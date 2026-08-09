@@ -1,5 +1,5 @@
 -- Run with `supabase test db` against local Supabase/Postgres + pgTAP.
-select plan(52);
+select plan(60);
 
 select ok(not has_function_privilege('anon', 'public.prune_user_game_records(uuid)', 'execute'), 'anon cannot execute prune_user_game_records');
 select ok(not has_function_privilege('authenticated', 'public.prune_user_game_records(uuid)', 'execute'), 'authenticated cannot execute prune_user_game_records');
@@ -13,6 +13,8 @@ select ok(to_regprocedure('public.abandon_match(uuid)') is not null, 'abandon_ma
 select ok(exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'matches' and column_name = 'created_expires_at'), 'CREATED matches have a lease column');
 select ok(to_regprocedure('public.get_verification_evidence_cleanup(uuid)') is not null, 'evidence cleanup retry RPC exists');
 select ok(exists (select 1 from storage.buckets where id = 'verification' and public = false), 'verification bucket is private and migration-managed');
+select ok((select file_size_limit from storage.buckets where id = 'verification') = 5242880, 'verification bucket limits objects to 5 MiB');
+select ok((select allowed_mime_types from storage.buckets where id = 'verification') = array['image/jpeg', 'image/png', 'image/webp']::text[], 'verification bucket allows only image MIME types');
 select ok(exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'verification objects owner insert' and 'authenticated' = any(roles)), 'verification upload policy is authenticated-only');
 select ok(exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'verification objects owner read' and 'authenticated' = any(roles)), 'verification read policy is owner-scoped, not public');
 select ok(to_regprocedure('public.ack_match_started(uuid)') is not null, 'start ack RPC exists');
@@ -72,6 +74,13 @@ update public.matches set created_expires_at = now() - interval '1 minute' where
 select is((select public.cleanup_stale_created_matches()), 0, 'signaling cleanup ignores an acknowledged match');
 select is((select server_status::text from public.matches where id = '00000000-0000-0000-0000-000000000106'), 'CREATED', 'acknowledged match remains active after five minutes');
 select is((select count(*)::int from public.active_match_participants where match_id = '00000000-0000-0000-0000-000000000106'), 2, 'acknowledged match keeps both reservations');
+update public.active_match_participants set expires_at = now() - interval '1 minute'
+ where match_id = '00000000-0000-0000-0000-000000000106' and user_id = '00000000-0000-0000-0000-000000000001';
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
+select is((select matched from public.enqueue_or_match()), false, 'enqueue reconciles only the caller expired active match');
+select is((select server_status::text from public.matches where id = '00000000-0000-0000-0000-000000000106'), 'ABANDONED', 'caller reconciliation terminalizes the expired match');
+select is((select count(*)::int from public.active_match_participants where match_id = '00000000-0000-0000-0000-000000000106'), 0, 'caller reconciliation releases reservations through the trigger');
+delete from public.match_queue where user_id = '00000000-0000-0000-0000-000000000001';
 
 insert into public.matches(id, black_player, white_player, status, server_status)
 values ('00000000-0000-0000-0000-000000000104', '00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000004', 'PLAYING', 'CREATED');
@@ -79,7 +88,14 @@ insert into public.active_match_participants(user_id, match_id, expires_at)
 values ('00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000104', now() + interval '30 days'),
        ('00000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000104', now() + interval '30 days');
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
-select is((select public.submit_match_result('00000000-0000-0000-0000-000000000104', 'd3', 'BLACK_WIN', '0000000000000000:0:0:1', 'NORMAL', null)::text), 'PENDING_RESULT', 'first result is pending');
+select throws_ok($$select public.submit_match_result('00000000-0000-0000-0000-000000000104', 'd3', 'BLACK_WIN', '0000000000000000:0:0:1', 'NORMAL', null)$$, 'P0001', 'match P2P not started', 'result submit is rejected before both start acks');
+select public.ack_match_started('00000000-0000-0000-0000-000000000104');
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000004', false);
+select public.ack_match_started('00000000-0000-0000-0000-000000000104');
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
+select is((select public.submit_match_result('00000000-0000-0000-0000-000000000104', 'd3', 'BLACK_WIN', '0000000000000000:0:0:1', 'NORMAL', null)::text), 'PENDING_RESULT', 'result submit succeeds after both start acks');
+select ok((select result_expires_at > now() + interval '4 minutes' and result_expires_at <= now() + interval '5 minutes' from public.matches where id = '00000000-0000-0000-0000-000000000104'), 'PENDING_RESULT uses a five-minute result lease');
+select ok((select min(expires_at) > now() + interval '4 minutes' and max(expires_at) <= now() + interval '5 minutes' from public.active_match_participants where match_id = '00000000-0000-0000-0000-000000000104'), 'PENDING_RESULT active reservations use the same five-minute lease');
 select is((select count(*)::int from public.active_match_participants where match_id = '00000000-0000-0000-0000-000000000104'), 2, 'PENDING_RESULT keeps both active reservations');
 update public.matches set result_expires_at = now() - interval '1 minute' where id = '00000000-0000-0000-0000-000000000104';
 select is((select public.cleanup_expired_pending_results()), 1, 'expired PENDING_RESULT becomes terminal');
@@ -89,6 +105,9 @@ select is((select count(*)::int from public.active_match_participants where matc
 
 insert into public.matches(id, black_player, white_player, status, server_status)
 values ('00000000-0000-0000-0000-000000000105', '00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000004', 'PLAYING', 'CREATED');
+select public.ack_match_started('00000000-0000-0000-0000-000000000105');
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000004', false);
+select public.ack_match_started('00000000-0000-0000-0000-000000000105');
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
 select is((select public.submit_match_result('00000000-0000-0000-0000-000000000105', 'd3', 'BLACK_WIN', '0000000000000000:0:0:1', 'NORMAL', null)::text), 'PENDING_RESULT', 'first result is pending for normal finalization');
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000004', false);
@@ -106,6 +125,10 @@ insert into public.matches(id, black_player, white_player, status, server_status
 values ('00000000-0000-0000-0000-000000000107', '00000000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-000000000006', 'PLAYING', 'CREATED');
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000005', false);
 select throws_ok($$select public.submit_match_result('00000000-0000-0000-0000-000000000107', '', 'BLACK_WIN', '0000000000000000:0:0:0', 'NORMAL', null)$$, 'P0001', 'invalid canonical moves', 'NORMAL cannot submit zero-ply canonical history');
+select public.ack_match_started('00000000-0000-0000-0000-000000000107');
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000006', false);
+select public.ack_match_started('00000000-0000-0000-0000-000000000107');
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000005', false);
 select is((select public.submit_match_result('00000000-0000-0000-0000-000000000107', '', 'BLACK_WIN', '0000000000000000:0:0:0', 'RESIGNATION', null)::text), 'PENDING_RESULT', 'zero-ply resignation is accepted');
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000006', false);
 select is((select public.submit_match_result('00000000-0000-0000-0000-000000000107', '', 'BLACK_WIN', '0000000000000000:0:0:0', 'RESIGNATION', null)::text), 'CONFIRMED', 'matching zero-ply resignation finalizes');
