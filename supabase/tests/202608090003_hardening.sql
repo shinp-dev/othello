@@ -1,5 +1,5 @@
 -- Run with `supabase test db` against local Supabase/Postgres + pgTAP.
-select plan(60);
+select plan(68);
 
 select ok(not has_function_privilege('anon', 'public.prune_user_game_records(uuid)', 'execute'), 'anon cannot execute prune_user_game_records');
 select ok(not has_function_privilege('authenticated', 'public.prune_user_game_records(uuid)', 'execute'), 'authenticated cannot execute prune_user_game_records');
@@ -18,8 +18,10 @@ select ok((select allowed_mime_types from storage.buckets where id = 'verificati
 select ok(exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'verification objects owner insert' and 'authenticated' = any(roles)), 'verification upload policy is authenticated-only');
 select ok(exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'verification objects owner read' and 'authenticated' = any(roles)), 'verification read policy is owner-scoped, not public');
 select ok(to_regprocedure('public.ack_match_started(uuid)') is not null, 'start ack RPC exists');
+select ok(to_regprocedure('public.get_match_start_state(uuid)') is not null, 'participant start state RPC exists');
 select ok(position('delete from public.active_match_participants' in pg_get_functiondef('public.cleanup_stale_created_matches()'::regprocedure)) = 0, 'signaling cleanup never deletes reservations directly');
 select ok(position('cleanup_terminal_matches' in pg_get_functiondef('public.enqueue_or_match()'::regprocedure)) = 0, 'terminal cleanup is outside matchmaking hot path');
+select ok(position('cleanup_stale_created_matches' in pg_get_functiondef('public.enqueue_or_match()'::regprocedure)) = 0, 'global signaling cleanup is outside matchmaking hot path');
 select ok(not exists (
   select 1 from pg_proc where prosecdef and pronamespace = 'public'::regnamespace
     and proconfig @> array['search_path=public']
@@ -65,10 +67,14 @@ values ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
 select is((select public.ack_match_started('00000000-0000-0000-0000-000000000106')::text), 'CREATED', 'first start ack is participant-scoped and idempotent');
 select is((select public.ack_match_started('00000000-0000-0000-0000-000000000106')::text), 'CREATED', 'repeated start ack is idempotent');
+select ok((select local_acked from public.get_match_start_state('00000000-0000-0000-0000-000000000106')), 'caller can observe its own start ack');
+select ok(not (select both_acked from public.get_match_start_state('00000000-0000-0000-0000-000000000106')), 'one start ack cannot begin play');
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', false);
 select is((select public.ack_match_started('00000000-0000-0000-0000-000000000106')::text), 'CREATED', 'second start ack is accepted');
+select ok((select both_acked from public.get_match_start_state('00000000-0000-0000-0000-000000000106')), 'both participants can observe confirmed start');
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
 select throws_ok($$select public.ack_match_started('00000000-0000-0000-0000-000000000106')$$, 'P0001', 'match participant required', 'non-participant cannot ack match start');
+select throws_ok($$select * from public.get_match_start_state('00000000-0000-0000-0000-000000000106')$$, 'P0001', 'match participant required', 'non-participant cannot inspect start state');
 select ok((select p2p_started_at is not null and play_lease_expires_at > now() + interval '23 hours' from public.matches where id = '00000000-0000-0000-0000-000000000106'), 'both acks switch to the long bounded play lease');
 update public.matches set created_expires_at = now() - interval '1 minute' where id = '00000000-0000-0000-0000-000000000106';
 select is((select public.cleanup_stale_created_matches()), 0, 'signaling cleanup ignores an acknowledged match');
@@ -115,6 +121,10 @@ select is((select public.submit_match_result('00000000-0000-0000-0000-0000000001
 select is((select count(*)::int from public.rating_history where match_id = '00000000-0000-0000-0000-000000000105'), 2, 'finalization writes two rating history rows');
 select is((select public.submit_match_result('00000000-0000-0000-0000-000000000105', 'd3', 'BLACK_WIN', '0000000000000000:0:0:1', 'NORMAL', null)::text), 'CONFIRMED', 'duplicate terminal submit is idempotent');
 select is((select count(*)::int from public.rating_history where match_id = '00000000-0000-0000-0000-000000000105'), 2, 'duplicate submit does not update rating twice');
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
+select is((select count(*)::int from public.game_records where players @> array['00000000-0000-0000-0000-000000000003'::uuid]), 1, 'array containment finds a record where caller is black or white');
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
+select is((select count(*)::int from public.game_records), 0, 'record RLS hides other users games');
 
 insert into auth.users (id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data)
 values

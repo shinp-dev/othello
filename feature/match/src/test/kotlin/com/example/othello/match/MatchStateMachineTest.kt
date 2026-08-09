@@ -11,7 +11,8 @@ class MatchStateMachineTest {
             MatchCommand.JoinQueue to MatchStatus.WAITING,
             MatchCommand.MatchFound to MatchStatus.SIGNALING,
             MatchCommand.OfferAccepted to MatchStatus.P2P_CONNECTED,
-            MatchCommand.DataChannelOpened to MatchStatus.PLAYING,
+            MatchCommand.DataChannelOpened to MatchStatus.P2P_CONNECTED,
+            MatchCommand.StartConfirmed to MatchStatus.PLAYING,
             MatchCommand.GameFinished to MatchStatus.FINISHING,
             MatchCommand.ResultConfirmed to MatchStatus.CONFIRMED,
         ).forEach { (command, expected) ->

@@ -2,6 +2,8 @@ package com.example.othello.transport.webrtc
 
 import android.content.Context
 import com.example.othello.network.MatchTransport
+import com.example.othello.network.FinishCommand
+import com.example.othello.network.FinishCommandJson
 import com.example.othello.network.MoveCommand
 import com.example.othello.network.MoveCommandJson
 import com.example.othello.network.TransportState
@@ -16,6 +18,9 @@ import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.CopyOnWriteArraySet
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CancellationException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -42,8 +47,9 @@ class AndroidWebRtcTransport(
     private val matchId: String,
     iceServers: List<IceServerConfig> = DefaultIceServers.publicStun,
 ) : MatchTransport {
-    private val stateListeners = mutableSetOf<(TransportState) -> Unit>()
-    private val commandListeners = mutableSetOf<(MoveCommand) -> Unit>()
+    private val stateListeners = CopyOnWriteArraySet<(TransportState) -> Unit>()
+    private val commandListeners = CopyOnWriteArraySet<(MoveCommand) -> Unit>()
+    private val finishListeners = CopyOnWriteArraySet<(FinishCommand) -> Unit>()
     private val factory: PeerConnectionFactory
     private val peerConnection: PeerConnection
     private var dataChannel: DataChannel? = null
@@ -53,11 +59,19 @@ class AndroidWebRtcTransport(
     private var dataChannelState = "NEW"
     private val dataChannelOpen = kotlinx.coroutines.CompletableDeferred<Unit>()
     private val iceGatheringComplete = kotlinx.coroutines.CompletableDeferred<Unit>()
+    private val closed = AtomicBoolean(false)
 
     init {
-        PeerConnectionFactory.initialize(
-            PeerConnectionFactory.InitializationOptions.builder(context.applicationContext).createInitializationOptions(),
-        )
+        if (!factoryInitialized.get()) {
+            synchronized(factoryInitialized) {
+                if (!factoryInitialized.get()) {
+                    PeerConnectionFactory.initialize(
+                        PeerConnectionFactory.InitializationOptions.builder(context.applicationContext).createInitializationOptions(),
+                    )
+                    factoryInitialized.set(true)
+                }
+            }
+        }
         factory = PeerConnectionFactory.builder().createPeerConnectionFactory()
         val configuration = PeerConnection.RTCConfiguration(iceServers.map { config ->
             PeerConnection.IceServer.builder(config.urls).apply {
@@ -65,7 +79,12 @@ class AndroidWebRtcTransport(
                 config.credential?.let { setPassword(it) }
             }.createIceServer()
         })
-        peerConnection = requireNotNull(factory.createPeerConnection(configuration, Observer()))
+        peerConnection = try {
+            requireNotNull(factory.createPeerConnection(configuration, Observer()))
+        } catch (error: Throwable) {
+            factory.dispose()
+            throw error
+        }
         updateState(TransportState.CONNECTING)
     }
 
@@ -81,8 +100,8 @@ class AndroidWebRtcTransport(
         }
         suspendCancellableCoroutine<Unit> { continuation ->
             peerConnection.setRemoteDescription(object : SdpObserver {
-                override fun onSetSuccess() { continuation.resume(Unit) }
-                override fun onSetFailure(error: String) { continuation.resumeWithException(IllegalStateException(error)) }
+                override fun onSetSuccess() { if (continuation.isActive) continuation.resume(Unit) }
+                override fun onSetFailure(error: String) { if (continuation.isActive) continuation.resumeWithException(IllegalStateException(error)) }
                 override fun onCreateSuccess(description: SessionDescription) = Unit
                 override fun onCreateFailure(error: String) = Unit
             }, SessionDescription(type, description.sdp))
@@ -92,18 +111,26 @@ class AndroidWebRtcTransport(
     suspend fun awaitDataChannelOpen() { dataChannelOpen.await() }
 
     fun provideOffererDataChannel() {
+        check(!closed.get()) { "WebRTC transport is closed" }
         if (dataChannel == null) dataChannel = peerConnection.createDataChannel("othello", DataChannel.Init()).also { attach(it) }
     }
 
     override suspend fun send(command: MoveCommand) {
-        check(dataChannel?.state() == DataChannel.State.OPEN) { "DataChannel is not open" }
-        val bytes = MoveCommandJson.encode(command).toByteArray(StandardCharsets.UTF_8)
-        check(dataChannel?.send(DataChannel.Buffer(ByteBuffer.wrap(bytes), false)) == true) { "DataChannel send failed" }
+        sendPayload(MoveCommandJson.encode(command))
+    }
+
+    override suspend fun sendFinish(command: FinishCommand) {
+        sendPayload(FinishCommandJson.encode(command))
     }
 
     override fun observe(onCommand: (MoveCommand) -> Unit): AutoCloseable {
         commandListeners += onCommand
         return AutoCloseable { commandListeners -= onCommand }
+    }
+
+    override fun observeFinish(onCommand: (FinishCommand) -> Unit): AutoCloseable {
+        finishListeners += onCommand
+        return AutoCloseable { finishListeners -= onCommand }
     }
 
     override fun observeState(onState: (TransportState) -> Unit): AutoCloseable {
@@ -120,18 +147,35 @@ class AndroidWebRtcTransport(
     )
 
     override fun close() {
+        if (!closed.compareAndSet(false, true)) return
         updateState(TransportState.CLOSING)
+        val cancellation = CancellationException("WebRTC transport closed")
+        dataChannelOpen.completeExceptionally(cancellation)
+        iceGatheringComplete.completeExceptionally(cancellation)
+        dataChannel?.unregisterObserver()
         dataChannel?.close()
+        dataChannel?.dispose()
         peerConnection.close()
+        peerConnection.dispose()
         factory.dispose()
+        commandListeners.clear()
+        finishListeners.clear()
         updateState(TransportState.CLOSED)
+        stateListeners.clear()
+    }
+
+    private fun sendPayload(payload: String) {
+        check(!closed.get() && dataChannel?.state() == DataChannel.State.OPEN) { "DataChannel is not open" }
+        val bytes = payload.toByteArray(StandardCharsets.UTF_8)
+        require(bytes.size <= MAX_PAYLOAD_BYTES) { "DataChannel payload is too large" }
+        check(dataChannel?.send(DataChannel.Buffer(ByteBuffer.wrap(bytes), false)) == true) { "DataChannel send failed" }
     }
 
     private suspend fun createLocalDescription(type: SessionDescription.Type): SessionDescriptionPayload {
         val description = suspendCancellableCoroutine<SessionDescription> { continuation ->
             val observer = object : SdpObserver {
-                override fun onCreateSuccess(description: SessionDescription) { continuation.resume(description) }
-                override fun onCreateFailure(error: String) { continuation.resumeWithException(IllegalStateException(error)) }
+                override fun onCreateSuccess(description: SessionDescription) { if (continuation.isActive) continuation.resume(description) }
+                override fun onCreateFailure(error: String) { if (continuation.isActive) continuation.resumeWithException(IllegalStateException(error)) }
                 override fun onSetSuccess() = Unit
                 override fun onSetFailure(error: String) = Unit
             }
@@ -140,8 +184,8 @@ class AndroidWebRtcTransport(
         }
         suspendCancellableCoroutine<Unit> { continuation ->
             peerConnection.setLocalDescription(object : SdpObserver {
-                override fun onSetSuccess() { continuation.resume(Unit) }
-                override fun onSetFailure(error: String) { continuation.resumeWithException(IllegalStateException(error)) }
+                override fun onSetSuccess() { if (continuation.isActive) continuation.resume(Unit) }
+                override fun onSetFailure(error: String) { if (continuation.isActive) continuation.resumeWithException(IllegalStateException(error)) }
                 override fun onCreateSuccess(description: SessionDescription) = Unit
                 override fun onCreateFailure(error: String) = Unit
             }, description)
@@ -152,9 +196,15 @@ class AndroidWebRtcTransport(
     }
 
     private fun attach(channel: DataChannel) {
+        if (closed.get()) {
+            channel.close()
+            channel.dispose()
+            return
+        }
         channel.registerObserver(object : DataChannel.Observer {
             override fun onBufferedAmountChange(previousAmount: Long) = Unit
             override fun onStateChange() {
+                if (closed.get()) return
                 when (channel.state()) {
                     DataChannel.State.OPEN -> { dataChannelState = "OPEN"; updateState(TransportState.OPEN); dataChannelOpen.complete(Unit) }
                     DataChannel.State.CLOSING -> { dataChannelState = "CLOSING"; updateState(TransportState.CLOSING) }
@@ -163,27 +213,46 @@ class AndroidWebRtcTransport(
                 }
             }
             override fun onMessage(buffer: DataChannel.Buffer) {
+                if (closed.get() || buffer.binary || buffer.data.remaining() > MAX_PAYLOAD_BYTES) {
+                    updateState(TransportState.FAILED)
+                    return
+                }
                 val payload = StandardCharsets.UTF_8.decode(buffer.data).toString()
-                MoveCommandJson.decode(payload).onSuccess { decodedCommand -> commandListeners.toList().forEach { it(decodedCommand) } }
-                    .onFailure { updateState(TransportState.FAILED) }
+                MoveCommandJson.decode(payload).onSuccess { decodedCommand -> commandListeners.forEach { it(decodedCommand) } }
+                    .onFailure {
+                        FinishCommandJson.decode(payload)
+                            .onSuccess { decodedCommand -> finishListeners.forEach { it(decodedCommand) } }
+                            .onFailure { updateState(TransportState.FAILED) }
+                    }
             }
         })
     }
 
     private fun updateState(next: TransportState) {
+        if (closed.get() && next != TransportState.CLOSING && next != TransportState.CLOSED) return
         state = next
-        stateListeners.toList().forEach { it(next) }
+        stateListeners.forEach { it(next) }
     }
 
     private inner class Observer : PeerConnection.Observer {
         override fun onIceCandidate(candidate: IceCandidate) = Unit
         override fun onIceCandidatesRemoved(candidates: Array<IceCandidate>) = Unit
         override fun onIceGatheringChange(newState: PeerConnection.IceGatheringState) {
+            if (closed.get()) return
             if (newState == PeerConnection.IceGatheringState.COMPLETE) iceGatheringComplete.complete(Unit)
         }
-        override fun onDataChannel(channel: DataChannel) { dataChannel = channel; attach(channel) }
+        override fun onDataChannel(channel: DataChannel) {
+            if (closed.get() || dataChannel != null) {
+                channel.close()
+                channel.dispose()
+                return
+            }
+            dataChannel = channel
+            attach(channel)
+        }
         override fun onSignalingChange(newState: PeerConnection.SignalingState) = Unit
         override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState) {
+            if (closed.get()) return
             iceState = newState.name
             peerConnectionState = when (newState) {
                 PeerConnection.IceConnectionState.CONNECTED, PeerConnection.IceConnectionState.COMPLETED -> "CONNECTED"
@@ -193,13 +262,18 @@ class AndroidWebRtcTransport(
                 else -> newState.name
             }
             if (newState == PeerConnection.IceConnectionState.FAILED) updateState(TransportState.FAILED)
-            if (newState == PeerConnection.IceConnectionState.DISCONNECTED) updateState(TransportState.CLOSED)
         }
         override fun onIceConnectionReceivingChange(receiving: Boolean) = Unit
         override fun onAddStream(stream: org.webrtc.MediaStream) = Unit
         override fun onRemoveStream(stream: org.webrtc.MediaStream) = Unit
         override fun onRenegotiationNeeded() = Unit
         override fun onAddTrack(receiver: org.webrtc.RtpReceiver, mediaStreams: Array<org.webrtc.MediaStream>) = Unit
+    }
+
+
+    private companion object {
+        const val MAX_PAYLOAD_BYTES = 32 * 1024
+        val factoryInitialized = AtomicBoolean(false)
     }
 }
 

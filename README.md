@@ -1,6 +1,6 @@
 # Othello Online MVP
 
-責務分離を優先したAndroid向けオンラインオセロの基盤です。現在の実行可能なMVPは、Supabase設定なしで動く端末内2人対局です。ホームの「対局する」から8x8盤を開き、合法手をタップして遊べます。
+責務分離を優先したAndroid向けオンラインオセロのMVPです。Supabase設定なしの端末内2人対局に加え、Supabase Auth・matchmaking・Realtime signaling・WebRTC DataChannelを使うオンライン対局経路を実装しています。オンライン経路は実機検証前のDraftです。
 
 ## 開発環境
 
@@ -60,9 +60,9 @@ npx wrangler secret put ADMIN_TOKEN
 npm run deploy
 ```
 
-## オンライン対局の実装順
+## オンライン対局
 
-MVP後は `MatchTransport` にWebRTC DataChannel実装を追加し、Supabase RealtimeはSDP offer/answerの確立時だけ使用します。P2P接続後に着手や時計をSupabaseへ送信しません。Android実機2台での確認は、Auth設定、同一Supabase project、TURN/STUN設定、2台のqueue参加、DataChannel成立、双方の同一棋譜・hash確認、結果提出の順で行います。
+`MatchTransport`のWebRTC DataChannel実装を使用し、Supabase RealtimeのPostgres ChangesはSDP offer/answerの確立時だけ使用します。DB signaling rowはsubscription準備前送信のfallbackも兼ねます。P2P接続後に着手や時計をSupabaseへ送信しません。実機2台では、Auth設定、同一Supabase project、TURN/STUN設定、2台のqueue参加、DataChannel成立、両者start ACK、双方の同一棋譜・hash、結果提出の順で確認します。
 
 `applicationId = com.example.othello` は開発用の仮値です。Store公開前に正式な所有ドメイン由来のIDを決定し、公開後に変更しない運用へ移行します。
 
@@ -70,7 +70,7 @@ Emulator A/Bの再現手順と、emulatorで完了できる項目・物理端末
 [`docs/DEVICE_TEST.md`](docs/DEVICE_TEST.md)を参照してください。`build/e2e/`には
 secretを含めないXML、スクリーンショット、対象tagのlogcatを保存できます。
 
-`matches`のCREATED leaseは5分のsignaling用です。DataChannel成立後、両participantが`ack_match_started`を一度呼ぶと、P2P開始事実と24時間のbounded play leaseを記録します。PENDING_RESULTには30日の結果待ち期限を設定し、期限切れはABANDONEDへ遷移してからreservationを解放します。CONFIRMED/DISPUTED/ABANDONEDのterminal match、game record、30日経過のsubmissionはmaintenance pathでretention条件を満たしたものから削除します。matchmaking hot pathではqueue/signaling leaseだけを処理します。Supabase Cron/pg_cronを使う場合は、service role相当で次を1時間ごとに実行します。
+`matches`のCREATED leaseは5分のsignaling用です。DataChannel成立後、両participantが`ack_match_started`を一度呼び、クライアントが`get_match_start_state`で両者ACKを確認してからPLAYINGへ進みます。両者ACK後はP2P開始事実と24時間のbounded play leaseを記録します。PENDING_RESULTのactive reservationは5分で、30日保持の監査用submissionとは分離しています。期限切れはABANDONEDへ遷移してからreservationを解放します。matchmaking hot pathはcaller-scoped reconciliationとqueue expiryだけを行い、stale matchとterminal recordの全体cleanupはmaintenance pathで実行します。Supabase Cron/pg_cronを使う場合は、service role相当で次を1時間ごとに実行します。
 
 ```sql
 select public.cleanup_stale_created_matches();

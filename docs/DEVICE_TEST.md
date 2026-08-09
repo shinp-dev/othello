@@ -36,7 +36,7 @@ transport tests are not a substitute for this run. Evidence is written below
 1. Confirm API level/package install and app startup on both emulators. Sign in as A and B; diagnostics must show different user IDs.
 2. Tap `対局する` on both devices. The first device remains `WAITING`; the second enters `SIGNALING`.
 3. Confirm the signaling diagnostics show only the expected offer/answer exchange. Full SDP, credentials, and service keys must not appear in logs.
-4. Confirm the DataChannel reaches `OPEN`, Realtime is unsubscribed, and both clients call `ack_match_started` once. The server should set `p2p_started_at` only after both acks.
+4. Confirm the DataChannel reaches `OPEN`, both clients call `ack_match_started` once, and both observe `bothStartAcked=true` before `PLAYING`. The server sets `p2p_started_at` only after both acks; Realtime is then unsubscribed.
 5. Verify black moves first. `-AutoPlay` selects the first legal move through `MatchController` on each side; no board state is copied and moves do not use Realtime.
 6. Submit on both sides. Verify `CONFIRMED` produces one GameRecord and rating update. Repeat matchmaking for a second match and confirm the prior peer/channel/signaling resources are gone.
 7. Exercise duplicate, command-id reuse, wrong ply/hash, wrong match ID, and illegal move through the debug driver/Fake protocol suite. The board must not change and the app must not crash.

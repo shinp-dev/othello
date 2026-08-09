@@ -23,6 +23,7 @@ $requiredPatterns = @(
     'create or replace function public.abandon_match',
     'create or replace function public.ack_match_started',
     'match_start_acks',
+    'get_match_start_state',
     'cleanup_expired_pending_results',
     'p2p_started_at',
     'play_lease_expires_at',
@@ -56,5 +57,9 @@ if (-not (Test-Path 'supabase/tests/202608090003_hardening.sql')) {
 $testSql = Get-Content 'supabase/tests/202608090003_hardening.sql' -Raw
 if ($testSql -notmatch 'from pg_proc p') {
     Write-Error 'pgTAP privilege query must include FROM pg_proc p'; exit 1
+}
+$onlineRepair = Get-Content 'supabase/migrations/202608090013_online_contract_repairs.sql' -Raw
+if ($onlineRepair -match '(?s)create or replace function public\.enqueue_or_match\(\).*?cleanup_stale_created_matches') {
+    Write-Error 'enqueue_or_match must not run global stale-match cleanup'; exit 1
 }
 Write-Output 'SQL security contract check passed'

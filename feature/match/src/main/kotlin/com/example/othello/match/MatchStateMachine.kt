@@ -10,6 +10,7 @@ sealed interface MatchCommand {
     data object MatchFound : MatchCommand
     data object OfferAccepted : MatchCommand
     data object DataChannelOpened : MatchCommand
+    data object StartConfirmed : MatchCommand
     data object GameFinished : MatchCommand
     data object ResultConfirmed : MatchCommand
     data object ResultPending : MatchCommand
@@ -43,7 +44,8 @@ object MatchStateMachine {
                 else -> null
             }
             MatchStatus.P2P_CONNECTED -> when (command) {
-                MatchCommand.DataChannelOpened -> MatchStatus.PLAYING
+                MatchCommand.DataChannelOpened -> MatchStatus.P2P_CONNECTED
+                MatchCommand.StartConfirmed -> MatchStatus.PLAYING
                 MatchCommand.Disconnected -> MatchStatus.DISCONNECTED
                 else -> null
             }

@@ -3,7 +3,7 @@ package com.example.othello.records
 import com.example.othello.game.Disc
 import com.example.othello.game.Position
 
-enum class FinishReason { NORMAL, RESIGNATION, TIMEOUT, DISCONNECTED, DISPUTED }
+enum class FinishReason { NORMAL, RESIGNATION, TIMEOUT, DISCONNECT, DISPUTED }
 enum class MatchResult { BLACK_WIN, WHITE_WIN, DRAW }
 
 data class GameRecord(

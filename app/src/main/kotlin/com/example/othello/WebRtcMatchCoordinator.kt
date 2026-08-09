@@ -11,9 +11,14 @@ import com.example.othello.matchmaking.MatchAssignment
 import com.example.othello.transport.webrtc.AndroidWebRtcTransport
 import com.example.othello.transport.webrtc.AndroidWebRtcTransportFactory
 import com.example.othello.transport.webrtc.DefaultIceServers
+import com.example.othello.transport.webrtc.SessionDescriptionPayload
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** Owns the P2P session outside Compose so Activity recreation does not create a second peer. */
 class WebRtcMatchCoordinator(
@@ -21,10 +26,13 @@ class WebRtcMatchCoordinator(
     private val userId: String,
     private val assignment: MatchAssignment,
     private val signaling: SupabaseSignalingDataSource,
-    repository: OnlineMatchRepository,
-    private val scope: CoroutineScope,
+    private val repository: OnlineMatchRepository,
+    scope: CoroutineScope,
     private val debugAutoPlay: Boolean = false,
 ) : AutoCloseable {
+    val matchId: String get() = assignment.matchId
+    private val sessionJob = SupervisorJob(scope.coroutineContext[Job])
+    private val sessionScope = CoroutineScope(scope.coroutineContext + sessionJob)
     private val transport = AndroidWebRtcTransportFactory(context.applicationContext)
         .create(assignment.matchId, DefaultIceServers.publicStun) as AndroidWebRtcTransport
     val controller = OnlineMatchController(
@@ -32,70 +40,167 @@ class WebRtcMatchCoordinator(
         if (assignment.assignedDisc.name == "BLACK") Disc.BLACK else Disc.WHITE,
         transport,
         repository,
+        callbackScope = sessionScope,
+        cancelCallbackScopeOnClose = false,
     )
 
     fun diagnostics(): MatchDiagnostics = controller.diagnostics(userId, assignment.opponentId)
     private var subscription: AutoCloseable? = null
     private var autoPlaySubscription: AutoCloseable? = null
     private var autoPlayJob: Job? = null
+    private var dataChannelJob: Job? = null
     private var autoPlayInFlight = false
     private var finishInFlight = false
+    private var pendingRetryScheduled = false
     private var started = false
+    private var closed = false
+    private val signalingMutex = Mutex()
+    private val handledSignals = mutableSetOf<String>()
+    private var remoteOfferApplied = false
+    private var remoteAnswerApplied = false
+    private var answerPayload: SessionDescriptionPayload? = null
 
     fun start() {
         if (started) return
         started = true
-        if (debugAutoPlay) {
-            autoPlaySubscription = controller.observe { view ->
-                if (view.matchState.status == com.example.othello.match.MatchStatus.PLAYING &&
+        autoPlaySubscription = controller.observe { view ->
+            if (debugAutoPlay && view.matchState.status == com.example.othello.match.MatchStatus.PLAYING &&
                     view.game.currentPlayer == view.localDisc &&
                     view.game.legalMoves.isNotEmpty() && !autoPlayInFlight
-                ) {
-                    autoPlayInFlight = true
-                    autoPlayJob = scope.launch {
-                        try { controller.play(view.game.legalMoves.first()) } finally { autoPlayInFlight = false }
-                    }
-                } else if (view.matchState.status == com.example.othello.match.MatchStatus.FINISHING && !finishInFlight) {
-                    finishInFlight = true
-                    autoPlayJob = scope.launch {
-                        try { controller.finishNormally() } finally { finishInFlight = false; autoPlayJob = null }
+            ) {
+                autoPlayInFlight = true
+                autoPlayJob = sessionScope.launch {
+                    try { controller.play(view.game.legalMoves.first()) } finally { autoPlayInFlight = false }
+                }
+            } else if (view.matchState.status == com.example.othello.match.MatchStatus.PENDING_RESULT &&
+                !pendingRetryScheduled && !finishInFlight
+            ) {
+                pendingRetryScheduled = true
+                finishInFlight = true
+                autoPlayJob = sessionScope.launch {
+                    try {
+                        delay(750)
+                        controller.retryFinish()
+                    } finally {
+                        finishInFlight = false
+                        autoPlayJob = null
                     }
                 }
             }
         }
-        subscription = signaling.subscribe(assignment.matchId) { envelope ->
-            if (envelope.senderUserId == userId) return@subscribe
-            scope.launch { handle(envelope) }
-        }
+        subscription = signaling.subscribe(
+            assignment.matchId,
+            onEnvelope = { envelope ->
+                if (!closed && envelope.senderUserId == assignment.opponentId) {
+                    sessionScope.launch { handle(envelope) }
+                }
+            },
+            onError = { error ->
+                if (!closed) sessionScope.launch {
+                    controller.reportConnectionError(error.message ?: "signaling subscription failed")
+                }
+            },
+        )
         if (assignment.assignedDisc.name == "BLACK") {
-            scope.launch {
-                transport.provideOffererDataChannel()
-                val offer = transport.createOffer()
-                signaling.publish(SignalingEnvelope(assignment.matchId, userId, "OFFER", offer.sdp))
+            sessionScope.launch {
+                try {
+                    transport.provideOffererDataChannel()
+                    val offer = transport.createOffer()
+                    publishWithRetry(SignalingEnvelope(assignment.matchId, userId, "OFFER", offer.sdp))
+                } catch (error: kotlinx.coroutines.CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    if (!closed) controller.reportConnectionError(error.message ?: "offer failed")
+                }
             }
         }
     }
 
-    private suspend fun handle(envelope: SignalingEnvelope) {
-        when {
-            envelope.type == "OFFER" && assignment.assignedDisc.name == "WHITE" -> {
-                transport.setRemoteDescription(com.example.othello.transport.webrtc.SessionDescriptionPayload("OFFER", envelope.sdp))
-                val answer = transport.createAnswer()
-                signaling.publish(SignalingEnvelope(assignment.matchId, userId, "ANSWER", answer.sdp))
+    private suspend fun handle(envelope: SignalingEnvelope) = signalingMutex.withLock {
+        if (closed || envelope.matchId != assignment.matchId) return@withLock
+        val signalKey = "${envelope.senderUserId}|${envelope.type}|${envelope.sdp}|${envelope.protocolVersion}"
+        if (!handledSignals.add(signalKey)) return@withLock
+        try {
+            when {
+                envelope.type == "OFFER" && assignment.assignedDisc.name == "WHITE" -> {
+                    if (!remoteOfferApplied) {
+                        transport.setRemoteDescription(SessionDescriptionPayload("OFFER", envelope.sdp))
+                        remoteOfferApplied = true
+                    }
+                    val answer = answerPayload ?: transport.createAnswer().also { answerPayload = it }
+                    publishWithRetry(SignalingEnvelope(assignment.matchId, userId, "ANSWER", answer.sdp))
+                }
+                envelope.type == "ANSWER" && assignment.assignedDisc.name == "BLACK" -> {
+                    if (!remoteAnswerApplied) {
+                        transport.setRemoteDescription(SessionDescriptionPayload("ANSWER", envelope.sdp))
+                        remoteAnswerApplied = true
+                    }
+                }
+                else -> return@withLock
             }
-            envelope.type == "ANSWER" && assignment.assignedDisc.name == "BLACK" -> {
-                transport.setRemoteDescription(com.example.othello.transport.webrtc.SessionDescriptionPayload("ANSWER", envelope.sdp))
+            beginDataChannelHandshake()
+        } catch (error: Exception) {
+            handledSignals.remove(signalKey)
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            if (!closed) controller.reportConnectionError(error.message ?: "signaling failed")
+        }
+    }
+
+    private suspend fun publishWithRetry(envelope: SignalingEnvelope) {
+        var lastError: Exception? = null
+        repeat(3) { attempt ->
+            try {
+                signaling.publish(envelope)
+                return
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                lastError = error
+                if (attempt < 2) delay(500)
             }
         }
-        transport.awaitDataChannelOpen()
-        controller.onDataChannelOpen()
-        subscription?.close()
+        throw lastError ?: IllegalStateException("signaling publish failed")
+    }
+
+    private fun beginDataChannelHandshake() {
+        if (dataChannelJob?.isActive == true || closed) return
+        dataChannelJob = sessionScope.launch {
+            try {
+                transport.awaitDataChannelOpen()
+                repeat(3) { attempt ->
+                    if (controller.onDataChannelOpen()) {
+                        subscription?.close()
+                        return@launch
+                    }
+                    if (attempt < 2) delay(1_000)
+                }
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if (!closed) controller.reportConnectionError(error.message ?: "DataChannel start failed")
+            }
+        }
+    }
+
+    suspend fun leave() {
+        when (controller.viewState.matchState.status) {
+            com.example.othello.match.MatchStatus.PLAYING -> controller.finishForDisconnect()
+            com.example.othello.match.MatchStatus.CONFIRMED,
+            com.example.othello.match.MatchStatus.DISPUTED,
+            com.example.othello.match.MatchStatus.PENDING_RESULT -> Unit
+            else -> runCatching { repository.abandonMatch(assignment.matchId) }
+        }
+        close()
     }
 
     override fun close() {
+        if (closed) return
+        closed = true
         subscription?.close()
         autoPlaySubscription?.close()
         autoPlayJob?.cancel()
+        dataChannelJob?.cancel()
         controller.close()
+        sessionJob.cancel()
     }
 }

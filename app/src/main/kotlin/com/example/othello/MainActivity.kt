@@ -38,8 +38,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.othello.auth.UserSession
-import com.example.othello.data.supabase.SupabaseModule
 import com.example.othello.designsystem.OthelloTheme
 import com.example.othello.game.Disc
 import com.example.othello.game.Position
@@ -47,7 +47,6 @@ import com.example.othello.match.LocalMatchController
 import com.example.othello.match.LocalMatchViewState
 import com.example.othello.match.OnlineMatchController
 import com.example.othello.match.OnlineMatchViewState
-import com.example.othello.matchmaking.MatchmakingController
 import com.example.othello.matchmaking.MatchmakingStatus
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -61,25 +60,28 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun OthelloApp() {
+private fun OthelloApp(sessionOwner: OnlineSessionViewModel = viewModel()) {
     val context = LocalContext.current
     var localMatch by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val componentResult = remember { SupabaseModule.create(scope = scope) }
-    val component = componentResult.getOrNull()
+    val componentResult = sessionOwner.componentResult
+    val component = sessionOwner.component
     val debugAutoPlay = BuildConfig.DEBUG && (context as? android.app.Activity)
         ?.intent?.getBooleanExtra("othello.e2e.autoplay", false) == true
     var session by remember { mutableStateOf<UserSession?>(null) }
     var loginError by remember { mutableStateOf<String?>(null) }
-    DisposableEffect(component) { onDispose { component?.close() } }
-    val matchmaking = remember(component) { component?.let { MatchmakingController(it.matchmakingRepository) } }
+    val matchmaking = sessionOwner.matchmaking
     var matchmakingState by remember { mutableStateOf(matchmaking?.state) }
-    var p2pCoordinator by remember { mutableStateOf<WebRtcMatchCoordinator?>(null) }
+    var p2pCoordinator by remember(sessionOwner) { mutableStateOf(sessionOwner.coordinator) }
     DisposableEffect(matchmaking) {
         val closeable = matchmaking?.observe { matchmakingState = it }
         onDispose { closeable?.close() }
     }
-    LaunchedEffect(component) { session = component?.authGateway?.currentSession() }
+    LaunchedEffect(component) {
+        runCatching { component?.authGateway?.currentSession() }
+            .onSuccess { session = it }
+            .onFailure { loginError = it.message ?: "セッション確認に失敗しました" }
+    }
     LaunchedEffect(matchmakingState?.status, matchmakingState?.assignment) {
         if (matchmakingState?.status == MatchmakingStatus.WAITING) {
             while (isActive) {
@@ -92,14 +94,8 @@ private fun OthelloApp() {
         val assignment = matchmakingState?.assignment ?: return@LaunchedEffect
         val supabase = component ?: return@LaunchedEffect
         val session = supabase.authGateway.currentSession() ?: return@LaunchedEffect
-        p2pCoordinator?.close()
-        p2pCoordinator = WebRtcMatchCoordinator(
-            context, session.userId, assignment,
-            supabase.signalingDataSource,
-            supabase.onlineMatchRepository, this, debugAutoPlay,
-        ).also { it.start() }
+        p2pCoordinator = sessionOwner.startCoordinator(session.userId, assignment, debugAutoPlay)
     }
-    DisposableEffect(Unit) { onDispose { p2pCoordinator?.close() } }
     Surface(Modifier.fillMaxSize()) {
         when {
             localMatch -> MatchScreen(onBack = { localMatch = false })
@@ -107,9 +103,13 @@ private fun OthelloApp() {
                 coordinator = requireNotNull(p2pCoordinator),
                 scope = scope,
                 onBack = {
-                    p2pCoordinator?.close()
+                    val leaving = p2pCoordinator
                     p2pCoordinator = null
-                    matchmaking?.let { scope.launch { it.cancel() } }
+                    matchmaking?.reset()
+                    scope.launch {
+                        if (sessionOwner.coordinator === leaving) sessionOwner.leaveCoordinator()
+                        else leaving?.leave()
+                    }
                 },
             )
             else -> HomeScreen(
@@ -125,7 +125,13 @@ private fun OthelloApp() {
                             .onFailure { loginError = it.message ?: "ログインに失敗しました" }
                     }
                 },
-                onSignOut = { scope.launch { component?.authGateway?.signOut(); session = null } },
+                onSignOut = {
+                    scope.launch {
+                        runCatching { component?.authGateway?.signOut() }
+                            .onSuccess { session = null; loginError = null }
+                            .onFailure { loginError = it.message ?: "ログアウトに失敗しました" }
+                    }
+                },
                 onOnlineStart = { if (session != null) matchmaking?.let { scope.launch { it.enqueue() } } },
                 onCancel = { matchmaking?.let { scope.launch { it.cancel() } } },
                 onLocalStart = { localMatch = true },
@@ -158,10 +164,23 @@ private fun OnlineMatchScreen(
         OnlineOthelloBoard(viewState, controller, scope)
         Text(viewState.message, modifier = Modifier.align(Alignment.CenterHorizontally))
         Text(
-            "ICE ${diagnostics.iceState} / Peer ${diagnostics.peerConnectionState} / DC ${diagnostics.dataChannelState} / ack ${diagnostics.localStartAcked}",
+            "ICE ${diagnostics.iceState} / Peer ${diagnostics.peerConnectionState} / DC ${diagnostics.dataChannelState} / ack ${diagnostics.localStartAcked}/${diagnostics.bothStartAcked}",
             style = MaterialTheme.typography.labelSmall,
         )
         Text("ply ${viewState.game.ply} / hash ${viewState.game.stateHash()}", style = MaterialTheme.typography.labelSmall)
+        viewState.finishResult?.takeIf { it.serverStatus == "CONFIRMED" }?.let { result ->
+            val before = result.ratingBefore
+            val after = result.ratingAfter
+            val delta = result.ratingDelta
+            val current = result.currentRating
+            val peak = result.peakRating
+            if (before != null && after != null && delta != null) {
+                Text("Rating $before → $after (${delta.withSign()})")
+            }
+            if (current != null && peak != null) {
+                Text("Current $current / Peak $peak")
+            }
+        }
         OutlinedButton(
             onClick = { scope.launch { controller.resign() } },
             enabled = viewState.matchState.status == com.example.othello.match.MatchStatus.PLAYING,
@@ -170,6 +189,8 @@ private fun OnlineMatchScreen(
         if (viewState.error != null) Text(viewState.error!!, color = MaterialTheme.colorScheme.error)
     }
 }
+
+private fun Int.withSign(): String = if (this > 0) "+$this" else toString()
 
 @Composable
 private fun OnlineOthelloBoard(
@@ -237,7 +258,11 @@ private fun HomeScreen(
             Text("ログイン中: ${session.displayName}")
             OutlinedButton(onClick = onSignOut) { Text("ログアウト") }
         }
-        Button(onClick = onOnlineStart, enabled = session != null, modifier = Modifier.fillMaxWidth()) { Text("対局する") }
+        Button(
+            onClick = onOnlineStart,
+            enabled = session != null && state?.status !in setOf(MatchmakingStatus.WAITING, MatchmakingStatus.SIGNALING),
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("対局する") }
         OutlinedButton(onClick = onLocalStart, modifier = Modifier.fillMaxWidth()) { Text("ローカル対局") }
         when (state?.status) {
             MatchmakingStatus.WAITING -> {

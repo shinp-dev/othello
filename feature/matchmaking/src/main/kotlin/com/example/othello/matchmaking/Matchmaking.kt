@@ -55,20 +55,38 @@ class MatchmakingController(private val repository: MatchmakingRepository) {
     }
 
     suspend fun cancel() {
-        runCatching { repository.cancelWaiting() }.onSuccess { state = MatchmakingViewState(); publishState() }
+        runCatching {
+            val cancelled = repository.cancelWaiting()
+            if (cancelled) null else repository.claimMatchedAssignment()
+        }.onSuccess { assignment ->
+            state = if (assignment == null) MatchmakingViewState()
+            else MatchmakingViewState(MatchmakingStatus.SIGNALING, assignment)
+            publishState()
+        }
             .onFailure { state = state.copy(status = MatchmakingStatus.FAILED, error = it.message); publishState() }
     }
 
     suspend fun heartbeat() {
         runCatching {
-            repository.heartbeatWaiting()
-            repository.claimMatchedAssignment()
-        }.onSuccess { assignment ->
-            if (assignment != null) {
-                state = MatchmakingViewState(MatchmakingStatus.SIGNALING, assignment)
-                publishState()
+            val queueAlive = repository.heartbeatWaiting()
+            val assignment = repository.claimMatchedAssignment()
+            if (assignment != null) EnqueueResult.Matched(assignment)
+            else if (!queueAlive) repository.enqueueOrMatch()
+            else EnqueueResult.Waiting
+        }.onSuccess { result ->
+            when (result) {
+                EnqueueResult.Waiting -> Unit
+                is EnqueueResult.Matched -> {
+                    state = MatchmakingViewState(MatchmakingStatus.SIGNALING, result.assignment)
+                    publishState()
+                }
             }
-        }
+        }.onFailure { state = state.copy(status = MatchmakingStatus.FAILED, error = it.message); publishState() }
+    }
+
+    fun reset() {
+        state = MatchmakingViewState()
+        publishState()
     }
 
     private fun publishState() = listeners.toList().forEach { it(state) }

@@ -75,8 +75,8 @@ The state machine is a pure reducer. UI observes state; it does not decide trans
 
 1. A later queue participant gets a match and creates a non-trickle WebRTC offer.
 2. The offer is delivered to the waiting participant through private Supabase Realtime signaling only.
-3. The answer is returned, DataChannel opens, and the signaling subscription is removed.
-4. Each move is sent only on DataChannel. Every command contains `matchId`, `ply`, `move`, `commandId`, and `previousStateHash`.
+3. The answer is returned and DataChannel opens. Each participant writes one start ACK; the client enters `PLAYING` only after the server reports both ACKs, then removes the signaling subscription.
+4. Each move is sent only on DataChannel. Every move command contains `matchId`, `ply`, `move`, `commandId`, and `previousStateHash`. Resignation/timeout/disconnect use a separate terminal DataChannel control message so both peers submit the same result; it cannot carry a move.
 5. Receiver validates the server-assigned remote disc, command fingerprint, idempotency, ply, legality and hash. A reused command id with a different payload is a protocol error.
 6. If the next player has no legal move, both sides apply a forced pass locally and append the same `--` canonical token; no pass button is shown in normal UI.
 
@@ -97,7 +97,7 @@ Users may self-declare a credential. A verification submission uploads evidence 
 ## Security and forbidden dependencies
 
 - No moves or clocks are written to Supabase during a game.
-- Realtime is signaling-only and is unsubscribed after P2P connection.
+- Realtime Postgres Changes is signaling-only, protected by `match_signaling` RLS, and is unsubscribed after both start ACKs.
 - No service-role key is shipped to Android or browser.
 - Android cannot update rating, peak, official result, or verification status directly.
 - Match cannot reference Edax; review alone can reference `AnalysisEngine`.
@@ -108,7 +108,7 @@ Users may self-declare a credential. A verification submission uploads evidence 
 - `submit_match_result` stores idempotently and auto-finalizes when both submissions exist; `finalize_match_v2` remains participant-scoped reconciliation. Payload enums, hashes, clock size, and canonical token format are checked in SQL.
 - Credential evidence must be a `verification/<auth.uid()>/...` Storage-owned object. Review is idempotent/conflict-safe; the Worker receives cleanup paths from the DB and can retry deletion before the path is nulled.
 - Terminal matches, records, and submissions have retention/cleanup RPCs. Internal pruning and cleanup functions have no execute permission for `anon`, `authenticated`, or `PUBLIC`; SECURITY DEFINER functions use an empty search path.
-- DataChannel commands carry real moves only. `TurnResolver` deterministically adds `--` locally on both peers; command IDs reserve their first payload even when that payload is rejected.
+- DataChannel move commands carry real moves only. Terminal control messages are a separate wire type. `TurnResolver` deterministically adds `--` locally on both peers; command IDs reserve their first payload even when that payload is rejected.
 
 ## Change log
 

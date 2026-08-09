@@ -20,4 +20,5 @@ data class MatchDiagnostics(
     val stateHash: String? = null,
     val lastError: String? = null,
     val localStartAcked: Boolean = false,
+    val bothStartAcked: Boolean = false,
 )
