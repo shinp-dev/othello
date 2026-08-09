@@ -40,7 +40,7 @@ begin
        select 1 from storage.objects
         where bucket_id = 'verification'
           and name = p_evidence_path
-          and owner_id = auth.uid()
+          and owner_id = auth.uid()::text
      ) then
     raise exception 'evidence object ownership required';
   end if;
