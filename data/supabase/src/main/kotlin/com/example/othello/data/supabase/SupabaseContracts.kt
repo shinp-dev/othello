@@ -42,6 +42,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import io.ktor.http.ContentType
 import java.time.Instant
 
 data class SupabaseConfig(val url: String, val anonKey: String) {
@@ -248,7 +249,7 @@ class SupabaseCredentialRepository(
         val path = "$userId/${fileName.substringAfterLast('/')}"
         client.storage.from("verification").upload(path, bytes) {
             upsert = false
-            contentType = mimeType
+            contentType = ContentType.parse(mimeType)
         }
         return path
     }
