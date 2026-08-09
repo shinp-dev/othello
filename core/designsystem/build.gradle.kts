@@ -2,7 +2,7 @@ plugins {
     id("com.android.library")
 }
 
-android { namespace = "com.example.othello.core.designsystem"; compileSdk = 35 }
+android { namespace = "com.example.othello.core.designsystem"; compileSdk = 36 }
 
 dependencies {
     implementation("androidx.compose.material3:material3:1.2.1")

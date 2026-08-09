@@ -29,7 +29,12 @@ Android Studioでルートを開いて同期し、`app` configurationを実行�
 
 WebRTC SDKとSupabase SDKの具体実装は、それぞれ`transport:webrtc`と`data:supabase`へ隔離します。`matches.server_status`はサーバーが保証できる状態だけを保持し、AndroidのP2P session stateとは別物です。
 
-## Supabase
+## Supabase / Android configuration
+
+The Android client reads `supabase.url` and `supabase.anonKey` from the untracked
+`local.properties` file, or `SUPABASE_URL` / `SUPABASE_ANON_KEY` from the environment.
+Missing values produce a visible configuration error and do not crash the app. Never
+place a service-role key in Android resources or BuildConfig.
 
 1. Supabase projectを作成します。
 2. `supabase/migrations/202608090001_init.sql`、続けて`202608090002_hardening_additive.sql`をSupabase SQL EditorまたはSupabase CLIで適用します。

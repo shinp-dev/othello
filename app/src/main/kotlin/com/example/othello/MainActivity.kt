@@ -11,11 +11,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -25,19 +25,32 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import com.example.othello.data.supabase.SupabaseClientFactory
+import com.example.othello.data.supabase.SupabaseMatchmakingRepository
+import com.example.othello.data.supabase.SupabaseOnlineMatchRepository
+import com.example.othello.data.supabase.SupabaseRealtimeSignalingDataSource
+import com.example.othello.data.supabase.SupabaseAuthGateway
 import com.example.othello.designsystem.OthelloTheme
 import com.example.othello.game.Disc
 import com.example.othello.game.Position
 import com.example.othello.match.LocalMatchController
 import com.example.othello.match.LocalMatchViewState
+import com.example.othello.matchmaking.MatchmakingController
+import com.example.othello.matchmaking.MatchmakingStatus
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,24 +61,75 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun OthelloApp() {
-    var onMatch by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    var localMatch by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val clientResult = remember { SupabaseClientFactory.create() }
+    val matchmaking = remember(clientResult) { clientResult.getOrNull()?.let { MatchmakingController(SupabaseMatchmakingRepository(it)) } }
+    var matchmakingState by remember { mutableStateOf(matchmaking?.state) }
+    var p2pCoordinator by remember { mutableStateOf<WebRtcMatchCoordinator?>(null) }
+    DisposableEffect(matchmaking) {
+        val closeable = matchmaking?.observe { matchmakingState = it }
+        onDispose { closeable?.close() }
+    }
+    LaunchedEffect(matchmakingState?.status, matchmakingState?.assignment) {
+        if (matchmakingState?.status == MatchmakingStatus.WAITING) {
+            while (isActive) {
+                matchmaking?.heartbeat()
+                delay(10_000)
+            }
+        }
+    }
+    LaunchedEffect(matchmakingState?.assignment) {
+        val assignment = matchmakingState?.assignment ?: return@LaunchedEffect
+        val client = clientResult.getOrNull() ?: return@LaunchedEffect
+        val session = SupabaseAuthGateway(client).currentSession() ?: return@LaunchedEffect
+        p2pCoordinator?.close()
+        p2pCoordinator = WebRtcMatchCoordinator(
+            context, session.userId, assignment,
+            SupabaseRealtimeSignalingDataSource(client, this),
+            SupabaseOnlineMatchRepository(client), this,
+        ).also { it.start() }
+    }
+    DisposableEffect(Unit) { onDispose { p2pCoordinator?.close() } }
     Surface(Modifier.fillMaxSize()) {
-        if (onMatch) MatchScreen(onBack = { onMatch = false }) else HomeScreen(onStart = { onMatch = true })
+        if (localMatch) MatchScreen(onBack = { localMatch = false }) else HomeScreen(
+            state = matchmakingState,
+            configurationError = clientResult.exceptionOrNull()?.message,
+            onOnlineStart = { matchmaking?.let { scope.launch { it.enqueue() } } },
+            onCancel = { matchmaking?.let { scope.launch { it.cancel() } } },
+            onLocalStart = { localMatch = true },
+        )
     }
 }
 
 @Composable
-private fun HomeScreen(onStart: () -> Unit) {
+private fun HomeScreen(
+    state: com.example.othello.matchmaking.MatchmakingViewState?,
+    configurationError: String?,
+    onOnlineStart: () -> Unit,
+    onCancel: () -> Unit,
+    onLocalStart: () -> Unit,
+) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 40.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterVertically),
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text("OTHELLO", style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary)
         Text("オンライン対局 MVP", style = MaterialTheme.typography.titleMedium)
-        Text("まずは端末内で遊べるローカル対局を提供しています。\nオンライン対局は接続設定後に有効化されます。")
-        Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) { Text("対局する") }
-        OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth()) { Text("棋譜・プロフィール（準備中）") }
+        Button(onClick = onOnlineStart, modifier = Modifier.fillMaxWidth()) { Text("対局する") }
+        OutlinedButton(onClick = onLocalStart, modifier = Modifier.fillMaxWidth()) { Text("ローカル対局") }
+        when (state?.status) {
+            MatchmakingStatus.WAITING -> {
+                Text("対戦相手を待っています")
+                OutlinedButton(onClick = onCancel) { Text("キャンセル") }
+            }
+            MatchmakingStatus.SIGNALING -> Text("対戦相手が見つかりました。P2P接続を開始します")
+            MatchmakingStatus.FAILED -> Text(state.error ?: "マッチングに失敗しました", color = MaterialTheme.colorScheme.error)
+            else -> Unit
+        }
+        if (configurationError != null) Text(configurationError, color = MaterialTheme.colorScheme.error)
     }
 }
 
@@ -77,7 +141,6 @@ private fun MatchScreen(onBack: () -> Unit) {
         val closeable = controller.observe { viewState = it }
         onDispose { closeable.close() }
     }
-
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             OutlinedButton(onClick = onBack) { Text("戻る") }
@@ -88,7 +151,6 @@ private fun MatchScreen(onBack: () -> Unit) {
         OthelloBoard(viewState, controller)
         Text(viewState.message, style = MaterialTheme.typography.titleMedium, modifier = Modifier.align(Alignment.CenterHorizontally))
         Button(onClick = controller::reset, modifier = Modifier.fillMaxWidth()) { Text("新しい対局") }
-        Text("合法手をタップして着手します。対局中の通信はまだ開始していません。", style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -96,8 +158,8 @@ private fun MatchScreen(onBack: () -> Unit) {
 private fun ScoreHeader(viewState: LocalMatchViewState) {
     Card(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-            Text("● 黒 ${viewState.game.board.count(Disc.BLACK)}")
-            Text("○ 白 ${viewState.game.board.count(Disc.WHITE)}")
+            Text("黒 ${viewState.game.board.count(Disc.BLACK)}")
+            Text("白 ${viewState.game.board.count(Disc.WHITE)}")
             Text("手数 ${viewState.game.ply}")
         }
     }
@@ -116,11 +178,8 @@ private fun OthelloBoard(viewState: LocalMatchViewState, controller: LocalMatchC
                         modifier = Modifier.weight(1f).border(0.5.dp, Color(0xFF72AA8D)).clickable(enabled = legal) { controller.play(position) },
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (disc != Disc.EMPTY) {
-                            Box(Modifier.size(34.dp).background(if (disc == Disc.BLACK) Color(0xFF111514) else Color(0xFFF5F4ED), CircleShape))
-                        } else if (legal) {
-                            Box(Modifier.size(10.dp).background(Color(0xFFB7E0C9), CircleShape))
-                        }
+                        if (disc != Disc.EMPTY) Box(Modifier.size(34.dp).background(if (disc == Disc.BLACK) Color(0xFF111514) else Color(0xFFF5F4ED), CircleShape))
+                        else if (legal) Box(Modifier.size(10.dp).background(Color(0xFFB7E0C9), CircleShape))
                     }
                 }
             }

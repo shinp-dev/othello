@@ -2,7 +2,7 @@ package com.example.othello.match
 
 enum class MatchStatus {
     IDLE, WAITING, SIGNALING, P2P_CONNECTED, PLAYING, FINISHING, CONFIRMED,
-    SIGNALING_FAILED, DISCONNECTED, PENDING_RESULT, DISPUTED,
+    SIGNALING_FAILED, DISCONNECTED, PENDING_RESULT, DISPUTED, FAILED,
 }
 
 sealed interface MatchCommand {
@@ -70,6 +70,7 @@ object MatchStateMachine {
                 else -> null
             }
             MatchStatus.DISPUTED, MatchStatus.CONFIRMED -> if (command === MatchCommand.Reset) MatchStatus.IDLE else null
+            MatchStatus.FAILED -> if (command === MatchCommand.Reset) MatchStatus.IDLE else null
         }
         return if (next == null) MatchTransition.Rejected(state, "${command::class.simpleName} is not allowed from ${state.status}")
         else MatchTransition.Accepted(MatchState(next))

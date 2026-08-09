@@ -24,3 +24,8 @@ fun MatchResult.toDisc(): Disc? = when (this) {
     MatchResult.WHITE_WIN -> Disc.WHITE
     MatchResult.DRAW -> null
 }
+
+interface GameRecordRepository {
+    suspend fun recent(userId: String, limit: Int = 50): List<GameRecord>
+    suspend fun get(matchId: String): GameRecord
+}
