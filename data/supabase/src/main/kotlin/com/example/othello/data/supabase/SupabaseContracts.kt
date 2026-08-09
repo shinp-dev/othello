@@ -308,10 +308,12 @@ private data class GameRecordRow(
     @SerialName("finished_at") val finishedAt: String,
     @SerialName("time_control") val timeControl: String,
     @SerialName("finish_reason") val finishReason: String,
+    @SerialName("final_position_hash") val finalPositionHash: String? = null,
 ) {
     fun toDomain() = GameRecord(
         matchId, players, CanonicalMoves.decode(canonicalMoves), MatchResult.valueOf(result),
-        Instant.parse(startedAt).toEpochMilli(), Instant.parse(finishedAt).toEpochMilli(), timeControl, FinishReason.valueOf(finishReason),
+        Instant.parse(startedAt).toEpochMilli(), Instant.parse(finishedAt).toEpochMilli(), timeControl,
+        FinishReason.valueOf(finishReason), finalPositionHash,
     )
 }
 

@@ -8,7 +8,7 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" tools:node="remove" />
     <application
         android:theme="@style/Theme.Othello"
-        android:label="Othello MVP"
+        android:label="ちゃんりば"
         android:allowBackup="false"
         android:supportsRtl="true">
         <activity android:name=".MainActivity" android:exported="true">

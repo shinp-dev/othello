@@ -15,8 +15,20 @@ data class GameRecord(
     val finishedAtEpochMillis: Long,
     val timeControl: String,
     val finishReason: FinishReason,
+    val finalPositionHash: String? = null,
 ) {
-    init { require(players.size == 2); require(moves.size <= 120) }
+    init {
+        require(players.size == 2 && players.distinct().size == 2)
+        require(moves.size <= 120)
+        require(finalPositionHash == null || FINAL_POSITION_HASH.matches(finalPositionHash))
+    }
+
+    val blackPlayerId: String get() = players[0]
+    val whitePlayerId: String get() = players[1]
+
+    private companion object {
+        val FINAL_POSITION_HASH = Regex("^[0-9a-f]{16}:[0-2]:[0-2]:[0-9]{1,3}$")
+    }
 }
 
 fun MatchResult.toDisc(): Disc? = when (this) {

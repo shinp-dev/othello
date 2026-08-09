@@ -20,6 +20,13 @@ select jsonb_build_object(
   ),
   'ack_rpc', to_regprocedure('public.ack_match_started(uuid)') is not null,
   'result_rpc', to_regprocedure('public.submit_match_result(uuid,text,text,text,text,jsonb)') is not null,
+  'record_final_hash', exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'game_records' and column_name = 'final_position_hash'
+  ),
+  'deletion_request_rpc', to_regprocedure('public.request_account_deletion()') is not null,
+  'deletion_prepare_rpc', to_regprocedure('public.prepare_account_deletion(uuid)') is not null,
+  'deletion_complete_rpc', to_regprocedure('public.complete_account_deletion(uuid)') is not null,
   'profiles_select', has_table_privilege('authenticated', 'public.profiles', 'SELECT'),
   'profile_name_update', has_column_privilege('authenticated', 'public.profiles', 'display_name', 'UPDATE'),
   'ratings_select', has_table_privilege('authenticated', 'public.ratings', 'SELECT'),

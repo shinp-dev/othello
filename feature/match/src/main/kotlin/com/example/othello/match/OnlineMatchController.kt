@@ -100,7 +100,7 @@ class OnlineMatchController(
         }
         stateSubscription = transport.observeState { next ->
             callbackScope.launch {
-                if (next == TransportState.CLOSED || next == TransportState.FAILED) onDisconnected()
+                if (next == TransportState.CLOSED || next == TransportState.FAILED) handleTransportTermination()
             }
         }
     }
@@ -230,13 +230,42 @@ class OnlineMatchController(
 
     suspend fun finishForDisconnect(): MatchFinishResult? = actionMutex.withLock { finishLocallyLocked(FinishReason.DISCONNECT) }
 
-    fun onDisconnected() {
-        if (state.matchState.status in setOf(MatchStatus.CONFIRMED, MatchStatus.DISPUTED, MatchStatus.PENDING_RESULT, MatchStatus.FINISHING)) return
+    private suspend fun handleTransportTermination() = actionMutex.withLock {
+        if (closed || state.matchState.status in setOf(
+                MatchStatus.CONFIRMED,
+                MatchStatus.DISPUTED,
+                MatchStatus.PENDING_RESULT,
+                MatchStatus.FINISHING,
+                MatchStatus.DISCONNECTED,
+            )
+        ) return@withLock
+        if (started && state.matchState.status == MatchStatus.PLAYING) {
+            // The DataChannel is already unavailable, so the terminal peer packet cannot be
+            // delivered. Persist the local disconnect fact directly; a one-sided submission
+            // receives the short PENDING_RESULT lease and can never strand the active lock for
+            // the full play lease.
+            finish(FinishReason.DISCONNECT, winnerForLoser(localDisc))
+            return@withLock
+        }
+        val abandonError = try {
+            repository.abandonMatch(matchId)
+            null
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            error.message ?: "対局予約を解放できませんでした"
+        }
         timeoutJob?.cancel()
         timeoutJob = null
         matchClock.stop()
         publishClockState()
-        update { copy(matchState = MatchState(MatchStatus.DISCONNECTED), message = "接続が切断されました") }
+        update {
+            copy(
+                matchState = MatchState(MatchStatus.DISCONNECTED, abandonError),
+                message = "接続が切断されました",
+                error = abandonError,
+            )
+        }
     }
 
     fun reportConnectionError(message: String) {

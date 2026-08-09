@@ -49,7 +49,14 @@ $requiredPatterns = @(
     'grant update \(display_name\) on table public\.profiles to authenticated',
     'grant insert on table public\.match_signaling to authenticated',
     'grant usage, select on sequence public\.match_signaling_id_seq to authenticated',
-    'delete from public\.match_notifications n[\s\S]*n\.match_id = row_value\.id'
+    'delete from public\.match_notifications n[\s\S]*n\.match_id = row_value\.id',
+    'alter table public\.game_records add column if not exists final_position_hash',
+    'final position hash required',
+    'create or replace function public\.prepare_account_deletion',
+    'create or replace function public\.complete_account_deletion',
+    'create or replace function public\.get_account_deletion_evidence',
+    'account deletion is pending',
+    "coalesce\(nullif\(btrim\(new\.raw_user_meta_data ->> 'display_name'\), ''\), 'プレイヤー'\)"
 )
 $missing = $requiredPatterns | Where-Object { $sql -notmatch $_ }
 if ($missing) { $missing | ForEach-Object { Write-Error "Missing SQL security contract: $_" }; exit 1 }

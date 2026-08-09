@@ -1,17 +1,17 @@
-# Othello Online MVP Architecture
+# ちゃんりば Architecture
 
 ## Scope
 
-This repository is an Android-first Othello beta. Local play, Supabase-backed matchmaking/finalization, WebRTC DataChannel play, immutable records, credential submission, and post-game Edax review are implemented behind production-shaped domain boundaries.
+This repository implements the Android-first Reversi product ちゃんりば. Local play, Supabase-backed matchmaking/finalization, WebRTC DataChannel play, immutable records, credential submission, account-deletion processing, and post-game Edax review are implemented behind explicit domain boundaries.
 
-The current MVP assumption is that a user can start a local game without Supabase credentials. Network features remain opt-in and are not faked as authoritative local state.
+A user can start a local game without Supabase credentials. Network features require Auth and are never faked as authoritative local state.
 
 ## Modules
 
 | Module | Responsibility | Must not know |
 | --- | --- | --- |
 | `:app` | Compose navigation, dependency wiring, Android entry point | Game rule implementation, DB writes |
-| `:core:game` | Immutable Othello value objects, legal moves, transitions, result | Android, network, users, rating, analysis |
+| `:core:game` | Immutable Reversi value objects, legal moves, transitions, result | Android, network, users, rating, analysis |
 | `:core:network` | Transport and signaling ports, P2P command validation | Compose, rating policy |
 | `:core:auth` | Auth/session port | Game rules |
 | `:core:designsystem` | Theme and reusable UI primitives | Domain decisions |
@@ -50,6 +50,7 @@ feature:match -X-> feature:profile / feature:credential
 | `game_records` | Records | RecordRepository |
 | `ratings`, `rating_history` | Rating policy/application | Server RPC only for official updates |
 | `federation_credentials`, `verification_submissions` | Credential / admin BFF | RLS + Cloudflare Worker |
+| `account_deletion_requests` | Profile / trusted admin BFF | owner request RPC + service-role processing RPCs |
 
 The Android client never contains a service-role key. It cannot mark a rating, match, or credential as verified.
 
@@ -84,6 +85,8 @@ The state machine is a pure reducer. UI observes state; it does not decide trans
 
 Both players submit immutable move history, result, final hash and finish reason. A server-side RPC compares submissions. Only matching submissions become `CONFIRMED`; then one idempotent transaction creates the record and applies the versioned `RatingPolicy`. Mismatches become `DISPUTED` and do not change rating. A single submission is `PENDING_RESULT`.
 
+New GameRecords persist the verified final-position hash and fixed `5m` product time control. Existing records created before migration 017 may have a null final hash; records remain immutable.
+
 `RatingPolicy` and `StableRatingPolicy` are replaceable interfaces. Peak is monotonic. Stable band uses recent completed ratings and returns `CALCULATING` until enough observations exist.
 
 ## Review / Edax
@@ -95,6 +98,10 @@ Edax evaluation data and opening books are user imports, never app assets. The c
 ## Federation verification
 
 Users may self-declare a credential. A verification submission uploads evidence to Supabase Storage and is reviewed only through Cloudflare Worker -> Supabase. Public profiles show only `段級位確認済み`; evidence and legal names are private and removable after approval.
+
+## Account deletion
+
+Android can only create an owner-scoped deletion request. The trusted Worker deletes every object under the user's verification prefix through the Storage API, calls a service-role-only DB preparation RPC, removes the Auth identity through the Auth Admin API, and then marks the request complete. DB preparation removes private ratings, credentials, submissions and record references, while retaining an anonymized profile tombstone so the opponent's immutable shared record and match foreign keys remain valid. A pending deletion request is excluded from matchmaking.
 
 ## Security and forbidden dependencies
 
@@ -115,5 +122,5 @@ Users may self-declare a credential. A verification submission uploads evidence 
 
 ## Change log
 
-- 2026-08-09: Initial architecture recorded before implementation. Empty repository assumption documented. Local two-player mode is the safe executable MVP while Supabase/WebRTC/Edax ports remain replaceable.
-- 2026-08-09: Additive hardening recorded. Server persisted match state is separated from device session state; official-Rating matchmaking, result submission, idempotent finalization, bounded records, public profile projection, and credential admin RPC were added without destructive schema conversion.
+- 2026-08-09: Initial module boundaries and pure Game Core were established.
+- 2026-08-10: Online beta, bounded records, WebRTC/start ACK/clock/finalization, credential administration, account deletion, and Edax post-game analysis were completed without crossing the Match/Analysis boundary.

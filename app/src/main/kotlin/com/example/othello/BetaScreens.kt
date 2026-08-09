@@ -39,6 +39,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.example.othello.analysis.api.AnalysisResult
 import com.example.othello.analysis.api.EvaluationKind
@@ -55,6 +57,7 @@ import com.example.othello.profile.Profile
 import com.example.othello.profile.ProfileRepository
 import com.example.othello.records.GameRecord
 import com.example.othello.records.GameRecordRepository
+import com.example.othello.records.FinishReason
 import com.example.othello.records.MatchResult
 import com.example.othello.review.ReviewSession
 import com.example.othello.review.AnalysisRequestGuard
@@ -91,9 +94,9 @@ internal fun ProfileScreen(userId: String, repository: ProfileRepository, onBack
                 },
                 enabled = displayName.trim().isNotEmpty() && displayName.trim() != current.displayName,
             ) { Text("表示名を保存") }
-            Text("Current Rating: ${current.currentRating}")
-            Text("Peak Rating: ${current.peakRating}")
-            Text("Stable Rating Band: ${current.stableRatingBand}")
+            Text("現在のレーティング: ${current.currentRating}")
+            Text("最高レーティング: ${current.peakRating}")
+            Text("安定レーティング帯: ${if (current.stableRatingBand == "CALCULATING") "算出中" else current.stableRatingBand}")
             Text("連盟段級位: ${current.federationGrade ?: "未登録"}")
             Text("確認状態: ${current.federationVerificationStatus ?: "未申請"}")
             Text("公開プロフィールにメールアドレスや証明画像は表示されません", style = MaterialTheme.typography.bodySmall)
@@ -124,13 +127,11 @@ internal fun RecordsScreen(
             records!!.isEmpty() -> Text("保存された棋譜はありません")
             else -> records!!.forEach { record ->
                 val localIsBlack = record.players.first() == userId
-                val opponent = record.players.first { it != userId }
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("${record.result.labelFor(localIsBlack)} / ${if (localIsBlack) "黒" else "白"}")
-                        Text("相手: ${opponent.take(8)}…", style = MaterialTheme.typography.bodySmall)
-                        Text("${record.finishReason} / ${formatDate(record.finishedAtEpochMillis)}")
-                        Text("${record.moves.size} ply / ${CanonicalMoves.encode(record.moves)}", style = MaterialTheme.typography.bodySmall)
+                        Text("${record.finishReason.userLabel()} / ${formatDate(record.finishedAtEpochMillis)}")
+                        Text("${record.moves.size}手 / ${CanonicalMoves.encode(record.moves)}", style = MaterialTheme.typography.bodySmall)
                         OutlinedButton(onClick = { onReview(record) }) { Text("棋譜を開く") }
                     }
                 }
@@ -176,7 +177,7 @@ internal fun ReviewScreen(
         if (!analysisRequested) return@LaunchedEffect
         when {
             !dataStatus.enabled -> analysisMessage = "設定でEdax解析がOFFです"
-            !dataStatus.nativeAvailable -> analysisMessage = "Edax native libraryを利用できません"
+            !dataStatus.nativeAvailable -> analysisMessage = "Edax解析エンジンを利用できません"
             dataStatus.evaluationData == null -> analysisMessage = "解析用評価データが設定されていません"
             else -> {
                 analysisRunning = true
@@ -207,9 +208,9 @@ internal fun ReviewScreen(
 
     val visibleEvaluations = if (showEvaluations) analysisResult?.evaluations.orEmpty() else emptyList()
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        ScreenHeader("Review", onBack)
-        Text("${record.result} / ${record.finishReason} / ${formatDate(record.finishedAtEpochMillis)}")
-        Text("ply ${review.cursor}/${review.mainLineLastPly}${if (review.isInVariation) " / variation" else ""}")
+        ScreenHeader("棋譜レビュー", onBack)
+        Text("${record.result.userLabel()} / ${record.finishReason.userLabel()} / ${formatDate(record.finishedAtEpochMillis)}")
+        Text("手数 ${review.cursor}/${review.mainLineLastPly}${if (review.isInVariation) " / 変化手順" else ""}")
         ReviewBoard(state, review.isInVariation, visibleEvaluations.associateBy { it.move }) { position ->
             if (review.playVariation(position)) revision++
         }
@@ -383,13 +384,28 @@ private fun ReviewBoard(
                     val position = Position(row, column)
                     val disc = state.board[position]
                     val legal = variationEnabled && position in state.legalMoves
+                    val evaluation = evaluations[position]
                     Box(
-                        Modifier.weight(1f).border(0.5.dp, Color(0xFF72AA8D)).clickable(enabled = legal) { onMove(position) },
+                        Modifier
+                            .weight(1f)
+                            .border(0.5.dp, Color(0xFF72AA8D))
+                            .semantics {
+                                contentDescription = buildString {
+                                    append("${('A'.code + column).toChar()}${row + 1}、")
+                                    append(when (disc) {
+                                        Disc.BLACK -> "黒石"
+                                        Disc.WHITE -> "白石"
+                                        Disc.EMPTY -> if (position in state.legalMoves) "合法手" else "空き"
+                                    })
+                                    evaluation?.let { append("、評価 ${formatEvaluation(it.score.value, it.score.kind)}") }
+                                }
+                            }
+                            .clickable(enabled = legal) { onMove(position) },
                         contentAlignment = Alignment.Center,
                     ) {
                         if (disc != Disc.EMPTY) Box(Modifier.size(34.dp).background(if (disc == Disc.BLACK) Color(0xFF111514) else Color(0xFFF5F4ED), CircleShape))
-                        else if (evaluations[position] != null) {
-                            val score = requireNotNull(evaluations[position]).score
+                        else if (evaluation != null) {
+                            val score = evaluation.score
                             Text(formatEvaluation(score.value, score.kind), color = Color(0xFFFFE082), style = MaterialTheme.typography.labelSmall)
                         } else if (legal) Box(Modifier.size(10.dp).background(Color(0xFFB7E0C9), CircleShape))
                     }
@@ -427,6 +443,20 @@ private fun MatchResult.labelFor(localIsBlack: Boolean): String {
         localWon -> "勝ち"
         else -> "負け"
     }
+}
+
+private fun MatchResult.userLabel(): String = when (this) {
+    MatchResult.BLACK_WIN -> "黒勝ち"
+    MatchResult.WHITE_WIN -> "白勝ち"
+    MatchResult.DRAW -> "引き分け"
+}
+
+private fun FinishReason.userLabel(): String = when (this) {
+    FinishReason.NORMAL -> "通常終局"
+    FinishReason.RESIGNATION -> "投了"
+    FinishReason.TIMEOUT -> "時間切れ"
+    FinishReason.DISCONNECT -> "切断"
+    FinishReason.DISPUTED -> "結果不一致"
 }
 
 private fun formatDate(epochMillis: Long): String = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")

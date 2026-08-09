@@ -104,7 +104,7 @@ internal fun AnalysisSettingsScreen(
             steps = 16,
             enabled = !busy,
         )
-        Text("スマホ向けの既定値はlevel 8です。解析はReview画面で明示的に開始した時だけ動作します。", style = MaterialTheme.typography.bodySmall)
+        Text("スマホ向けの既定値はレベル8です。解析は棋譜レビュー画面で明示的に開始した時だけ動作します。", style = MaterialTheme.typography.bodySmall)
 
         AnalysisFileStatus("評価データ", status.evaluationData, required = true)
         Button(
@@ -141,8 +141,9 @@ internal fun AnalysisSettingsScreen(
 internal fun AboutScreen(onBack: () -> Unit, onLicenses: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SettingsHeader("このアプリについて", onBack)
-        Text("Othello Android β")
-        Text("対局後Reviewの解析エンジンとしてEdaxを使用します。Edax公式・公認アプリではありません。")
+        Text("ちゃんりば")
+        Text("ちゃんとリバーシ。軽く一局打っても、その一局がちゃんと残り、振り返りが次につながるリバーシアプリです。")
+        Text("対局後レビューの解析エンジンとしてEdaxを使用します。Edax公式・公認アプリではありません。")
         Button(onClick = onLicenses, modifier = Modifier.fillMaxWidth()) { Text("オープンソースライセンス") }
     }
 }
@@ -174,7 +175,7 @@ private fun AnalysisFileStatus(label: String, file: ImportedAnalysisFile?, requi
     } else {
         Text(file.fileName)
         Text("${file.sizeBytes / 1024} KiB / SHA-256 ${file.sha256.take(12)}…", style = MaterialTheme.typography.bodySmall)
-        Text("import: ${formatImportDate(file.importedAtEpochMillis)}", style = MaterialTheme.typography.bodySmall)
+        Text("取込日時: ${formatImportDate(file.importedAtEpochMillis)}", style = MaterialTheme.typography.bodySmall)
     }
 }
 

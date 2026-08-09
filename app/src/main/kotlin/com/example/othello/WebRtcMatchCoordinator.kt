@@ -83,7 +83,11 @@ class WebRtcMatchCoordinator(
                         autoPlayInFlight = false
                     }
                 }
-            } else if (view.matchState.status == com.example.othello.match.MatchStatus.PENDING_RESULT) {
+            } else if (view.matchState.status in setOf(
+                    com.example.othello.match.MatchStatus.FINISHING,
+                    com.example.othello.match.MatchStatus.PENDING_RESULT,
+                )
+            ) {
                 schedulePendingResultRetry()
             } else if (view.matchState.status in setOf(
                     com.example.othello.match.MatchStatus.CONFIRMED,
@@ -126,7 +130,11 @@ class WebRtcMatchCoordinator(
         pendingResultRetryJob = sessionScope.launch {
             repeat(PENDING_RESULT_RETRY_ATTEMPTS) { attempt ->
                 delay(if (attempt == 0) 750L else PENDING_RESULT_RETRY_MILLIS)
-                if (closed || controller.viewState.matchState.status != com.example.othello.match.MatchStatus.PENDING_RESULT) {
+                if (closed || controller.viewState.matchState.status !in setOf(
+                        com.example.othello.match.MatchStatus.FINISHING,
+                        com.example.othello.match.MatchStatus.PENDING_RESULT,
+                    )
+                ) {
                     return@launch
                 }
                 controller.retryFinish()

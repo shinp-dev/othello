@@ -43,7 +43,10 @@ try {
         'HeuristicTestAnalysisEngine',
         'SUPABASE_SERVICE_ROLE_KEY',
         'player-a@example.test',
-        'player-b@example.test'
+        'player-b@example.test',
+        'http://10.0.2.2',
+        'http://127.0.0.1',
+        'packet injection'
     )
     foreach ($entry in $entries | Where-Object {
         $_.FullName -match '(?i)(\.dex$|resources\.arsc$|AndroidManifest\.xml$|^assets/|^base/assets/)'
@@ -100,11 +103,29 @@ if ($extension -eq '.apk') {
     if ($LASTEXITCODE -ne 0) { throw 'APK is not 16 KB ZIP aligned' }
     $permissions = & $aapt dump permissions $artifact
     if ($LASTEXITCODE -ne 0) { throw 'aapt permission inspection failed' }
-    foreach ($permission in @('READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE', 'MANAGE_EXTERNAL_STORAGE')) {
+    foreach ($permission in @(
+        'READ_EXTERNAL_STORAGE',
+        'WRITE_EXTERNAL_STORAGE',
+        'MANAGE_EXTERNAL_STORAGE',
+        'READ_MEDIA_IMAGES',
+        'READ_MEDIA_VIDEO',
+        'READ_MEDIA_AUDIO',
+        'ACCESS_MEDIA_LOCATION',
+        'QUERY_ALL_PACKAGES',
+        'REQUEST_INSTALL_PACKAGES'
+    )) {
         if (($permissions -join "`n") -match [regex]::Escape($permission)) {
-            throw "Release requests forbidden broad storage permission: $permission"
+            throw "Release requests forbidden broad or unrelated permission: $permission"
         }
+    }
+    $badging = & $aapt dump badging $artifact
+    if ($LASTEXITCODE -ne 0) { throw 'aapt badging inspection failed' }
+    if (($badging -join "`n") -match 'application-debuggable') { throw 'Release APK is debuggable' }
+    $manifest = & $aapt dump xmltree $artifact AndroidManifest.xml
+    if ($LASTEXITCODE -ne 0) { throw 'aapt manifest inspection failed' }
+    if ($manifest | Where-Object { $_ -match 'android:usesCleartextTraffic.*(?:0xffffffff|0x1)\s*$' }) {
+        throw 'Release APK enables cleartext traffic'
     }
 }
 
-Write-Output "release contents passed: no bundled eval/book/test data, exact ABI set, 16 KB native alignment, and no debug hooks"
+Write-Output "release contents passed: no bundled eval/book/test data, exact ABI set, 16 KB native alignment, no debug hooks, and least-privilege manifest"

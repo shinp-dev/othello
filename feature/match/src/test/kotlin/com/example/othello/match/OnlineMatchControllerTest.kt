@@ -25,6 +25,7 @@ private class FakeMatchTransport : MatchTransport {
     val sentFinishes = mutableListOf<FinishCommand>()
     private val listeners = mutableSetOf<(MoveCommand) -> Unit>()
     private val finishListeners = mutableSetOf<(FinishCommand) -> Unit>()
+    private val stateListeners = mutableSetOf<(TransportState) -> Unit>()
     private var state = TransportState.OPEN
     var failSend = false
     var closeCalls = 0
@@ -43,9 +44,17 @@ private class FakeMatchTransport : MatchTransport {
 
     fun deliver(command: MoveCommand) = listeners.toList().forEach { it(command) }
     fun deliverFinish(command: FinishCommand) = finishListeners.toList().forEach { it(command) }
+    fun fail() {
+        state = TransportState.FAILED
+        stateListeners.toList().forEach { it(state) }
+    }
     override fun observe(onCommand: (MoveCommand) -> Unit): AutoCloseable { listeners += onCommand; return AutoCloseable { listeners -= onCommand } }
     override fun observeFinish(onCommand: (FinishCommand) -> Unit): AutoCloseable { finishListeners += onCommand; return AutoCloseable { finishListeners -= onCommand } }
-    override fun observeState(onState: (TransportState) -> Unit): AutoCloseable { onState(state); return AutoCloseable { } }
+    override fun observeState(onState: (TransportState) -> Unit): AutoCloseable {
+        stateListeners += onState
+        onState(state)
+        return AutoCloseable { stateListeners -= onState }
+    }
     override fun close() { closeCalls++ }
 }
 
@@ -56,9 +65,10 @@ private class FakeOnlineRepository : OnlineMatchRepository {
     var startState = MatchStartAck("CREATED", localAcked = true, bothAcked = true)
     var ackCalls = 0
     var submitCalls = 0
+    var abandonCalls = 0
     override suspend fun ackMatchStarted(matchId: String): MatchStartAck { ackCalls++; return startState }
     override suspend fun getMatchStartState(matchId: String) = startState
-    override suspend fun abandonMatch(matchId: String) = true
+    override suspend fun abandonMatch(matchId: String): Boolean { abandonCalls++; return true }
     override suspend fun submitMatchResult(submission: MatchSubmission): MatchFinishResult {
         submitCalls++
         submitted = submission
@@ -163,6 +173,38 @@ class OnlineMatchControllerTest {
         assertEquals(repository.submissions.first(), repository.submissions.last())
         assertEquals(MatchStatus.CONFIRMED, controller.viewState.matchState.status)
         assertEquals(1, transport.closeCalls)
+    }
+
+    @Test
+    fun unexpectedTransportFailureDuringPlaySubmitsDisconnectWithoutPeerPacket() = runBlocking {
+        val transport = FakeMatchTransport()
+        val repository = FakeOnlineRepository().apply {
+            serverStatuses.clear()
+            serverStatuses += "PENDING_RESULT"
+        }
+        val controller = OnlineMatchController("lost-channel", Disc.BLACK, transport, repository)
+        controller.onDataChannelOpen()
+
+        transport.fail()
+
+        assertEquals(1, repository.submitCalls)
+        assertEquals(FinishReason.DISCONNECT, repository.submitted?.finishReason)
+        assertEquals(MatchResult.WHITE_WIN, repository.submitted?.result)
+        assertEquals(MatchStatus.PENDING_RESULT, controller.viewState.matchState.status)
+        assertTrue(transport.sentFinishes.isEmpty())
+    }
+
+    @Test
+    fun transportFailureBeforeStartAbandonsReservation() = runBlocking {
+        val transport = FakeMatchTransport()
+        val repository = FakeOnlineRepository()
+        val controller = OnlineMatchController("pre-start", Disc.BLACK, transport, repository)
+
+        transport.fail()
+
+        assertEquals(1, repository.abandonCalls)
+        assertEquals(0, repository.submitCalls)
+        assertEquals(MatchStatus.DISCONNECTED, controller.viewState.matchState.status)
     }
 
     @Test

@@ -5,6 +5,7 @@ import android.content.Intent
 internal data class DebugLaunchOptions(
     val autoPlay: Boolean = false,
     val timeControlMillis: Long? = null,
+    val showDiagnostics: Boolean = false,
 )
 
 @Suppress("UNUSED_PARAMETER")

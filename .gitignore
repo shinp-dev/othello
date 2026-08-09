@@ -9,3 +9,4 @@ captures/
 supabase/.temp/
 supabase/.branches/
 build/e2e/
+cloudflare-admin/node_modules/

@@ -10,6 +10,13 @@ jobs:
       - uses: android-actions/setup-android@v3
       - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: cloudflare-admin/package-lock.json
+      - run: npm ci --prefix cloudflare-admin
+      - run: npm run typecheck --prefix cloudflare-admin
       - run: ./gradlew test
       - run: ./gradlew lint
       - run: ./gradlew assembleDebug assembleRelease bundleRelease

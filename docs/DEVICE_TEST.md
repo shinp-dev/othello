@@ -1,4 +1,4 @@
-# Android Emulator A/B WebRTC test
+# ちゃんりば Android Emulator A/B / physical-device test
 
 The reproducible emulator path is `scripts/run-emulator-e2e.ps1`. It uses two real
 Android Emulator processes and the production-shaped Supabase/WebRTC path; Fake
@@ -36,7 +36,7 @@ transport tests are not a substitute for this run. Evidence is written below
 
 ## Acceptance sequence
 
-1. Confirm API level/package install and app startup on both emulators. Sign in as A and B; diagnostics must show different user IDs.
+1. Confirm API level/package install and app startup on both emulators. Sign in as A and B. Internal IDs and transport diagnostics are debug-build-only and must not appear in release UI.
 2. Tap `対局する` on both devices. The first device remains `WAITING`; the second enters `SIGNALING`.
 3. Confirm the signaling diagnostics show only the expected offer/answer exchange. Full SDP, credentials, and service keys must not appear in logs.
 4. Confirm the DataChannel reaches `OPEN`, both clients call `ack_match_started` once, and both observe `bothStartAcked=true` before `PLAYING`. The server sets `p2p_started_at` only after both acks; Realtime is then unsubscribed.
@@ -63,11 +63,12 @@ transport tests are not a substitute for this run. Evidence is written below
 6. Optionally import the test-created header-only empty Book to test load/delete.
    Never use or commit a third-party eval or Book fixture.
 
-## Expected diagnostics
+## Debug-only diagnostics
 
-`matchId`, user/disc/opponent, ICE/PeerConnection/DataChannel states, signaling timestamps,
-offer/answer-set flags, sent/received packet counts, ply, state hash, error, and start-ack
-status are safe. Do not log complete SDP, tokens, passwords, or evidence paths.
+`matchId`, assigned disc, ICE/PeerConnection/DataChannel states, sent/received packet counts,
+ply, state hash, error, and start-ack status support Emulator E2E only. Release UI does not
+show internal user IDs, match IDs, hashes, or transport diagnostics. Never log complete SDP,
+tokens, passwords, or evidence paths.
 
 ## Physical-device-only follow-up
 
@@ -79,5 +80,6 @@ limits, thermal/battery behavior, and production Edax native performance.
 
 ## Product decisions outside emulator acceptance
 
-- Configure production Supabase Auth, Realtime authorization, Storage limits, TURN credentials, crash reporting, privacy/retention policy, and Play Console signing.
-- Before Play pre-release: choose the permanent application ID, add privacy policy/data-safety declarations, account deletion flow, release signing, OSS notices, crash/ANR monitoring, and staged rollout testing.
+- Decide the permanent applicationId, repository rename, launcher icon/final visual brand, TURN provider, and Play publication/signing.
+- Publish the final Privacy Policy URL and the external web account-deletion request URL required by Google Play; the in-app request and trusted server-side deletion processor are implemented.
+- Decide crash/ANR monitoring and staged rollout policy without placing credentials in the repository.

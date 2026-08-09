@@ -1,6 +1,6 @@
-# Othello Online MVP
+# ちゃんりば（ちゃんとリバーシ）
 
-責務分離を優先したAndroid向けオンラインオセロβです。Supabase Auth・matchmaking・Realtime signaling・WebRTC DataChannelを使うオンライン対局と、対局後GameRecordをEdaxで解析するReview経路を実装しています。本アプリはEdax公式・公認アプリではありません。
+軽く一局打っても、その一局がちゃんと残り、ちゃんと振り返れて、次につながるAndroid向けリバーシアプリです。Supabase Auth・matchmaking・Realtime signaling・WebRTC DataChannelを使うオンライン対局と、対局後GameRecordをEdaxで解析するレビュー経路を実装しています。本アプリはEdax公式・公認アプリではありません。
 
 ## 開発環境
 
@@ -57,7 +57,9 @@ Hosted疎通環境を同じ設定で作り直す手順は [docs/SUPABASE_HOSTED_
 
 ## Cloudflare Admin
 
-`cloudflare-admin`は段級位申請の管理BFFです。service-role keyはWorker secretにだけ置き、`ADMIN_TOKEN`もWorker secretに置きます。Storage bucketは`verification`、object名は`<auth.uid()>/<filename>`とし、提出RPCがStorage ownerとprefixを検証します。承認・却下は`review_verification_submission` RPCで原子的に更新し、WorkerはDBが発行する`get_verification_evidence_cleanup`のpathだけを削除します。削除失敗時は同じ管理操作で再試行でき、成功後はpathをnull化します。ブラウザへservice-role keyを配布しません。
+`cloudflare-admin`は段級位申請とアカウント削除を扱う信頼済み管理BFFです。service-role keyはWorker secretにだけ置き、`ADMIN_TOKEN`もWorker secretに置きます。Storage bucketは`verification`、object名は`<auth.uid()>/<filename>`とし、提出RPCがStorage ownerとprefixを検証します。承認・却下は`review_verification_submission` RPCで原子的に更新し、WorkerはDBが発行するpathだけをStorage APIで削除します。
+
+削除要求は10分ごとのWorker Cronまたは管理endpointから再実行できます。証明画像の実体削除、私有データ削除、共有棋譜を壊さないプロフィール匿名化、Supabase Auth Admin削除、完了記録の順に処理し、途中失敗を完了扱いしません。ブラウザやAndroidへservice-role keyを配布しません。
 
 ```powershell
 cd cloudflare-admin
@@ -71,7 +73,7 @@ npm run deploy
 
 `MatchTransport`のWebRTC DataChannel実装を使用し、Supabase RealtimeのPostgres ChangesはSDP offer/answerの確立時だけ使用します。DB signaling rowはsubscription準備前送信のfallbackも兼ねます。P2P接続後に着手や時計をSupabaseへ送信しません。実機2台では、Auth設定、同一Supabase project、TURN/STUN設定、2台のqueue参加、DataChannel成立、両者start ACK、双方の同一棋譜・hash、結果提出の順で確認します。
 
-`applicationId = com.example.othello` は開発用の仮値です。Store公開前に正式な所有ドメイン由来のIDを決定し、公開後に変更しない運用へ移行します。
+`applicationId = com.example.othello` は開発用の仮値です。Google Play公開前に必ず正式な所有ドメイン由来のIDを決定し、公開後に変更しない運用へ移行します。repository名と内部package/DB識別子の`othello`は、公開ブランドではなく既存の技術識別子として今回変更していません。
 
 Emulator A/Bの再現手順と、emulatorで完了できる項目・物理端末に残る項目は
 [`docs/DEVICE_TEST.md`](docs/DEVICE_TEST.md)を参照してください。`build/e2e/`には
@@ -95,3 +97,10 @@ Edaxの評価データ（`eval.dat`等）とOpening Bookは、権利をEdax本�
 Reviewでは実戦開始局面、任意ply、最終局面、保存前variation局面を解析でき、現在手番の全合法手へ予測終局石差を盤面上表示します。完全読みの`exact`、深さ依存の`heuristic`、import済みBook由来の`book`を区別します。解析は明示操作時だけ単一background workerで実行し、ply変更・variation変更・画面離脱・新規解析でcancel/stale-result破棄を行います。
 
 対応ABIは`arm64-v8a`と開発用`x86_64`だけです。Edaxを含む全native libraryとAPK packagingは16 KiB page-size alignmentをrelease検査します。`feature:match`と`core:game`はanalysis/JNI/Edaxへ依存せず、ranked/live DataChannel経路から解析へ到達できません。
+
+## 公開前に残る判断と実機確認
+
+- ユーザー判断: 正式applicationId、repository renameの要否、launcher icon/最終ビジュアル、Google Play公開、TURN provider、Privacy Policyと外部アカウント削除URL。
+- 物理端末: arm64 native実性能、Edaxの持続性能・thermal・battery、Wi-Fi↔mobile/mobile↔mobile、carrier NAT/CGNAT/symmetric NAT、STUN-only成功率とTURN必要率、network handover、メーカー固有background挙動。
+
+現在のICE設定はPublic STUNのみです。Emulator A/B成功はTURN不要の根拠にはせず、物理ネットワーク試験後に導入判断します。有料サービスを前提にした設定は含めていません。

@@ -1,6 +1,6 @@
 # Notices
 
-## Othello Android application
+## ちゃんりば Android application
 
 The application source in this repository is distributed under the GNU General
 Public License version 3. See `LICENSE`.

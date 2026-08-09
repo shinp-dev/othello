@@ -35,6 +35,7 @@ New-Item -ItemType Directory -Force $evidence | Out-Null
 $devices = @(@{ Name = 'A'; Id = 'emulator-5554'; Email = $PlayerAEmail; Password = $PlayerAPassword }, @{ Name = 'B'; Id = 'emulator-5556'; Email = $PlayerBEmail; Password = $PlayerBPassword })
 $started = @()
 $uiPlay = -join ([char[]](0x5bfe, 0x5c40, 0x3059, 0x308b))
+$uiProduct = -join ([char[]](0x3061, 0x3083, 0x3093, 0x308a, 0x3070))
 $uiLogin = -join ([char[]](0x30ed, 0x30b0, 0x30a4, 0x30f3))
 $uiLoggedIn = $uiLogin + -join ([char[]](0x4e2d, 0x3a))
 $uiWaiting = -join ([char[]](0x5bfe, 0x6226, 0x76f8, 0x624b, 0x3092, 0x5f85, 0x3063, 0x3066, 0x3044, 0x307e, 0x3059))
@@ -66,15 +67,18 @@ function Get-UiXml([string]$device) {
         $dumpOut = Join-Path $evidence "$device-uiautomator.out"
         $dumpErr = Join-Path $evidence "$device-uiautomator.err"
         $dump = Start-Process -FilePath $adb `
-            -ArgumentList @('-s', $device, 'shell', 'uiautomator', 'dump', '/sdcard/othello-window.xml') `
+            -ArgumentList @('-s', $device, 'exec-out', 'uiautomator', 'dump', '/dev/tty') `
             -NoNewWindow -PassThru -RedirectStandardOutput $dumpOut -RedirectStandardError $dumpErr
         if (-not $dump.WaitForExit(15000)) {
             $dump.Kill()
             $dump.WaitForExit()
             return ''
         }
-        if ($dump.ExitCode -ne 0) { return '' }
-        return (& $adb -s $device shell cat /sdcard/othello-window.xml 2>$null) -join ""
+        # Ensure redirected UTF-8 output is fully flushed before reading it.
+        $dump.WaitForExit()
+        $xml = Get-Content -Raw -Encoding UTF8 $dumpOut
+        if (-not $xml.StartsWith("<?xml") -or $xml -notlike '*<hierarchy*') { return '' }
+        return $xml
     } catch { return '' }
 }
 
@@ -174,7 +178,7 @@ try {
             $launchArgs += @('--el', 'othello.e2e.timeControlMillis', "$TimeControlMillis")
         }
         Invoke-Adb $player.Id $launchArgs | Out-Null
-        Wait-UiText $player.Id 'OTHELLO'
+        Wait-UiText $player.Id $uiProduct
         Capture-Evidence $player
     }
 

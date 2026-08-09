@@ -1,4 +1,4 @@
-# Hosted Supabase setup (disposable E2E project)
+# ちゃんりば Hosted Supabase setup (disposable E2E project)
 
 この手順は、オンライン疎通確認用のSupabaseプロジェクトを同じ設定で作り直すためのメモです。永続運用や本番課金を前提にしません。
 
@@ -32,7 +32,7 @@ supabase link --project-ref <project-ref>
 supabase db push
 ```
 
-DashboardのSQL Editorを使う場合も、`202608090001_init.sql` から末尾のmigrationまでを順番に適用します。途中失敗時の部分適用を避けるため、まとめて実行する場合は `begin;` / `commit;` で囲みます。
+DashboardのSQL Editorを使う場合も、`202608090001_init.sql` から`202608090017_product_integrity_and_deletion.sql`までを順番に適用します。途中失敗時の部分適用を避けるため、まとめて実行する場合は `begin;` / `commit;` で囲みます。
 
 適用後、`scripts/verify-hosted-supabase.sql` をSQL Editorで実行します。`realtime_tables` は `2`、ほかはすべて `true` であることを確認します。これにより次を同時に確認できます。
 
@@ -40,6 +40,7 @@ DashboardのSQL Editorを使う場合も、`202608090001_init.sql` から末尾�
 - Realtime対象の `match_notifications` と `match_signaling`
 - privateな `verification` bucket、5 MiB上限、JPEG/PNG/WebP制限
 - Androidクライアントに必要な最小Data API権限
+- account deletionのservice-role-only準備/完了RPCと匿名profile tombstone
 
 ## Auth
 
@@ -74,5 +75,9 @@ $env:OTHELLO_E2E_PLAYER_B_PASSWORD='<player-b-password>'
 3. A/Bが同一Projectへログインできる。
 4. Queue参加、Realtime signaling、DataChannel成立、両者start ACKまで到達する。
 5. 同一棋譜の結果提出で `CONFIRMED`、GameRecord 1件、Rating更新1回になる。
+
+## 信頼済み管理Worker
+
+`cloudflare-admin/wrangler.toml`の`SUPABASE_URL`だけを対象Projectへ変更し、`SUPABASE_SERVICE_ROLE_KEY`と`ADMIN_TOKEN`は`wrangler secret put`で登録します。Gitへ値を保存しません。`SUPABASE_VERIFICATION_BUCKET`はmigrationが作る`verification`です。Worker Cronは10分ごとに削除要求を再実行し、Storage APIで証明画像を消してからDB匿名化とAuth Admin削除を行います。Cloudflare側で課金やカード登録を要求された場合はdeployせず、同じWorkerを別の信頼済み無料実行基盤へ配置します。
 
 この環境を破棄しても、DB定義の正本は `supabase/migrations`、画面設定の正本はこの文書です。

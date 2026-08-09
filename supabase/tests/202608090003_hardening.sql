@@ -1,5 +1,6 @@
 -- Run with `supabase test db` against local Supabase/Postgres + pgTAP.
-select plan(95);
+begin;
+select plan(115);
 
 select ok(not has_function_privilege('anon', 'public.prune_user_game_records(uuid)', 'execute'), 'anon cannot execute prune_user_game_records');
 select ok(not has_function_privilege('authenticated', 'public.prune_user_game_records(uuid)', 'execute'), 'authenticated cannot execute prune_user_game_records');
@@ -12,6 +13,16 @@ select ok(exists (select 1 from pg_constraint where conrelid = 'public.active_ma
 select ok(to_regprocedure('public.abandon_match(uuid)') is not null, 'abandon_match RPC exists');
 select ok(exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'matches' and column_name = 'created_expires_at'), 'CREATED matches have a lease column');
 select ok(to_regprocedure('public.get_verification_evidence_cleanup(uuid)') is not null, 'evidence cleanup retry RPC exists');
+select ok(exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'game_records' and column_name = 'final_position_hash'), 'game records persist the verified final position hash');
+select ok(to_regprocedure('public.prepare_account_deletion(uuid)') is not null, 'trusted account deletion preparation RPC exists');
+select ok(to_regprocedure('public.complete_account_deletion(uuid)') is not null, 'trusted account deletion completion RPC exists');
+select ok(not has_function_privilege('authenticated', 'public.prepare_account_deletion(uuid)', 'execute'), 'authenticated users cannot run account deletion preparation');
+select ok(not has_function_privilege('authenticated', 'public.complete_account_deletion(uuid)', 'execute'), 'authenticated users cannot complete account deletion');
+select ok(exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'profiles' and column_name = 'deleted_at'), 'profiles support anonymous deletion tombstones');
+select ok(not exists (
+  select 1 from pg_constraint
+   where conrelid = 'public.profiles'::regclass and confrelid = 'auth.users'::regclass and contype = 'f'
+), 'shared profile tombstones do not cascade with Auth deletion');
 select ok(exists (select 1 from storage.buckets where id = 'verification' and public = false), 'verification bucket is private and migration-managed');
 select ok((select file_size_limit from storage.buckets where id = 'verification') = 5242880, 'verification bucket limits objects to 5 MiB');
 select ok((select allowed_mime_types from storage.buckets where id = 'verification') = array['image/jpeg', 'image/png', 'image/webp']::text[], 'verification bucket allows only image MIME types');
@@ -51,8 +62,10 @@ values
  ('00000000-0000-0000-0000-000000000001', 'authenticated', 'authenticated', 'a@example.test', '', now(), '{}', '{"display_name":"a"}'),
  ('00000000-0000-0000-0000-000000000002', 'authenticated', 'authenticated', 'b@example.test', '', now(), '{}', '{"display_name":"b"}'),
  ('00000000-0000-0000-0000-000000000003', 'authenticated', 'authenticated', 'c@example.test', '', now(), '{}', '{"display_name":"c"}'),
- ('00000000-0000-0000-0000-000000000004', 'authenticated', 'authenticated', 'd@example.test', '', now(), '{}', '{"display_name":"d"}')
+ ('00000000-0000-0000-0000-000000000004', 'authenticated', 'authenticated', 'd@example.test', '', now(), '{}', '{"display_name":"d"}'),
+ ('00000000-0000-0000-0000-000000000007', 'authenticated', 'authenticated', 'private-name@example.test', '', now(), '{}', '{}')
 on conflict (id) do nothing;
+select is((select display_name from public.profiles where id = '00000000-0000-0000-0000-000000000007'), 'プレイヤー', 'default public display name never derives from email');
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
 select set_config('request.jwt.claim.role', 'authenticated', false);
@@ -150,6 +163,8 @@ select is((select public.submit_match_result('00000000-0000-0000-0000-0000000001
 select is((select count(*)::int from public.rating_history where match_id = '00000000-0000-0000-0000-000000000105'), 2, 'finalization writes two rating history rows');
 select is((select public.submit_match_result('00000000-0000-0000-0000-000000000105', 'd3', 'BLACK_WIN', '0000000000000000:0:0:1', 'NORMAL', null)::text), 'CONFIRMED', 'duplicate terminal submit is idempotent');
 select is((select count(*)::int from public.rating_history where match_id = '00000000-0000-0000-0000-000000000105'), 2, 'duplicate submit does not update rating twice');
+select is((select final_position_hash from public.game_records where match_id = '00000000-0000-0000-0000-000000000105'), '0000000000000000:0:0:1', 'confirmed record retains the verified final position hash');
+select is((select time_control from public.game_records where match_id = '00000000-0000-0000-0000-000000000105'), '5m', 'confirmed record stores the product time control');
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
 select is((select count(*)::int from public.game_records where players @> array['00000000-0000-0000-0000-000000000003'::uuid]), 1, 'array containment finds a record where caller is black or white');
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
@@ -203,5 +218,34 @@ select ok(not has_function_privilege('anon', 'public.request_account_deletion()'
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
 select set_config('request.jwt.claim.role', 'authenticated', false);
 select is(public.request_account_deletion(), public.request_account_deletion(), 'account deletion request is idempotent');
+select throws_ok(
+  $$select * from public.enqueue_or_match()$$,
+  'P0001', 'account deletion is pending', 'deletion-requested users cannot re-enter matchmaking'
+);
+
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
+select public.request_account_deletion();
+select set_config('request.jwt.claim.role', 'service_role', false);
+select is(
+  cardinality(public.get_account_deletion_evidence('00000000-0000-0000-0000-000000000003')),
+  2,
+  'trusted deletion worker receives every verification object under the user prefix'
+);
+
+-- User 5 has a shared record but no Storage objects, so the DB phase can be tested
+-- independently without bypassing Storage API deletion protection.
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000005', false);
+select set_config('request.jwt.claim.role', 'authenticated', false);
+select public.request_account_deletion();
+select set_config('request.jwt.claim.role', 'service_role', false);
+select is(public.prepare_account_deletion('00000000-0000-0000-0000-000000000005'), 'PROCESSING', 'trusted deletion preparation is retryable');
+select is((select count(*)::int from public.ratings where user_id = '00000000-0000-0000-0000-000000000005'), 0, 'account deletion removes private rating state');
+select ok((select display_name = '退会済みユーザー' and deleted_at is not null from public.profiles where id = '00000000-0000-0000-0000-000000000005'), 'account deletion anonymizes the shared profile tombstone');
+select is((select count(*)::int from public.game_records where match_id = '00000000-0000-0000-0000-000000000107'), 1, 'account deletion preserves the opponents shared immutable record');
+select is((select count(*)::int from public.user_game_records where user_id = '00000000-0000-0000-0000-000000000006' and match_id = '00000000-0000-0000-0000-000000000107'), 1, 'opponent keeps the bounded record reference');
+select is((select count(*)::int from public.user_game_records where user_id = '00000000-0000-0000-0000-000000000005'), 0, 'deleted user record references are removed');
+select is(public.complete_account_deletion('00000000-0000-0000-0000-000000000005'), 'COMPLETED', 'trusted worker completes deletion after Auth removal');
+select is((select status from public.account_deletion_requests where user_id = '00000000-0000-0000-0000-000000000005'), 'COMPLETED', 'completed deletion status is retained for audit');
 
 select * from finish();
+rollback;

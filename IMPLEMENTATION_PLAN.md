@@ -6,7 +6,7 @@
 2. **Phase 2 — Game Core**
    - Implement immutable 8x8 board, legal move generation, flipping, pass, terminal result and deterministic hash.
    - Add unit/property-style random legal game tests.
-3. **Phase 3/4 — local MVP shell**
+3. **Phase 3/4 — local product shell**
    - Add Compose home and match screens.
    - Wire local two-player game through a small ViewModel; keep UI free of game rules.
    - Provide ports for auth, matchmaking and P2P without requiring network configuration.
@@ -29,4 +29,6 @@
 - No Supabase URL/key is committed; the Android client obtains a public URL/publishable key from untracked local configuration.
 - Edax 4.6 JNI is bundled for `arm64-v8a` and `x86_64`; evaluation data and books remain user-supplied imports and are never bundled.
 - Post-game Review supports start/arbitrary/final/variation positions, all-legal-move scoring, exact/heuristic/book typing, cancellation, stale-result rejection, and an identity-aware memory cache.
+- The user-facing brand is `ちゃんりば` (`ちゃんとリバーシ`). `com.example.othello` remains a temporary applicationId that must be replaced before Play publication.
+- Account deletion is requested in-app and processed by the trusted Worker without exposing service-role authority; private data is removed while shared records retain an anonymous tombstone.
 - Physical devices remain necessary for carrier NAT/TURN-rate, network handover, manufacturer background behavior, thermal/battery, and sustained arm64 Edax performance.
