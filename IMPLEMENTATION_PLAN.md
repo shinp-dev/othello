@@ -23,8 +23,10 @@
 - Auth bootstrap trigger, atomic federation review RPC, Worker-side evidence deletion, remote-disc/fingerprint P2P validation, forced pass, and typed analysis scores.
 - Review follow-up: one-user active-match reservation/lease, participant-only abandon, atomic submit/finalize, terminal retention cleanup, Storage owner validation, retryable evidence cleanup, strict result payloads, deny-by-default internal RPCs, and pgTAP coverage.
 
-## MVP assumptions
+## Current beta status
 
-- Local two-player mode is the first runnable vertical slice and is explicitly labeled in the UI.
-- No Supabase URL/key is committed; network implementations are placeholders until environment configuration exists.
-- Edax JNI is intentionally not bundled; `AnalysisEngine` is testable through the deterministic adapter.
+- Local two-player mode and hosted Supabase/WebRTC online play are executable vertical slices.
+- No Supabase URL/key is committed; the Android client obtains a public URL/publishable key from untracked local configuration.
+- Edax 4.6 JNI is bundled for `arm64-v8a` and `x86_64`; evaluation data and books remain user-supplied imports and are never bundled.
+- Post-game Review supports start/arbitrary/final/variation positions, all-legal-move scoring, exact/heuristic/book typing, cancellation, stale-result rejection, and an identity-aware memory cache.
+- Physical devices remain necessary for carrier NAT/TURN-rate, network handover, manufacturer background behavior, thermal/battery, and sustained arm64 Edax performance.

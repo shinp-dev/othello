@@ -8,9 +8,11 @@ import com.example.othello.network.MatchTransport
 import com.example.othello.network.FinishCommand
 import com.example.othello.network.MoveCommand
 import com.example.othello.network.TransportState
+import com.example.othello.network.ClockSnapshot
 import com.example.othello.records.FinishReason
 import com.example.othello.records.MatchResult
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.delay
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -179,6 +181,78 @@ class OnlineMatchControllerTest {
         whiteTransport.deliver(blackTransport.sent.single())
         assertEquals(1, white.viewState.game.ply)
         assertEquals(ProtocolState.PLAYING, ProtocolState.from(black.viewState.matchState.status))
+    }
+
+    @Test
+    fun moveReceivedDuringMutualStartAckIsAppliedAfterLocalStartConfirmation() = runBlocking {
+        val blackTransport = FakeMatchTransport()
+        val whiteTransport = FakeMatchTransport()
+        blackTransport.peer = whiteTransport
+        whiteTransport.peer = blackTransport
+        val black = OnlineMatchController("start-race", Disc.BLACK, blackTransport, FakeOnlineRepository())
+        val white = OnlineMatchController("start-race", Disc.WHITE, whiteTransport, FakeOnlineRepository())
+
+        assertTrue(black.onDataChannelOpen())
+        assertTrue(black.play(Position(2, 3)))
+        assertEquals(0, white.viewState.game.ply)
+
+        assertTrue(white.onDataChannelOpen())
+        assertEquals(1, white.viewState.game.ply)
+        assertEquals(1, white.viewState.commandCountReceived)
+    }
+
+    @Test
+    fun localMonotonicClockTimeoutSendsFinishAndSubmitsOnce() = runBlocking {
+        val transport = FakeMatchTransport()
+        val repository = FakeOnlineRepository()
+        val controller = OnlineMatchController(
+            "timeout",
+            Disc.BLACK,
+            transport,
+            repository,
+            timeControlMillis = 25,
+        )
+
+        assertEquals(25, controller.viewState.blackRemainingMillis)
+        assertEquals(25, controller.viewState.whiteRemainingMillis)
+        assertTrue(controller.onDataChannelOpen())
+        delay(100)
+
+        assertEquals(FinishReason.TIMEOUT, repository.submitted?.finishReason)
+        assertEquals(MatchResult.WHITE_WIN, repository.submitted?.result)
+        assertEquals(1, repository.submitCalls)
+        assertEquals(1, transport.sentFinishes.size)
+        assertEquals(0, controller.viewState.blackRemainingMillis)
+    }
+
+    @Test
+    fun remoteClockSnapshotCannotReduceTheLocalPlayersClock() = runBlocking {
+        var now = 0L
+        val transport = FakeMatchTransport()
+        val controller = OnlineMatchController(
+            "clock-authority",
+            Disc.WHITE,
+            transport,
+            FakeOnlineRepository(),
+            timeControlMillis = 5_000,
+            monotonicNowMillis = { now },
+        )
+        controller.onDataChannelOpen()
+        now = 1_000
+
+        transport.deliver(
+            MoveCommand(
+                matchId = "clock-authority",
+                ply = 0,
+                move = Position(2, 3),
+                commandId = "remote-move",
+                previousStateHash = GameState().stateHash(),
+                clockSnapshot = ClockSnapshot(4_000, 0),
+            ),
+        )
+
+        assertEquals(4_000, controller.viewState.blackRemainingMillis)
+        assertEquals(5_000, controller.viewState.whiteRemainingMillis)
     }
 
     @Test

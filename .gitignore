@@ -1,9 +1,11 @@
 .gradle/
 **/build/
+**/.cxx/
 local.properties
 .idea/
 *.iml
 captures/
 .DS_Store
 supabase/.temp/
+supabase/.branches/
 build/e2e/

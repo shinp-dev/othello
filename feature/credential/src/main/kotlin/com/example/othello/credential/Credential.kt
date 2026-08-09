@@ -10,6 +10,7 @@ data class FederationCredential(
     val id: String? = null,
 )
 interface CredentialRepository {
+    suspend fun current(): FederationCredential?
     suspend fun selfDeclare(value: String): FederationCredential
     suspend fun submitVerification(credential: FederationCredential, evidencePath: String): FederationCredential
     suspend fun uploadEvidence(fileName: String, mimeType: String, bytes: ByteArray): String

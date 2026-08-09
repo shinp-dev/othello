@@ -17,6 +17,8 @@ object MoveCommandJson {
         val row: Int,
         val column: Int,
         val previousStateHash: String,
+        val blackRemainingMillis: Long? = null,
+        val whiteRemainingMillis: Long? = null,
     )
 
     fun encode(command: MoveCommand): String = json.encodeToString(
@@ -29,6 +31,8 @@ object MoveCommandJson {
             row = command.move.row,
             column = command.move.column,
             previousStateHash = command.previousStateHash,
+            blackRemainingMillis = command.clockSnapshot?.blackRemainingMillis,
+            whiteRemainingMillis = command.clockSnapshot?.whiteRemainingMillis,
         ),
     )
 
@@ -41,6 +45,9 @@ object MoveCommandJson {
             move = Position(wire.row, wire.column),
             commandId = wire.commandId,
             previousStateHash = wire.previousStateHash,
+            clockSnapshot = if (wire.blackRemainingMillis != null && wire.whiteRemainingMillis != null) {
+                ClockSnapshot(wire.blackRemainingMillis, wire.whiteRemainingMillis)
+            } else null,
         )
     }
 }

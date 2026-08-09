@@ -9,6 +9,7 @@ import com.example.othello.network.MoveCommandJson
 import com.example.othello.network.TransportState
 import com.example.othello.network.TransportDiagnostics
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import org.webrtc.DataChannel
 import org.webrtc.IceCandidate
 import org.webrtc.MediaConstraints
@@ -190,7 +191,11 @@ class AndroidWebRtcTransport(
                 override fun onCreateFailure(error: String) = Unit
             }, description)
         }
-        if (!iceGatheringComplete.isCompleted) iceGatheringComplete.await()
+        if (!iceGatheringComplete.isCompleted) {
+            // Signaling is intentionally non-trickle. An unreachable STUN server
+            // must not prevent a usable host-candidate SDP from being published.
+            withTimeoutOrNull(ICE_GATHERING_TIMEOUT_MILLIS) { iceGatheringComplete.await() }
+        }
         val gathered = peerConnection.localDescription ?: description
         return SessionDescriptionPayload(gathered.type.canonicalForm(), gathered.description)
     }
@@ -273,6 +278,7 @@ class AndroidWebRtcTransport(
 
     private companion object {
         const val MAX_PAYLOAD_BYTES = 32 * 1024
+        const val ICE_GATHERING_TIMEOUT_MILLIS = 10_000L
         val factoryInitialized = AtomicBoolean(false)
     }
 }

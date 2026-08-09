@@ -5,6 +5,22 @@ import com.example.othello.game.MoveOutcome
 import com.example.othello.game.Position
 import com.example.othello.game.Disc
 
+data class ClockSnapshot(
+    val blackRemainingMillis: Long,
+    val whiteRemainingMillis: Long,
+) {
+    init {
+        require(blackRemainingMillis >= 0)
+        require(whiteRemainingMillis >= 0)
+    }
+
+    fun remaining(disc: Disc): Long = when (disc) {
+        Disc.BLACK -> blackRemainingMillis
+        Disc.WHITE -> whiteRemainingMillis
+        Disc.EMPTY -> error("EMPTY has no clock")
+    }
+}
+
 data class MoveCommand(
     val matchId: String,
     val ply: Int,
@@ -13,6 +29,7 @@ data class MoveCommand(
     val commandId: String,
     val previousStateHash: String,
     val protocolVersion: Int = CURRENT_PROTOCOL_VERSION,
+    val clockSnapshot: ClockSnapshot? = null,
 )
 
 enum class FinishSignalReason { RESIGNATION, TIMEOUT, DISCONNECT }
@@ -26,6 +43,7 @@ data class FinishCommand(
     val loserDisc: Disc,
     val reason: FinishSignalReason,
     val protocolVersion: Int = CURRENT_PROTOCOL_VERSION,
+    val clockSnapshot: ClockSnapshot? = null,
 )
 
 const val CURRENT_PROTOCOL_VERSION: Int = 1
@@ -53,6 +71,7 @@ enum class ProtocolViolation {
     WRONG_TURN,
     ILLEGAL_MOVE,
     COMMAND_ID_REUSE,
+    INVALID_CLOCK_SNAPSHOT,
 }
 
 interface MatchTransport {
@@ -75,6 +94,9 @@ class FinishCommandValidator(private val matchId: String, private val remoteDisc
             return FinishCommandValidation.Rejected(ProtocolViolation.PROTOCOL_VERSION_MISMATCH)
         }
         if (command.matchId != matchId) return FinishCommandValidation.Rejected(ProtocolViolation.MATCH_MISMATCH)
+        if (command.clockSnapshot?.let { it.blackRemainingMillis < 0 || it.whiteRemainingMillis < 0 } == true) {
+            return FinishCommandValidation.Rejected(ProtocolViolation.INVALID_CLOCK_SNAPSHOT)
+        }
         val fingerprint = command.fingerprint()
         commandFingerprints[command.commandId]?.let { previous ->
             return if (previous == fingerprint) FinishCommandValidation.Duplicate(command.commandId)
@@ -90,6 +112,7 @@ class FinishCommandValidator(private val matchId: String, private val remoteDisc
     private fun FinishCommand.fingerprint(): String = buildString {
         append(protocolVersion).append('|').append(matchId).append('|').append(ply).append('|').append(commandId).append('|')
         append(stateHash).append('|').append(loserDisc.name).append('|').append(reason.name)
+        clockSnapshot?.let { append('|').append(it.blackRemainingMillis).append(',').append(it.whiteRemainingMillis) }
     }
 }
 
@@ -107,6 +130,9 @@ class MoveCommandValidator(private val matchId: String, private val remoteDisc: 
             return CommandValidation.Rejected(ProtocolViolation.PROTOCOL_VERSION_MISMATCH)
         }
         if (command.matchId != matchId) return CommandValidation.Rejected(ProtocolViolation.MATCH_MISMATCH)
+        if (command.clockSnapshot?.let { it.blackRemainingMillis < 0 || it.whiteRemainingMillis < 0 } == true) {
+            return CommandValidation.Rejected(ProtocolViolation.INVALID_CLOCK_SNAPSHOT)
+        }
         val fingerprint = command.fingerprint()
         commandFingerprints[command.commandId]?.let { previous ->
             return if (previous == fingerprint) CommandValidation.Duplicate(command.commandId)
@@ -130,5 +156,6 @@ class MoveCommandValidator(private val matchId: String, private val remoteDisc: 
     private fun MoveCommand.fingerprint(): String = buildString {
         append(protocolVersion).append('|').append(matchId).append('|').append(ply).append('|').append(commandId).append('|').append(previousStateHash).append('|')
         append(move.row).append(',').append(move.column)
+        clockSnapshot?.let { append('|').append(it.blackRemainingMillis).append(',').append(it.whiteRemainingMillis) }
     }
 }

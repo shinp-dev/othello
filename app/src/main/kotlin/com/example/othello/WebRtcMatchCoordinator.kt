@@ -29,6 +29,7 @@ class WebRtcMatchCoordinator(
     private val repository: OnlineMatchRepository,
     scope: CoroutineScope,
     private val debugAutoPlay: Boolean = false,
+    debugTimeControlMillis: Long? = null,
 ) : AutoCloseable {
     val matchId: String get() = assignment.matchId
     private val sessionJob = SupervisorJob(scope.coroutineContext[Job])
@@ -42,16 +43,16 @@ class WebRtcMatchCoordinator(
         repository,
         callbackScope = sessionScope,
         cancelCallbackScopeOnClose = false,
+        timeControlMillis = debugTimeControlMillis ?: com.example.othello.match.DEFAULT_TIME_CONTROL_MILLIS,
     )
 
     fun diagnostics(): MatchDiagnostics = controller.diagnostics(userId, assignment.opponentId)
     private var subscription: AutoCloseable? = null
     private var autoPlaySubscription: AutoCloseable? = null
     private var autoPlayJob: Job? = null
+    private var pendingResultRetryJob: Job? = null
     private var dataChannelJob: Job? = null
     private var autoPlayInFlight = false
-    private var finishInFlight = false
-    private var pendingRetryScheduled = false
     private var started = false
     private var closed = false
     private val signalingMutex = Mutex()
@@ -70,22 +71,26 @@ class WebRtcMatchCoordinator(
             ) {
                 autoPlayInFlight = true
                 autoPlayJob = sessionScope.launch {
-                    try { controller.play(view.game.legalMoves.first()) } finally { autoPlayInFlight = false }
-                }
-            } else if (view.matchState.status == com.example.othello.match.MatchStatus.PENDING_RESULT &&
-                !pendingRetryScheduled && !finishInFlight
-            ) {
-                pendingRetryScheduled = true
-                finishInFlight = true
-                autoPlayJob = sessionScope.launch {
                     try {
-                        delay(750)
-                        controller.retryFinish()
+                        while (true) {
+                            val next = controller.viewState
+                            if (next.matchState.status != com.example.othello.match.MatchStatus.PLAYING ||
+                                next.game.currentPlayer != next.localDisc || next.game.legalMoves.isEmpty()
+                            ) break
+                            if (!controller.play(next.game.legalMoves.first())) break
+                        }
                     } finally {
-                        finishInFlight = false
-                        autoPlayJob = null
+                        autoPlayInFlight = false
                     }
                 }
+            } else if (view.matchState.status == com.example.othello.match.MatchStatus.PENDING_RESULT) {
+                schedulePendingResultRetry()
+            } else if (view.matchState.status in setOf(
+                    com.example.othello.match.MatchStatus.CONFIRMED,
+                    com.example.othello.match.MatchStatus.DISPUTED,
+                )
+            ) {
+                pendingResultRetryJob?.cancel()
             }
         }
         subscription = signaling.subscribe(
@@ -112,6 +117,19 @@ class WebRtcMatchCoordinator(
                 } catch (error: Exception) {
                     if (!closed) controller.reportConnectionError(error.message ?: "offer failed")
                 }
+            }
+        }
+    }
+
+    private fun schedulePendingResultRetry() {
+        if (pendingResultRetryJob?.isActive == true || closed) return
+        pendingResultRetryJob = sessionScope.launch {
+            repeat(PENDING_RESULT_RETRY_ATTEMPTS) { attempt ->
+                delay(if (attempt == 0) 750L else PENDING_RESULT_RETRY_MILLIS)
+                if (closed || controller.viewState.matchState.status != com.example.othello.match.MatchStatus.PENDING_RESULT) {
+                    return@launch
+                }
+                controller.retryFinish()
             }
         }
     }
@@ -199,8 +217,14 @@ class WebRtcMatchCoordinator(
         subscription?.close()
         autoPlaySubscription?.close()
         autoPlayJob?.cancel()
+        pendingResultRetryJob?.cancel()
         dataChannelJob?.cancel()
         controller.close()
         sessionJob.cancel()
+    }
+
+    private companion object {
+        const val PENDING_RESULT_RETRY_ATTEMPTS = 61
+        const val PENDING_RESULT_RETRY_MILLIS = 5_000L
     }
 }

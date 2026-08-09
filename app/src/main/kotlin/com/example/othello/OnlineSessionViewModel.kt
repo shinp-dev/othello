@@ -16,7 +16,12 @@ class OnlineSessionViewModel(application: Application) : AndroidViewModel(applic
     var coordinator: WebRtcMatchCoordinator? = null
         private set
 
-    fun startCoordinator(userId: String, assignment: MatchAssignment, debugAutoPlay: Boolean): WebRtcMatchCoordinator {
+    fun startCoordinator(
+        userId: String,
+        assignment: MatchAssignment,
+        debugAutoPlay: Boolean,
+        debugTimeControlMillis: Long? = null,
+    ): WebRtcMatchCoordinator {
         coordinator?.takeIf { it.matchId == assignment.matchId }?.let { return it }
         coordinator?.close()
         val supabase = requireNotNull(component) { "Supabase is not configured" }
@@ -28,6 +33,7 @@ class OnlineSessionViewModel(application: Application) : AndroidViewModel(applic
             supabase.onlineMatchRepository,
             viewModelScope,
             debugAutoPlay,
+            debugTimeControlMillis,
         ).also {
             coordinator = it
             it.start()

@@ -11,6 +11,7 @@ import com.example.othello.network.MatchTransport
 import com.example.othello.network.MoveCommand
 import com.example.othello.network.MoveCommandValidator
 import com.example.othello.network.CommandValidation
+import com.example.othello.network.ClockSnapshot
 import com.example.othello.network.FinishCommand
 import com.example.othello.network.FinishCommandValidation
 import com.example.othello.network.FinishCommandValidator
@@ -23,12 +24,15 @@ import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+
+const val DEFAULT_TIME_CONTROL_MILLIS: Long = 5 * 60 * 1_000L
 
 data class OnlineMatchViewState(
     val matchState: MatchState = MatchState(),
@@ -43,6 +47,8 @@ data class OnlineMatchViewState(
     val localStartAcked: Boolean = false,
     val bothStartAcked: Boolean = false,
     val finishResult: MatchFinishResult? = null,
+    val blackRemainingMillis: Long = DEFAULT_TIME_CONTROL_MILLIS,
+    val whiteRemainingMillis: Long = DEFAULT_TIME_CONTROL_MILLIS,
 )
 
 /** Coordinates local game rules, DataChannel validation and result submission. */
@@ -54,12 +60,16 @@ class OnlineMatchController(
     private val ackAttempts: Int = 3,
     private val startConfirmationAttempts: Int = 20,
     private val startConfirmationDelayMillis: Long = 250,
+    private val timeControlMillis: Long = DEFAULT_TIME_CONTROL_MILLIS,
+    monotonicNowMillis: () -> Long = { System.nanoTime() / 1_000_000L },
     private val callbackScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
     private val cancelCallbackScopeOnClose: Boolean = true,
 ) : AutoCloseable {
     private var state = OnlineMatchViewState(
         matchState = MatchState(MatchStatus.P2P_CONNECTED),
         localDisc = localDisc,
+        blackRemainingMillis = timeControlMillis,
+        whiteRemainingMillis = timeControlMillis,
     )
     private val listeners = mutableSetOf<(OnlineMatchViewState) -> Unit>()
     private val validator = MoveCommandValidator(matchId, localDisc.opponent())
@@ -69,12 +79,17 @@ class OnlineMatchController(
     private val stateSubscription: AutoCloseable
     private val startMutex = Mutex()
     private val finishMutex = Mutex()
+    private val actionMutex = Mutex()
+    private val matchClock = MatchClock(timeControlMillis, monotonicNowMillis)
+    private var timeoutJob: Job? = null
     private var localAckRecorded = false
     private var activeSubmission: MatchSubmission? = null
     private var lastFinishResult: MatchFinishResult? = null
     private var started = false
     private var closed = false
     private var transportClosed = false
+    private val pendingRemoteCommands = ArrayDeque<MoveCommand>()
+    private val pendingRemoteFinishes = ArrayDeque<FinishCommand>()
 
     init {
         transportSubscription = transport.observe { command ->
@@ -160,14 +175,30 @@ class OnlineMatchController(
         }
         started = true
         transition(MatchCommand.StartConfirmed)
+        matchClock.start(state.game.currentPlayer)
         update { copy(message = "対局中", error = null, localStartAcked = true, bothStartAcked = true) }
+        publishClockState()
+        scheduleLocalTimeout()
+        drainPendingRemoteMessages()
         true
     }
 
-    suspend fun play(position: Position): Boolean {
+    suspend fun play(position: Position): Boolean = actionMutex.withLock {
         if (!started || state.matchState.status != MatchStatus.PLAYING) return false
         if (state.game.currentPlayer != localDisc) return false
-        val command = MoveCommand(matchId, state.game.ply, position, UUID.randomUUID().toString(), state.game.stateHash())
+        val clockSnapshot = matchClock.snapshot()
+        if (clockSnapshot.remaining(localDisc) == 0L) {
+            finishLocallyLocked(FinishReason.TIMEOUT)
+            return false
+        }
+        val command = MoveCommand(
+            matchId,
+            state.game.ply,
+            position,
+            UUID.randomUUID().toString(),
+            state.game.stateHash(),
+            clockSnapshot = clockSnapshot,
+        )
         return when (val outcome = state.game.play(position)) {
             is MoveOutcome.Played -> {
                 try {
@@ -178,7 +209,7 @@ class OnlineMatchController(
                     update { copy(error = error.message ?: "着手を送信できませんでした", message = "着手送信に失敗") }
                     return false
                 }
-                applyNext(outcome.state, position)
+                applyNext(outcome.state, position, clockSnapshot)
                 update { copy(commandCountSent = commandCountSent + 1) }
                 true
             }
@@ -186,21 +217,25 @@ class OnlineMatchController(
         }
     }
 
-    suspend fun resign(): MatchFinishResult? = finishLocally(FinishReason.RESIGNATION)
+    suspend fun resign(): MatchFinishResult? = actionMutex.withLock { finishLocallyLocked(FinishReason.RESIGNATION) }
 
-    suspend fun finishNormally(): MatchFinishResult? = finish(FinishReason.NORMAL)
+    suspend fun finishNormally(): MatchFinishResult? = actionMutex.withLock { finish(FinishReason.NORMAL) }
 
-    suspend fun retryFinish(): MatchFinishResult? {
+    suspend fun retryFinish(): MatchFinishResult? = actionMutex.withLock {
         val submission = activeSubmission ?: return null
         return finish(submission.finishReason, submission.result)
     }
 
-    suspend fun onTimeout(): MatchFinishResult? = finishLocally(FinishReason.TIMEOUT)
+    suspend fun onTimeout(): MatchFinishResult? = actionMutex.withLock { finishLocallyLocked(FinishReason.TIMEOUT) }
 
-    suspend fun finishForDisconnect(): MatchFinishResult? = finishLocally(FinishReason.DISCONNECT)
+    suspend fun finishForDisconnect(): MatchFinishResult? = actionMutex.withLock { finishLocallyLocked(FinishReason.DISCONNECT) }
 
     fun onDisconnected() {
         if (state.matchState.status in setOf(MatchStatus.CONFIRMED, MatchStatus.DISPUTED, MatchStatus.PENDING_RESULT, MatchStatus.FINISHING)) return
+        timeoutJob?.cancel()
+        timeoutJob = null
+        matchClock.stop()
+        publishClockState()
         update { copy(matchState = MatchState(MatchStatus.DISCONNECTED), message = "接続が切断されました") }
     }
 
@@ -209,10 +244,28 @@ class OnlineMatchController(
         update { copy(error = message, message = "P2P接続を再試行しています") }
     }
 
-    private fun onRemoteCommand(command: MoveCommand) {
-        if (closed || state.matchState.status != MatchStatus.PLAYING) return
+    /** UI ticker hook. Official timeout scheduling remains inside this controller. */
+    fun refreshClock() {
+        if (state.matchState.status == MatchStatus.PLAYING) publishClockState()
+    }
+
+    private suspend fun onRemoteCommand(command: MoveCommand) = actionMutex.withLock {
+        if (closed) return@withLock
+        if (state.matchState.status == MatchStatus.P2P_CONNECTED) {
+            if (pendingRemoteCommands.size < MAX_PENDING_REMOTE_MESSAGES) pendingRemoteCommands.addLast(command)
+            return@withLock
+        }
+        if (state.matchState.status != MatchStatus.PLAYING) return@withLock
+        applyRemoteCommand(command)
+    }
+
+    private fun applyRemoteCommand(command: MoveCommand) {
         when (val validation = validator.validate(state.game, command)) {
-            is CommandValidation.Accepted -> applyNext(validation.state, command.move).also {
+            is CommandValidation.Accepted -> applyNext(
+                validation.state,
+                command.move,
+                command.clockSnapshot?.let(::mergeRemoteClock) ?: matchClock.snapshot(),
+            ).also {
                 update { copy(commandCountReceived = commandCountReceived + 1) }
             }
             is CommandValidation.Duplicate -> Unit
@@ -222,13 +275,22 @@ class OnlineMatchController(
         }
     }
 
-    private suspend fun onRemoteFinish(command: FinishCommand) {
-        if (closed || state.matchState.status != MatchStatus.PLAYING) return
+    private suspend fun onRemoteFinish(command: FinishCommand) = actionMutex.withLock {
+        if (closed) return@withLock
+        if (state.matchState.status == MatchStatus.P2P_CONNECTED) {
+            if (pendingRemoteFinishes.size < MAX_PENDING_REMOTE_MESSAGES) pendingRemoteFinishes.addLast(command)
+            return@withLock
+        }
+        if (state.matchState.status != MatchStatus.PLAYING) return@withLock
+        applyRemoteFinish(command)
+    }
+
+    private suspend fun applyRemoteFinish(command: FinishCommand) {
         when (val validation = finishValidator.validate(state.game, command)) {
-            is FinishCommandValidation.Accepted -> finish(
-                validation.command.reason.toFinishReason(),
-                winnerForLoser(validation.command.loserDisc),
-            )
+            is FinishCommandValidation.Accepted -> {
+                command.clockSnapshot?.let { matchClock.adoptAndStart(mergeRemoteClock(it), state.game.currentPlayer) }
+                finish(validation.command.reason.toFinishReason(), winnerForLoser(validation.command.loserDisc))
+            }
             is FinishCommandValidation.Duplicate -> Unit
             is FinishCommandValidation.Rejected -> update {
                 copy(error = validation.violation.name, message = "対局プロトコルエラー: ${validation.violation.name}")
@@ -236,18 +298,38 @@ class OnlineMatchController(
         }
     }
 
-    private fun applyNext(next: GameState, move: Position) {
+    private suspend fun drainPendingRemoteMessages() {
+        while (state.matchState.status == MatchStatus.PLAYING && pendingRemoteCommands.isNotEmpty()) {
+            onRemoteCommand(pendingRemoteCommands.removeFirst())
+        }
+        while (state.matchState.status == MatchStatus.PLAYING && pendingRemoteFinishes.isNotEmpty()) {
+            onRemoteFinish(pendingRemoteFinishes.removeFirst())
+        }
+    }
+
+    private fun applyNext(next: GameState, move: Position, clockSnapshot: ClockSnapshot) {
         val resolution = TurnResolver.resolveForcedPasses(next)
-        update { copy(game = resolution.state, moves = moves + move + List(resolution.forcedPasses) { null }) }
+        matchClock.adoptAndStart(clockSnapshot, resolution.state.currentPlayer)
+        val currentClock = matchClock.snapshot()
+        update {
+            copy(
+                game = resolution.state,
+                moves = moves + move + List(resolution.forcedPasses) { null },
+                blackRemainingMillis = currentClock.blackRemainingMillis,
+                whiteRemainingMillis = currentClock.whiteRemainingMillis,
+            )
+        }
+        scheduleLocalTimeout()
         if (resolution.state.status is GameStatus.Finished) {
             update { copy(matchState = MatchState(MatchStatus.FINISHING), message = "結果を送信中") }
             callbackScope.launch { finishNormally() }
         }
     }
 
-    private suspend fun finishLocally(reason: FinishReason): MatchFinishResult? {
+    private suspend fun finishLocallyLocked(reason: FinishReason): MatchFinishResult? {
         if (!started || state.matchState.status != MatchStatus.PLAYING) return lastFinishResult
         val signalReason = reason.toSignalReason() ?: return null
+        val clockSnapshot = matchClock.snapshot()
         val command = FinishCommand(
             matchId = matchId,
             ply = state.game.ply,
@@ -255,6 +337,7 @@ class OnlineMatchController(
             stateHash = state.game.stateHash(),
             loserDisc = localDisc,
             reason = signalReason,
+            clockSnapshot = clockSnapshot,
         )
         try {
             transport.sendFinish(command)
@@ -276,8 +359,12 @@ class OnlineMatchController(
             result,
             state.game.stateHash(),
             reason,
+            clockPayload(),
         ).also { activeSubmission = it }
         if (submission.finishReason != reason || submission.result != result) return@withLock lastFinishResult
+        timeoutJob?.cancel()
+        matchClock.stop()
+        publishClockState()
         update { copy(matchState = MatchState(MatchStatus.FINISHING), message = "結果を送信中") }
         val submitted = try {
             repository.submitMatchResult(submission)
@@ -334,6 +421,55 @@ class OnlineMatchController(
         FinishSignalReason.DISCONNECT -> FinishReason.DISCONNECT
     }
 
+    private fun publishClockState() {
+        val clock = matchClock.snapshot()
+        if (clock.blackRemainingMillis != state.blackRemainingMillis || clock.whiteRemainingMillis != state.whiteRemainingMillis) {
+            update { copy(blackRemainingMillis = clock.blackRemainingMillis, whiteRemainingMillis = clock.whiteRemainingMillis) }
+        }
+    }
+
+    /** The peer is authoritative only for its own decreasing clock. */
+    private fun mergeRemoteClock(remote: ClockSnapshot): ClockSnapshot {
+        val local = matchClock.snapshot()
+        return when (localDisc) {
+            Disc.BLACK -> ClockSnapshot(
+                blackRemainingMillis = local.blackRemainingMillis,
+                whiteRemainingMillis = minOf(local.whiteRemainingMillis, remote.whiteRemainingMillis),
+            )
+            Disc.WHITE -> ClockSnapshot(
+                blackRemainingMillis = minOf(local.blackRemainingMillis, remote.blackRemainingMillis),
+                whiteRemainingMillis = local.whiteRemainingMillis,
+            )
+            Disc.EMPTY -> error("EMPTY cannot own a match clock")
+        }
+    }
+
+    private fun scheduleLocalTimeout() {
+        timeoutJob?.cancel()
+        timeoutJob = null
+        if (!started || state.matchState.status != MatchStatus.PLAYING || state.game.status !is GameStatus.InProgress ||
+            state.game.currentPlayer != localDisc
+        ) return
+        val expectedPly = state.game.ply
+        val remaining = matchClock.snapshot().remaining(localDisc)
+        timeoutJob = callbackScope.launch {
+            delay(remaining.coerceAtLeast(1L))
+            actionMutex.withLock {
+                if (!closed && state.matchState.status == MatchStatus.PLAYING && state.game.ply == expectedPly &&
+                    state.game.currentPlayer == localDisc && matchClock.snapshot().remaining(localDisc) == 0L
+                ) {
+                    publishClockState()
+                    finishLocallyLocked(FinishReason.TIMEOUT)
+                }
+            }
+        }
+    }
+
+    private fun clockPayload(): String {
+        val clock = matchClock.snapshot()
+        return "{\"blackRemainingMillis\":${clock.blackRemainingMillis},\"whiteRemainingMillis\":${clock.whiteRemainingMillis}}"
+    }
+
     private fun transition(command: MatchCommand) {
         when (val result = MatchStateMachine.reduce(state.matchState, command)) {
             is MatchTransition.Accepted -> update { copy(matchState = result.state) }
@@ -370,9 +506,15 @@ class OnlineMatchController(
     override fun close() {
         if (closed) return
         closed = true
+        timeoutJob?.cancel()
+        timeoutJob = null
         closeTransport()
         listeners.clear()
         if (cancelCallbackScopeOnClose) callbackScope.cancel()
+    }
+
+    private companion object {
+        const val MAX_PENDING_REMOTE_MESSAGES = 64
     }
 
     private fun closeTransport() {

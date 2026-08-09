@@ -2,7 +2,7 @@
 
 ## Scope
 
-This repository is an Android-first Othello MVP. The first executable slice is a local two-player board with a production-shaped domain boundary. Online matchmaking, P2P transport, result confirmation, and credential review are represented by ports and database contracts so they can be implemented without moving game rules into infrastructure or UI.
+This repository is an Android-first Othello beta. Local play, Supabase-backed matchmaking/finalization, WebRTC DataChannel play, immutable records, credential submission, and post-game Edax review are implemented behind production-shaped domain boundaries.
 
 The current MVP assumption is that a user can start a local game without Supabase credentials. Network features remain opt-in and are not faked as authoritative local state.
 
@@ -22,7 +22,7 @@ The current MVP assumption is that a user can start a local game without Supabas
 | `:feature:profile` | Profile presentation/query boundary | Rating calculations |
 | `:feature:credential` | Federation credential submission/review boundary | Rating |
 | `:analysis:api` | `AnalysisEngine`, settings and result contracts | Match implementation |
-| `:analysis:edax` | Android-local Edax adapter; JNI can replace the unavailable production adapter | Match, Supabase |
+| `:analysis:edax` | Android-local Edax 4.6 JNI adapter and user-data storage | Match, Supabase |
 | `:transport:webrtc` | Android WebRTC SDK wiring and ICE configuration boundary | Game Core rules |
 | `:data:supabase` | Android Supabase SDK wiring, Composition Root, and signaling data sources | Game Core rules |
 
@@ -88,7 +88,9 @@ Both players submit immutable move history, result, final hash and finish reason
 
 ## Review / Edax
 
-`ReviewSession` owns cursor and variations and never mutates `GameRecord`. `AnalysisEngine` lives behind `analysis:api`; the review feature can ask it to evaluate every legal move. `EvaluationScore` carries perspective and `EXACT`/`HEURISTIC`/`UNAVAILABLE` kind. The heuristic engine is test/debug-only; production returns `解析を利用できません` until Edax JNI is bundled. Evaluation values are never persisted. `BookSource.ImportedBook` models an app-private imported Edax Book path without forcing Android Storage Access Framework into pure Kotlin.
+`ReviewSession` owns cursor and variations and never mutates `GameRecord`. `AnalysisEngine` lives behind `analysis:api`; the review feature asks it to evaluate every legal move. `EvaluationScore` carries the side-to-move perspective and `EXACT`/`HEURISTIC`/`BOOK` kind. `analysis:edax` owns JNI, Edax-specific conversion, cancellation, a 32-position identity-aware memory cache, and SAF-to-private-storage data management. Evaluation values and Review variations are never persisted into `GameRecord`.
+
+Edax evaluation data and opening books are user imports, never app assets. The cache key includes canonical board, side to move, Edax level, eval SHA-256 and optional book SHA-256. A data replacement therefore cannot reuse stale scores. One active book slot is represented as a named slot boundary so later multi-book switching does not change `analysis:api`.
 
 ## Federation verification
 
@@ -101,6 +103,7 @@ Users may self-declare a credential. A verification submission uploads evidence 
 - No service-role key is shipped to Android or browser.
 - Android cannot update rating, peak, official result, or verification status directly.
 - Match cannot reference Edax; review alone can reference `AnalysisEngine`.
+- Live matchmaking, clocks, move transport, result submission and rating never construct or call `AnalysisEngine`.
 - Game records are immutable after finalization.
 - SQL enables RLS and exposes narrow RPCs instead of client-owned status updates.
 - Matchmaking snapshots official `ratings.current_rating`, uses TTL queue rows and `FOR UPDATE SKIP LOCKED`; client rating input is not accepted.

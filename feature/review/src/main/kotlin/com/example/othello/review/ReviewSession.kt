@@ -7,6 +7,7 @@ import com.example.othello.analysis.api.ReviewPosition
 import com.example.othello.game.GameState
 import com.example.othello.game.MoveOutcome
 import com.example.othello.game.Position
+import com.example.othello.game.TurnResolver
 import com.example.othello.records.GameRecord
 
 data class Variation(val parentPly: Int, val moves: List<Position?>)
@@ -14,16 +15,50 @@ data class Variation(val parentPly: Int, val moves: List<Position?>)
 class ReviewSession(private val record: GameRecord) {
     private val states = buildStates(record.moves)
     private val variations = mutableListOf<Variation>()
+    private var variationParentPly: Int? = null
+    private val activeVariationMoves = mutableListOf<Position?>()
+    private var activeVariationState: GameState? = null
     var cursor: Int = 0
         private set
 
-    val current: GameState get() = states[cursor]
+    val current: GameState get() = activeVariationState ?: states[cursor]
     val currentVariations: List<Variation> get() = variations.toList()
+    val isInVariation: Boolean get() = activeVariationState != null
+    val mainLineLastPly: Int get() = states.lastIndex
 
-    fun next() { if (cursor < states.lastIndex) cursor++ }
-    fun previous() { if (cursor > 0) cursor-- }
-    fun seek(ply: Int) { cursor = ply.coerceIn(0, states.lastIndex) }
+    fun next() { if (!isInVariation && cursor < states.lastIndex) cursor++ }
+    fun previous() { if (!isInVariation && cursor > 0) cursor-- }
+    fun seek(ply: Int) { if (!isInVariation) cursor = ply.coerceIn(0, states.lastIndex) }
     fun branch(moves: List<Position?>) { variations += Variation(cursor, moves.toList()) }
+
+    fun beginVariation() {
+        if (isInVariation) return
+        variationParentPly = cursor
+        activeVariationMoves.clear()
+        activeVariationState = states[cursor]
+    }
+
+    fun playVariation(position: Position): Boolean {
+        val base = activeVariationState ?: return false
+        val played = base.play(position) as? MoveOutcome.Played ?: return false
+        val resolution = TurnResolver.resolveForcedPasses(played.state)
+        activeVariationMoves += position
+        repeat(resolution.forcedPasses) { activeVariationMoves += null }
+        activeVariationState = resolution.state
+        return true
+    }
+
+    fun cancelVariation() {
+        variationParentPly = null
+        activeVariationMoves.clear()
+        activeVariationState = null
+    }
+
+    fun saveVariationAndReturn() {
+        val parent = variationParentPly ?: return
+        if (activeVariationMoves.isNotEmpty()) variations += Variation(parent, activeVariationMoves.toList())
+        cancelVariation()
+    }
 
     suspend fun analyze(engine: AnalysisEngine, settings: AnalysisSettings = AnalysisSettings()): AnalysisResult =
         engine.analyze(ReviewPosition(current), settings)

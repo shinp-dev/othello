@@ -6,9 +6,11 @@ param(
     [string]$PlayerAPassword = $env:OTHELLO_E2E_PLAYER_A_PASSWORD,
     [string]$PlayerBEmail = $env:OTHELLO_E2E_PLAYER_B_EMAIL,
     [string]$PlayerBPassword = $env:OTHELLO_E2E_PLAYER_B_PASSWORD,
-    [int]$TimeoutSeconds = 120,
+    [int]$TimeoutSeconds = 240,
+    [long]$TimeControlMillis = 0,
     [switch]$StartSupabase,
     [switch]$KeepEmulators,
+    [switch]$ReuseEmulators,
     [switch]$AutoPlay
 )
 
@@ -50,7 +52,10 @@ function Wait-DeviceBooted([string]$device) {
             $boot = (& $adb -s $device shell getprop sys.boot_completed 2>$null).Trim()
             $packageService = (& $adb -s $device shell pm path android 2>$null) -join ''
         } catch { $boot = ''; $packageService = '' }
-        if ($boot -eq '1' -and $packageService -like 'package:*') { return }
+        if ($boot -eq '1' -and $packageService -like 'package:*') {
+            Recover-SystemUiAnr $device
+            return
+        }
         Start-Sleep -Seconds 2
     } while ((Get-Date) -lt $deadline)
     throw "$device did not finish booting in $TimeoutSeconds seconds."
@@ -58,7 +63,17 @@ function Wait-DeviceBooted([string]$device) {
 
 function Get-UiXml([string]$device) {
     try {
-        & $adb -s $device shell uiautomator dump /sdcard/othello-window.xml 2>$null | Out-Null
+        $dumpOut = Join-Path $evidence "$device-uiautomator.out"
+        $dumpErr = Join-Path $evidence "$device-uiautomator.err"
+        $dump = Start-Process -FilePath $adb `
+            -ArgumentList @('-s', $device, 'shell', 'uiautomator', 'dump', '/sdcard/othello-window.xml') `
+            -NoNewWindow -PassThru -RedirectStandardOutput $dumpOut -RedirectStandardError $dumpErr
+        if (-not $dump.WaitForExit(15000)) {
+            $dump.Kill()
+            $dump.WaitForExit()
+            return ''
+        }
+        if ($dump.ExitCode -ne 0) { return '' }
         return (& $adb -s $device shell cat /sdcard/othello-window.xml 2>$null) -join ""
     } catch { return '' }
 }
@@ -66,6 +81,9 @@ function Get-UiXml([string]$device) {
 function Wait-UiText([string]$device, [string]$text) {
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     do {
+        Recover-SystemUiAnr $device
+        $appPid = (& $adb -s $device shell pidof com.example.othello 2>$null) -join ''
+        if ([string]::IsNullOrWhiteSpace($appPid)) { throw "$device app process exited while waiting for UI text: $text" }
         if ((Get-UiXml $device) -like "*$text*") { return }
         Start-Sleep -Seconds 2
     } while ((Get-Date) -lt $deadline)
@@ -90,6 +108,17 @@ function Tap-UiText([string]$device, [string]$text) {
     Invoke-Adb $device @('shell', 'input', 'tap', "$x", "$y") | Out-Null
 }
 
+function Recover-SystemUiAnr([string]$device) {
+    $xml = Get-UiXml $device
+    if ($xml -notlike "*System UI isn't responding*") { return }
+    $bounds = Get-TextBounds $xml 'Wait'
+    if ($null -eq $bounds) { return }
+    $x = [int](($bounds[0] + $bounds[2]) / 2)
+    $y = [int](($bounds[1] + $bounds[3]) / 2)
+    Invoke-Adb $device @('shell', 'input', 'tap', "$x", "$y") | Out-Null
+    Start-Sleep -Seconds 2
+}
+
 function Enter-UiText([string]$device, [string]$label, [string]$value) {
     Tap-UiText $device $label
     Invoke-Adb $device @('shell', 'input', 'text', $value) | Out-Null
@@ -100,12 +129,35 @@ function Capture-Evidence($player) {
     $prefix = Join-Path $evidence "$($player.Name)-$(Get-Date -Format 'HHmmss')"
     $xml = Get-UiXml $device
     Set-Content -Path "$prefix.xml" -Value $xml -Encoding UTF8
-    & $adb -s $device exec-out screencap -p | Set-Content -Path "$prefix.png" -AsByteStream
+    $screenshot = Start-Process -FilePath $adb -ArgumentList @('-s', $device, 'exec-out', 'screencap', '-p') -NoNewWindow -Wait -PassThru -RedirectStandardOutput "$prefix.png"
+    if ($screenshot.ExitCode -ne 0) { throw "screencap failed for $device" }
     & $adb -s $device logcat -d -v time -s OthelloSignaling OthelloWebRTC OthelloMatch OthelloProtocol | Set-Content -Path "$prefix.log" -Encoding UTF8
+}
+
+function Get-MatchId([string]$device) {
+    $match = [regex]::Match((Get-UiXml $device), 'text="matchId: ([^"]+)"')
+    if (-not $match.Success) { throw "$device does not expose a matchId in diagnostics" }
+    return $match.Groups[1].Value
+}
+
+function Wait-OnlineReady {
+    Wait-UiText "emulator-5554" $uiOnline
+    Wait-UiText "emulator-5556" $uiOnline
+    Wait-UiText "emulator-5554" "DC OPEN"
+    Wait-UiText "emulator-5556" "DC OPEN"
+    Wait-UiText "emulator-5554" "ack true/true"
+    Wait-UiText "emulator-5556" "ack true/true"
 }
 
 try {
     foreach ($player in $devices) {
+        if ($ReuseEmulators) {
+            $state = (& $adb -s $player.Id get-state 2>$null) -join ''
+            if ($state.Trim() -eq 'device') {
+                Wait-DeviceBooted $player.Id
+                continue
+            }
+        }
         $selectedAvd = if ($player.Name -eq 'A') { $AvdName } else { $AvdNameB }
         $args = @('-avd', $selectedAvd, '-port', ($player.Id -replace 'emulator-', ''), '-no-snapshot', '-no-audio', '-no-boot-anim')
         Start-Process -FilePath $emulator -ArgumentList $args -WindowStyle Hidden | Out-Null
@@ -117,6 +169,10 @@ try {
         Invoke-Adb $player.Id @('shell', 'pm', 'clear', 'com.example.othello') | Out-Null
         $launchArgs = @('shell', 'am', 'start', '-n', 'com.example.othello/.MainActivity')
         if ($AutoPlay) { $launchArgs += @('--ez', 'othello.e2e.autoplay', 'true') }
+        if ($TimeControlMillis -gt 0) {
+            if ($TimeControlMillis -lt 1000 -or $TimeControlMillis -gt 60000) { throw 'TimeControlMillis must be 1000..60000 for the debug E2E hook.' }
+            $launchArgs += @('--el', 'othello.e2e.timeControlMillis', "$TimeControlMillis")
+        }
         Invoke-Adb $player.Id $launchArgs | Out-Null
         Wait-UiText $player.Id 'OTHELLO'
         Capture-Evidence $player
@@ -133,13 +189,36 @@ try {
         Tap-UiText "emulator-5554" $uiPlay
         Wait-UiText "emulator-5554" $uiWaiting
         Tap-UiText "emulator-5556" $uiPlay
-        Wait-UiText "emulator-5554" $uiOnline
-        Wait-UiText "emulator-5556" $uiOnline
-        Wait-UiText "emulator-5554" "DC"
-        Wait-UiText "emulator-5556" "DC"
+        Wait-OnlineReady
         Capture-Evidence $devices[0]
         Capture-Evidence $devices[1]
-        Write-Output "Emulator E2E signaling/DataChannel checkpoints passed. Evidence: $evidence"
+        $firstMatchId = Get-MatchId "emulator-5554"
+        if ($AutoPlay) {
+            Wait-UiText "emulator-5554" "CONFIRMED"
+            Wait-UiText "emulator-5556" "CONFIRMED"
+            Capture-Evidence $devices[0]
+            Capture-Evidence $devices[1]
+
+            Tap-UiText "emulator-5554" (-join ([char[]](0x623b, 0x308b)))
+            Tap-UiText "emulator-5556" (-join ([char[]](0x623b, 0x308b)))
+            Wait-UiText "emulator-5554" $uiPlay
+            Wait-UiText "emulator-5556" $uiPlay
+            Tap-UiText "emulator-5554" $uiPlay
+            Wait-UiText "emulator-5554" $uiWaiting
+            Tap-UiText "emulator-5556" $uiPlay
+            Wait-OnlineReady
+            $secondMatchId = Get-MatchId "emulator-5554"
+            if ($secondMatchId -eq $firstMatchId) { throw 'Second match reused the first matchId.' }
+            Capture-Evidence $devices[0]
+            Capture-Evidence $devices[1]
+            Wait-UiText "emulator-5554" "CONFIRMED"
+            Wait-UiText "emulator-5556" "CONFIRMED"
+            Capture-Evidence $devices[0]
+            Capture-Evidence $devices[1]
+            Write-Output "Two-match Emulator E2E reached CONFIRMED through real WebRTC. First=$firstMatchId Second=$secondMatchId Evidence: $evidence"
+        } else {
+            Write-Output "Emulator E2E signaling/DataChannel checkpoints passed. Match=$firstMatchId Evidence: $evidence"
+        }
     } else {
         Write-Warning "No E2E credentials supplied; completed two-emulator install/launch smoke test only."
         Write-Output "Evidence: $evidence"

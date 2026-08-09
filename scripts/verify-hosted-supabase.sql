@@ -1,0 +1,32 @@
+-- Run in the hosted project's SQL Editor after every migration has been applied.
+-- Every value in hosted_contract must be true, except realtime_tables which must be 2.
+select jsonb_build_object(
+  'matches_table', to_regclass('public.matches') is not null,
+  'signaling_table', to_regclass('public.match_signaling') is not null,
+  'verification_bucket', exists (
+    select 1
+    from storage.buckets
+    where id = 'verification'
+      and public = false
+      and file_size_limit = 5242880
+      and allowed_mime_types = array['image/jpeg', 'image/png', 'image/webp']::text[]
+  ),
+  'realtime_tables', (
+    select count(*)
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename in ('match_notifications', 'match_signaling')
+  ),
+  'ack_rpc', to_regprocedure('public.ack_match_started(uuid)') is not null,
+  'result_rpc', to_regprocedure('public.submit_match_result(uuid,text,text,text,text,jsonb)') is not null,
+  'profiles_select', has_table_privilege('authenticated', 'public.profiles', 'SELECT'),
+  'profile_name_update', has_column_privilege('authenticated', 'public.profiles', 'display_name', 'UPDATE'),
+  'ratings_select', has_table_privilege('authenticated', 'public.ratings', 'SELECT'),
+  'history_select', has_table_privilege('authenticated', 'public.rating_history', 'SELECT'),
+  'records_select', has_table_privilege('authenticated', 'public.game_records', 'SELECT'),
+  'credentials_insert', has_table_privilege('authenticated', 'public.federation_credentials', 'INSERT'),
+  'signaling_select', has_table_privilege('authenticated', 'public.match_signaling', 'SELECT'),
+  'signaling_insert', has_table_privilege('authenticated', 'public.match_signaling', 'INSERT'),
+  'signaling_sequence', has_sequence_privilege('authenticated', 'public.match_signaling_id_seq', 'USAGE')
+) as hosted_contract;

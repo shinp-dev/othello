@@ -1,21 +1,26 @@
 # Othello Online MVP
 
-責務分離を優先したAndroid向けオンラインオセロのMVPです。Supabase設定なしの端末内2人対局に加え、Supabase Auth・matchmaking・Realtime signaling・WebRTC DataChannelを使うオンライン対局経路を実装しています。オンライン経路は実機検証前のDraftです。
+責務分離を優先したAndroid向けオンラインオセロβです。Supabase Auth・matchmaking・Realtime signaling・WebRTC DataChannelを使うオンライン対局と、対局後GameRecordをEdaxで解析するReview経路を実装しています。本アプリはEdax公式・公認アプリではありません。
 
 ## 開発環境
 
 - Android Studio Koala以降
 - JDK 17
 - Android SDK 36
+- Android NDK `27.3.13750724` (r27d LTS) / CMake `3.22.1`
 - Kotlin 2.2.10 / Compose Compiler plugin / Compose 1.6.8
 
 ## ビルドとテスト
 
 ```powershell
 ./gradlew test
+./gradlew lint
 ./gradlew :app:assembleDebug
+./gradlew :app:assembleRelease
+./gradlew :app:bundleRelease
 pwsh ./scripts/check-boundaries.ps1
 pwsh ./scripts/check-sql-security.ps1
+pwsh ./scripts/check-release-contents.ps1
 supabase start
 supabase test db
 supabase stop
@@ -41,8 +46,10 @@ The Android client reads `supabase.url` and `supabase.anonKey` from the untracke
 Missing values produce a visible configuration error and do not crash the app. Never
 place a service-role key in Android resources or BuildConfig.
 
+Hosted疎通環境を同じ設定で作り直す手順は [docs/SUPABASE_HOSTED_SETUP.md](docs/SUPABASE_HOSTED_SETUP.md) に記録しています。
+
 1. Supabase projectを作成します。
-2. `supabase/migrations/202608090001_init.sql`、続けて`202608090002_hardening_additive.sql`をSupabase SQL EditorまたはSupabase CLIで適用します。
+2. `supabase/migrations`内のmigrationをファイル名順にすべてSupabase SQL EditorまたはSupabase CLIで適用します。
 3. Android側へservice-role keyを置かず、AuthユーザーのJWTと公開anon keyだけをアプリ設定へ渡します。
 4. 新規AuthユーザーはDB triggerで`profiles`/`ratings`へbootstrapされます。マッチングは`enqueue_or_match()`だけを使用し、公式Rating snapshotとTTLをDB側で管理します。
 5. 結果提出は`submit_match_result(...)`を使用します。2件目の提出時に同一transaction内で自動finalizeされ、`finalize_match_v2(...)`はreconciliation用に残します。参加者以外・二重Rating更新・不一致結果はDB側で拒否または`DISPUTED`になります。
@@ -81,4 +88,10 @@ select public.cleanup_terminal_matches();
 
 ## Edax / OSS
 
-Edax JNIはまだバイナリを同梱していません。`analysis:api`の`AnalysisEngine`と`analysis:edax`の`ProductionAnalysisEngine`が差し替え境界です。`HeuristicTestAnalysisEngine`はtest/debug専用で、本番の偽評価には使用しません。Edaxを追加する際は、Edaxの配布ライセンスとJNI/NDKビルド成果物の著作権表示をアプリのOSS画面へ追加してください。現時点の依存ライセンスはGradleのCompose/AndroidX/Kotlin標準ライセンスに従います。
+対局後Reviewの解析エンジンには[Edax 4.6](https://github.com/abulmo/edax-reversi)を使用します。upstream commitは`14f048c05ddfa385b6bf954a9c2905bbe677e9d3`へ固定し、`Kotlin -> analysis:api -> analysis:edax -> JNI -> native Edax`で統合しています。Android app全体はGNU GPL version 3で配布します。ライセンス全文は[`LICENSE`](LICENSE)、著作権・第三者dependency表示は[`NOTICE.md`](NOTICE.md)、固定ソース・patch・再構築手順は[`third_party/edax/UPSTREAM.md`](third_party/edax/UPSTREAM.md)と[`docs/EDAX_BUILD.md`](docs/EDAX_BUILD.md)を参照してください。
+
+Edaxの評価データ（`eval.dat`等）とOpening Bookは、権利をEdax本体と分離して扱い、APK/AABにもrepositoryにも同梱しません。ユーザーが正当に取得・所有するファイルを、`設定 -> 解析`からStorage Access Frameworkで選び、アプリprivate storageへコピーします。評価データ未設定時は偽の値を表示しません。Bookは任意で、未設定またはbook miss時は通常のEdax探索を使います。
+
+Reviewでは実戦開始局面、任意ply、最終局面、保存前variation局面を解析でき、現在手番の全合法手へ予測終局石差を盤面上表示します。完全読みの`exact`、深さ依存の`heuristic`、import済みBook由来の`book`を区別します。解析は明示操作時だけ単一background workerで実行し、ply変更・variation変更・画面離脱・新規解析でcancel/stale-result破棄を行います。
+
+対応ABIは`arm64-v8a`と開発用`x86_64`だけです。Edaxを含む全native libraryとAPK packagingは16 KiB page-size alignmentをrelease検査します。`feature:match`と`core:game`はanalysis/JNI/Edaxへ依存せず、ranked/live DataChannel経路から解析へ到達できません。

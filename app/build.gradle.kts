@@ -13,6 +13,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
     buildFeatures {
@@ -28,6 +29,12 @@ dependencies {
     implementation(project(":core:designsystem"))
     implementation(project(":feature:match"))
     implementation(project(":feature:matchmaking"))
+    implementation(project(":feature:records"))
+    implementation(project(":feature:review"))
+    implementation(project(":feature:profile"))
+    implementation(project(":feature:credential"))
+    implementation(project(":analysis:api"))
+    implementation(project(":analysis:edax"))
     implementation(project(":data:supabase"))
     implementation(project(":transport:webrtc"))
     implementation("androidx.activity:activity-compose:1.9.0")

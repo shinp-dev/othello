@@ -12,9 +12,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew test
       - run: ./gradlew lint
-      - run: ./gradlew assembleDebug
+      - run: ./gradlew assembleDebug assembleRelease bundleRelease
       - run: pwsh ./scripts/check-boundaries.ps1
       - run: pwsh ./scripts/check-sql-security.ps1
+      - run: pwsh ./scripts/check-release-contents.ps1
+      - run: pwsh ./scripts/check-release-contents.ps1 -ArtifactPath app/build/outputs/bundle/release/app-release.aab
       - id: supabase_cli
         uses: supabase/setup-cli@v1
         with: { version: 2.101.0 }

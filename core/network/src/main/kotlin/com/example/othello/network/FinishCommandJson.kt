@@ -18,6 +18,8 @@ object FinishCommandJson {
         val stateHash: String,
         val loserDisc: String,
         val reason: String,
+        val blackRemainingMillis: Long? = null,
+        val whiteRemainingMillis: Long? = null,
     )
 
     fun encode(command: FinishCommand): String = json.encodeToString(
@@ -30,6 +32,8 @@ object FinishCommandJson {
             stateHash = command.stateHash,
             loserDisc = command.loserDisc.name,
             reason = command.reason.name,
+            blackRemainingMillis = command.clockSnapshot?.blackRemainingMillis,
+            whiteRemainingMillis = command.clockSnapshot?.whiteRemainingMillis,
         ),
     )
 
@@ -44,6 +48,9 @@ object FinishCommandJson {
             stateHash = wire.stateHash,
             loserDisc = Disc.valueOf(wire.loserDisc).also { require(it != Disc.EMPTY) },
             reason = FinishSignalReason.valueOf(wire.reason),
+            clockSnapshot = if (wire.blackRemainingMillis != null && wire.whiteRemainingMillis != null) {
+                ClockSnapshot(wire.blackRemainingMillis, wire.whiteRemainingMillis)
+            } else null,
         )
     }
 }

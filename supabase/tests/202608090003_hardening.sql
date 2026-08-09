@@ -1,5 +1,5 @@
 -- Run with `supabase test db` against local Supabase/Postgres + pgTAP.
-select plan(68);
+select plan(95);
 
 select ok(not has_function_privilege('anon', 'public.prune_user_game_records(uuid)', 'execute'), 'anon cannot execute prune_user_game_records');
 select ok(not has_function_privilege('authenticated', 'public.prune_user_game_records(uuid)', 'execute'), 'authenticated cannot execute prune_user_game_records');
@@ -17,6 +17,24 @@ select ok((select file_size_limit from storage.buckets where id = 'verification'
 select ok((select allowed_mime_types from storage.buckets where id = 'verification') = array['image/jpeg', 'image/png', 'image/webp']::text[], 'verification bucket allows only image MIME types');
 select ok(exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'verification objects owner insert' and 'authenticated' = any(roles)), 'verification upload policy is authenticated-only');
 select ok(exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'verification objects owner read' and 'authenticated' = any(roles)), 'verification read policy is owner-scoped, not public');
+select ok(has_table_privilege('authenticated', 'public.profiles', 'select'), 'authenticated can read RLS-scoped profiles');
+select ok(has_column_privilege('authenticated', 'public.profiles', 'display_name', 'update'), 'authenticated can update only the profile display name column');
+select ok(not has_table_privilege('authenticated', 'public.profiles', 'update'), 'authenticated has no table-wide profile update privilege');
+select ok(has_table_privilege('authenticated', 'public.ratings', 'select'), 'authenticated can read RLS-scoped ratings');
+select ok(not has_table_privilege('authenticated', 'public.ratings', 'update'), 'authenticated cannot update ratings');
+select ok(has_table_privilege('authenticated', 'public.rating_history', 'select'), 'authenticated can read RLS-scoped rating history');
+select ok(has_table_privilege('authenticated', 'public.game_records', 'select'), 'authenticated can read RLS-scoped game records');
+select ok(has_table_privilege('authenticated', 'public.federation_credentials', 'select'), 'authenticated can read own credentials');
+select ok(has_table_privilege('authenticated', 'public.federation_credentials', 'insert'), 'authenticated can self-declare credentials');
+select ok(has_table_privilege('authenticated', 'public.match_signaling', 'select'), 'authenticated participants can read signaling');
+select ok(has_table_privilege('authenticated', 'public.match_signaling', 'insert'), 'authenticated participants can publish signaling');
+select ok(not has_table_privilege('authenticated', 'public.match_signaling', 'update'), 'authenticated cannot rewrite signaling');
+select ok(not has_table_privilege('authenticated', 'public.match_signaling', 'delete'), 'authenticated cannot delete signaling');
+select ok(has_table_privilege('authenticated', 'public.match_notifications', 'select'), 'authenticated can receive own match notifications');
+select ok(has_sequence_privilege('authenticated', 'public.match_signaling_id_seq', 'usage'), 'authenticated can allocate signaling identity values');
+select ok(has_table_privilege('anon', 'public.public_profiles', 'select'), 'anon can read the sanitized public profile view');
+select ok(not has_table_privilege('anon', 'public.profiles', 'select'), 'anon cannot read the base profile table');
+select ok(not has_table_privilege('authenticated', 'public.active_match_participants', 'select'), 'active reservations remain RPC-only');
 select ok(to_regprocedure('public.ack_match_started(uuid)') is not null, 'start ack RPC exists');
 select ok(to_regprocedure('public.get_match_start_state(uuid)') is not null, 'participant start state RPC exists');
 select ok(position('delete from public.active_match_participants' in pg_get_functiondef('public.cleanup_stale_created_matches()'::regprocedure)) = 0, 'signaling cleanup never deletes reservations directly');
@@ -42,6 +60,17 @@ select is((select matched from public.enqueue_or_match()), false, 'first user en
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', false);
 select is((select matched from public.enqueue_or_match()), true, 'second user creates a match');
 select is((select count(*)::int from public.active_match_participants), 2, 'both players receive one active reservation');
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
+select is(
+  (select match_id::text from public.claim_waiting_match()),
+  (select id::text from public.matches where '00000000-0000-0000-0000-000000000001'::uuid in (black_player, white_player) limit 1),
+  'waiting participant can claim the created match'
+);
+select is(
+  (select count(*)::int from public.match_notifications where user_id = '00000000-0000-0000-0000-000000000001'),
+  0,
+  'claim consumes only the caller notification'
+);
 select throws_ok(
   $$insert into public.active_match_participants(user_id, match_id, expires_at)
     values ('00000000-0000-0000-0000-000000000002', (select id from public.matches limit 1), now() + interval '5 minutes')$$,
@@ -164,5 +193,15 @@ select throws_ok($$select public.review_verification_submission((select id from 
 select is((select public.get_verification_evidence_cleanup((select id from public.verification_submissions where credential_id = (select id from public.federation_credentials where credential_type = 'dan-good')))), '00000000-0000-0000-0000-000000000003/proof.png', 'cleanup retry returns DB-owned path');
 select public.mark_verification_evidence_deleted((select id from public.verification_submissions where credential_id = (select id from public.federation_credentials where credential_type = 'dan-good')));
 select is((select public.get_verification_evidence_cleanup((select id from public.verification_submissions where credential_id = (select id from public.federation_credentials where credential_type = 'dan-good')))), null, 'successful cleanup removes the path reference');
+
+select ok(to_regclass('public.account_deletion_requests') is not null, 'account deletion request table exists');
+select ok(to_regprocedure('public.request_account_deletion()') is not null, 'account deletion request RPC exists');
+select ok(has_table_privilege('authenticated', 'public.account_deletion_requests', 'select'), 'authenticated users can read their deletion request');
+select ok(not has_table_privilege('authenticated', 'public.account_deletion_requests', 'insert'), 'authenticated users cannot forge deletion request rows');
+select ok(has_function_privilege('authenticated', 'public.request_account_deletion()', 'execute'), 'authenticated users can request deletion through RPC');
+select ok(not has_function_privilege('anon', 'public.request_account_deletion()', 'execute'), 'anonymous users cannot request account deletion');
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
+select set_config('request.jwt.claim.role', 'authenticated', false);
+select is(public.request_account_deletion(), public.request_account_deletion(), 'account deletion request is idempotent');
 
 select * from finish();

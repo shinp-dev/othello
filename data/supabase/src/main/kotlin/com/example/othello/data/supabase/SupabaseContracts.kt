@@ -16,6 +16,7 @@ import com.example.othello.matchmaking.MatchmakingRepository
 import com.example.othello.network.CURRENT_PROTOCOL_VERSION
 import com.example.othello.profile.Profile
 import com.example.othello.profile.ProfileRepository
+import com.example.othello.profile.AccountDeletionRepository
 import com.example.othello.records.FinishReason
 import com.example.othello.records.GameRecord
 import com.example.othello.records.GameRecordRepository
@@ -45,6 +46,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.retryWhen
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import io.ktor.http.ContentType
@@ -80,6 +83,13 @@ private data class EnqueueRow(
     @SerialName("assigned_disc") val assignedDisc: String? = null,
 )
 
+@Serializable
+private data class ClaimRow(
+    @SerialName("match_id") val matchId: String,
+    @SerialName("opponent_id") val opponentId: String,
+    @SerialName("assigned_disc") val assignedDisc: String,
+)
+
 internal class SupabaseMatchmakingRepository(private val client: SupabaseClient) : MatchmakingRepository {
     override suspend fun enqueueOrMatch(): EnqueueResult {
         val row = client.postgrest.rpc("enqueue_or_match").decodeList<EnqueueRow>().single()
@@ -96,17 +106,22 @@ internal class SupabaseMatchmakingRepository(private val client: SupabaseClient)
         )
     }
 
-    override suspend fun cancelWaiting(): Boolean = client.postgrest.rpc("cancel_waiting").decodeSingle()
-    override suspend fun heartbeatWaiting(): Boolean = client.postgrest.rpc("heartbeat_waiting").decodeSingle()
+    override suspend fun cancelWaiting(): Boolean = client.postgrest.rpc("cancel_waiting").decodeAs<Boolean>()
+    override suspend fun heartbeatWaiting(): Boolean = client.postgrest.rpc("heartbeat_waiting").decodeAs<Boolean>()
     override suspend fun claimMatchedAssignment(): MatchAssignment? = client.postgrest.rpc("claim_waiting_match")
-        .decodeList<EnqueueRow>().firstOrNull()?.let { row ->
+        .decodeList<ClaimRow>().firstOrNull()?.let { row ->
             MatchAssignment(
-                requireNotNull(row.matchId), requireNotNull(row.opponentId),
-                if (row.assignedDisc == "BLACK") AssignedDisc.BLACK else AssignedDisc.WHITE,
+                row.matchId,
+                row.opponentId,
+                when (row.assignedDisc) {
+                    "BLACK" -> AssignedDisc.BLACK
+                    "WHITE" -> AssignedDisc.WHITE
+                    else -> error("invalid assigned disc")
+                },
             )
         }
     override suspend fun reconcileCallerActiveMatch(): Boolean =
-        client.postgrest.rpc("reconcile_expired_active_match_for_user").decodeSingle<Int>() > 0
+        client.postgrest.rpc("reconcile_expired_active_match_for_user").decodeAs<Int>() > 0
 }
 
 @Serializable
@@ -139,7 +154,7 @@ private data class MatchRatingHistoryRow(
 
 internal class SupabaseOnlineMatchRepository(private val client: SupabaseClient) : OnlineMatchRepository {
     override suspend fun ackMatchStarted(matchId: String): MatchStartAck {
-        client.postgrest.rpc("ack_match_started", AckParams(matchId)).decodeSingle<String>()
+        client.postgrest.rpc("ack_match_started", AckParams(matchId)).decodeAs<String>()
         return getMatchStartState(matchId)
     }
 
@@ -149,7 +164,7 @@ internal class SupabaseOnlineMatchRepository(private val client: SupabaseClient)
         .single()
         .toDomain()
 
-    override suspend fun abandonMatch(matchId: String): Boolean = client.postgrest.rpc("abandon_match", AckParams(matchId)).decodeSingle<String>().isNotBlank()
+    override suspend fun abandonMatch(matchId: String): Boolean = client.postgrest.rpc("abandon_match", AckParams(matchId)).decodeAs<String>().isNotBlank()
 
     override suspend fun submitMatchResult(submission: MatchSubmission): MatchFinishResult {
         val serverStatus = client.postgrest.rpc(
@@ -162,7 +177,7 @@ internal class SupabaseOnlineMatchRepository(private val client: SupabaseClient)
                 submission.finishReason.name,
                 submission.clockPayload,
             ),
-        ).decodeSingle<String>()
+        ).decodeAs<String>()
         if (serverStatus != "CONFIRMED") return MatchFinishResult(serverStatus)
         return try {
             val history = client.from("rating_history").select {
@@ -224,6 +239,17 @@ private data class RatingRow(
 private data class DisplayNameUpdate(@SerialName("display_name") val displayName: String)
 
 @Serializable
+private data class ProfileProjectionRow(
+    val id: String,
+    @SerialName("display_name") val displayName: String,
+    @SerialName("current_rating") val currentRating: Int,
+    @SerialName("peak_rating") val peakRating: Int,
+    @SerialName("stable_rating_band") val stableRatingBand: String,
+    @SerialName("federation_grade") val federationGrade: String? = null,
+    @SerialName("federation_verification_status") val federationVerificationStatus: String? = null,
+)
+
+@Serializable
 private data class CredentialInsert(
     @SerialName("user_id") val userId: String,
     val organization: String,
@@ -240,9 +266,17 @@ private data class SubmitVerificationParams(
 
 internal class SupabaseProfileRepository(private val client: SupabaseClient) : ProfileRepository {
     override suspend fun get(userId: String): Profile {
-        val row = client.from("profiles").select { filter { eq("id", userId) } }.decodeSingle<ProfileRow>()
-        val rating = client.from("ratings").select { filter { eq("user_id", userId) } }.decodeSingle<RatingRow>()
-        return Profile(row.id, row.displayName, rating.currentRating, rating.peakRating, "CALCULATING")
+        val row = client.from("public_profiles").select { filter { eq("id", userId) } }.decodeSingle<ProfileProjectionRow>()
+        return Profile(
+            row.id,
+            row.displayName,
+            row.currentRating,
+            row.peakRating,
+            row.stableRatingBand,
+            row.federationGrade,
+            row.federationVerificationStatus == "VERIFIED",
+            row.federationVerificationStatus,
+        )
     }
 
     override suspend fun updateDisplayName(userId: String, displayName: String): Profile {
@@ -297,6 +331,12 @@ internal class SupabaseCredentialRepository(
         fun toDomain() = FederationCredential(organization, credentialType, value, CredentialStatus.valueOf(status), verifiedAt?.let { Instant.parse(it).toEpochMilli() }, id)
     }
 
+    override suspend fun current(): FederationCredential? = client.from("federation_credentials")
+        .select { filter { eq("user_id", userId) }; limit(1) }
+        .decodeList<CredentialRow>()
+        .firstOrNull()
+        ?.toDomain()
+
     override suspend fun selfDeclare(value: String): FederationCredential {
         return client.from("federation_credentials").insert(CredentialInsert(userId, "日本オセロ連盟", "SELF_DECLARED", value)) { select() }
             .decodeSingle<CredentialRow>().toDomain()
@@ -320,6 +360,10 @@ internal class SupabaseCredentialRepository(
         client.postgrest.rpc("submit_verification_submission", SubmitVerificationParams(id, evidencePath))
         return credential.copy(status = CredentialStatus.PENDING)
     }
+}
+
+internal class SupabaseAccountDeletionRepository(private val client: SupabaseClient) : AccountDeletionRepository {
+    override suspend fun requestDeletion(): String = client.postgrest.rpc("request_account_deletion").decodeAs()
 }
 
 @Serializable
@@ -384,24 +428,49 @@ internal class SupabaseRealtimeSignalingDataSource(
         jobs.remove(matchId)?.cancel()
         val job = scope.launch {
             val delivered = mutableSetOf<String>()
-            fun deliver(envelope: SignalingEnvelope) {
+            val deliveryMutex = Mutex()
+            suspend fun deliver(envelope: SignalingEnvelope) {
                 if (envelope.matchId != matchId) return
-                runCatching { validate(envelope) }.onSuccess {
-                    val key = "${envelope.senderUserId}|${envelope.type}|${envelope.sdp}|${envelope.protocolVersion}"
-                    if (delivered.add(key)) onEnvelope(envelope)
-                }
+                try { validate(envelope) } catch (_: IllegalArgumentException) { return }
+                val key = "${envelope.senderUserId}|${envelope.type}|${envelope.sdp}|${envelope.protocolVersion}"
+                if (deliveryMutex.withLock { delivered.add(key) }) onEnvelope(envelope)
             }
-            client.from("match_signaling").selectAsFlow(
-                SignalingRow::id,
-                channelName = "match-signaling:$matchId",
-                filter = FilterOperation("match_id", FilterOperator.EQ, matchId),
-            ).retryWhen { _, attempt ->
-                if (attempt >= 2) false else {
-                    kotlinx.coroutines.delay(500L * (attempt + 1))
-                    true
+            // selectAsFlow can miss a row inserted between its initial SELECT and channel join.
+            // Brief catch-up reads close that signaling-only race; moves never use this path.
+            val realtimeJob = launch {
+                client.from("match_signaling").selectAsFlow(
+                    SignalingRow::id,
+                    channelName = "match-signaling:$matchId",
+                    filter = FilterOperation("match_id", FilterOperator.EQ, matchId),
+                ).retryWhen { _, attempt ->
+                    if (attempt >= 2) false else {
+                        kotlinx.coroutines.delay(500L * (attempt + 1))
+                        true
+                    }
+                }.catch { onError(it) }
+                    .collect { rows -> rows.sortedBy(SignalingRow::id).forEach { deliver(it.toEnvelope()) } }
+            }
+            try {
+                // Keep a finite signaling-only fallback alive even if the realtime flow joins late
+                // or completes. Slow emulator boots can otherwise miss an ANSWER after four seconds.
+                repeat(20) { attempt ->
+                    try {
+                        val rows = client.from("match_signaling").select {
+                            filter { eq("match_id", matchId) }
+                            order("id", Order.ASCENDING)
+                        }.decodeList<SignalingRow>()
+                        rows.forEach { deliver(it.toEnvelope()) }
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        // Realtime remains active; a later catch-up attempt can recover.
+                    }
+                    if (attempt < 19) kotlinx.coroutines.delay(500)
                 }
-            }.catch { onError(it) }
-                .collect { rows -> rows.sortedBy(SignalingRow::id).forEach { deliver(it.toEnvelope()) } }
+                realtimeJob.join()
+            } finally {
+                realtimeJob.cancel()
+            }
         }
         jobs[matchId] = job
         return AutoCloseable {
@@ -429,6 +498,7 @@ class SupabaseComponent private constructor(
     val matchmakingRepository: MatchmakingRepository,
     val onlineMatchRepository: OnlineMatchRepository,
     val profileRepository: ProfileRepository,
+    val accountDeletionRepository: AccountDeletionRepository,
     val gameRecordRepository: GameRecordRepository,
     val signalingDataSource: SupabaseSignalingDataSource,
     private val client: SupabaseClient,
@@ -447,6 +517,7 @@ class SupabaseComponent private constructor(
             matchmakingRepository = SupabaseMatchmakingRepository(client),
             onlineMatchRepository = SupabaseOnlineMatchRepository(client),
             profileRepository = SupabaseProfileRepository(client),
+            accountDeletionRepository = SupabaseAccountDeletionRepository(client),
             gameRecordRepository = SupabaseGameRecordRepository(client),
             signalingDataSource = SupabaseRealtimeSignalingDataSource(client, scope),
             client = client,

@@ -7,7 +7,7 @@ transport tests are not a substitute for this run. Evidence is written below
 
 ## Required setup
 
-1. Start Docker Desktop and install the pinned Supabase CLI (`2.101.0` or compatible). Run `supabase start` and apply all migrations.
+1. Start Docker Desktop and install the pinned Supabase CLI `2.101.0`. Run `supabase start` and apply all migrations.
 2. Create two local Auth users, for example `player-a@example.test` and `player-b@example.test`, without committing their passwords.
 3. Build with emulator routing in untracked `local.properties`:
 
@@ -28,8 +28,11 @@ transport tests are not a substitute for this run. Evidence is written below
    ./scripts/run-emulator-e2e.ps1 -StartSupabase -AutoPlay
    ```
 
-   The script boots `Pixel_8a` as `emulator-5554` and `emulator-5556`, installs the APK,
-   clears app data, signs in A/B, and waits for the online diagnostics checkpoints.
+   The script boots `Pixel_8a` and `Pixel_8a_B` as `emulator-5554` and
+   `emulator-5556`, installs the APK, clears app data, signs in A/B, completes
+   two autoplay games through the normal controller/DataChannel path, and
+   requires distinct match IDs and `CONFIRMED` on both clients. Use
+   `-TimeControlMillis 3000` for a debug timeout run; the hook accepts 1–60 sec.
 
 ## Acceptance sequence
 
@@ -41,6 +44,24 @@ transport tests are not a substitute for this run. Evidence is written below
 6. Submit on both sides. Verify `CONFIRMED` produces one GameRecord and rating update. Repeat matchmaking for a second match and confirm the prior peer/channel/signaling resources are gone.
 7. Exercise duplicate, command-id reuse, wrong ply/hash, wrong match ID, and illegal move through the debug driver/Fake protocol suite. The board must not change and the app must not crash.
 8. Repeat on Wi-Fi/Wi-Fi, Wi-Fi/mobile, and carrier/carrier. During a game, toggle background/foreground and lock/unlock. A live P2P session may be reported as disconnected after process death; it must never silently resume with an incorrect state.
+
+## Edax emulator acceptance
+
+1. Open a real saved GameRecord and its Review. With no eval imported, start
+   analysis and verify `解析用評価データが設定されていません`; no numeric scores
+   may appear.
+2. In `設定 -> 解析`, import a locally generated synthetic eval through the SAF.
+   Confirm name, import time and SHA-256 identity and confirm the copy exists only
+   under app-private storage. No storage permission prompt is allowed.
+3. Leave Book unset and analyze the initial and an arbitrary main-line ply. Every
+   Game Core legal move must have a value directly on its board square.
+4. Move rapidly across plies and verify only the final requested position is
+   shown. Start a variation, play a legal move, analyze it, save/return, and
+   confirm the immutable record is unchanged.
+5. At a small endgame, verify values carry `exact`; instrumentation separately
+   compares Edax and Game Core legal sets and deterministic output.
+6. Optionally import the test-created header-only empty Book to test load/delete.
+   Never use or commit a third-party eval or Book fixture.
 
 ## Expected diagnostics
 
@@ -56,8 +77,7 @@ carrier-specific NAT and platform behavior: Wi-Fi↔5G handover, mobile↔mobile
 CGNAT/symmetric NAT, STUN-only success rate/TURN necessity, manufacturer background
 limits, thermal/battery behavior, and production Edax native performance.
 
-## Remaining product work
+## Product decisions outside emulator acceptance
 
-- Provide a vetted Edax source/license and enable the JNI adapter only after reproducible NDK builds.
 - Configure production Supabase Auth, Realtime authorization, Storage limits, TURN credentials, crash reporting, privacy/retention policy, and Play Console signing.
 - Before Play pre-release: choose the permanent application ID, add privacy policy/data-safety declarations, account deletion flow, release signing, OSS notices, crash/ANR monitoring, and staged rollout testing.

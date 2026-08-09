@@ -44,7 +44,12 @@ $requiredPatterns = @(
     'get_verification_evidence_cleanup',
     'review decision conflict',
     'cleanup_terminal_matches',
-    'alter default privileges in schema public revoke execute on functions from public'
+    'alter default privileges in schema public revoke execute on functions from public',
+    'revoke all on table[\s\S]*public\.match_signaling[\s\S]*from public, anon, authenticated',
+    'grant update \(display_name\) on table public\.profiles to authenticated',
+    'grant insert on table public\.match_signaling to authenticated',
+    'grant usage, select on sequence public\.match_signaling_id_seq to authenticated',
+    'delete from public\.match_notifications n[\s\S]*n\.match_id = row_value\.id'
 )
 $missing = $requiredPatterns | Where-Object { $sql -notmatch $_ }
 if ($missing) { $missing | ForEach-Object { Write-Error "Missing SQL security contract: $_" }; exit 1 }
