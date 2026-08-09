@@ -15,9 +15,10 @@ jobs:
       - run: ./gradlew assembleDebug
       - run: pwsh ./scripts/check-boundaries.ps1
       - run: pwsh ./scripts/check-sql-security.ps1
-      - uses: supabase/setup-cli@v1
+      - id: supabase_cli
+        uses: supabase/setup-cli@v1
         with: { version: 2.101.0 }
       - run: supabase start
       - run: supabase test db
-      - if: always()
+      - if: always() && steps.supabase_cli.outcome == 'success'
         run: supabase stop
