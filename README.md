@@ -6,7 +6,7 @@
 
 - Android Studio Koala以降
 - JDK 17
-- Android SDK 35
+- Android SDK 36
 - Kotlin 2.2.10 / Compose Compiler plugin / Compose 1.6.8
 
 ## ビルドとテスト
@@ -19,6 +19,9 @@ pwsh ./scripts/check-sql-security.ps1
 supabase start
 supabase test db
 supabase stop
+
+# Emulator A/B smoke/E2E (credentials are environment variables, never committed)
+./scripts/run-emulator-e2e.ps1 -StartSupabase -AutoPlay
 ```
 
 Android Studioでルートを開いて同期し、`app` configurationを実行することもできます。リポジトリにはGradle Wrapperを含めています。
@@ -29,6 +32,7 @@ Android Studioでルートを開いて同期し、`app` configurationを実行�
 
 WebRTC SDKとSupabase SDKの具体実装は、それぞれ`transport:webrtc`と`data:supabase`へ隔離します。`matches.server_status`はサーバーが保証できる状態だけを保持し、AndroidのP2P session stateとは別物です。
 WebRTC Android SDKはMaven Centralの`io.github.webrtc-sdk:android:144.7559.09`に固定しています。
+`SupabaseModule`が`data:supabase`内でSDK clientとrepositoryを組み立て、appへは自前port interfaceだけを返します。
 
 ## Supabase / Android configuration
 
@@ -61,6 +65,10 @@ npm run deploy
 MVP後は `MatchTransport` にWebRTC DataChannel実装を追加し、Supabase RealtimeはSDP offer/answerの確立時だけ使用します。P2P接続後に着手や時計をSupabaseへ送信しません。Android実機2台での確認は、Auth設定、同一Supabase project、TURN/STUN設定、2台のqueue参加、DataChannel成立、双方の同一棋譜・hash確認、結果提出の順で行います。
 
 `applicationId = com.example.othello` は開発用の仮値です。Store公開前に正式な所有ドメイン由来のIDを決定し、公開後に変更しない運用へ移行します。
+
+Emulator A/Bの再現手順と、emulatorで完了できる項目・物理端末に残る項目は
+[`docs/DEVICE_TEST.md`](docs/DEVICE_TEST.md)を参照してください。`build/e2e/`には
+secretを含めないXML、スクリーンショット、対象tagのlogcatを保存できます。
 
 `matches`のCREATED leaseは5分のsignaling用です。DataChannel成立後、両participantが`ack_match_started`を一度呼ぶと、P2P開始事実と24時間のbounded play leaseを記録します。PENDING_RESULTには30日の結果待ち期限を設定し、期限切れはABANDONEDへ遷移してからreservationを解放します。CONFIRMED/DISPUTED/ABANDONEDのterminal match、game record、30日経過のsubmissionはmaintenance pathでretention条件を満たしたものから削除します。matchmaking hot pathではqueue/signaling leaseだけを処理します。Supabase Cron/pg_cronを使う場合は、service role相当で次を1時間ごとに実行します。
 

@@ -24,6 +24,7 @@ import com.example.othello.game.CanonicalMoves
 import com.example.othello.game.Disc
 import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.auth.*
+import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.*
@@ -35,9 +36,10 @@ import io.github.jan.supabase.storage.*
 import io.github.jan.supabase.SupabaseClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.collect
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
@@ -53,10 +55,10 @@ data class SupabaseConfig(val url: String, val anonKey: String) {
 
 class SupabaseConfigurationException(message: String) : IllegalStateException(message)
 
-object SupabaseClientFactory {
+internal object SupabaseClientFactory {
     fun config(): SupabaseConfig = SupabaseConfig(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY)
 
-    fun create(config: SupabaseConfig = config()): Result<SupabaseClient> = runCatching {
+    internal fun create(config: SupabaseConfig = config()): Result<SupabaseClient> = runCatching {
         config.validate().getOrThrow()
         createSupabaseClient(config.url, config.anonKey) {
             install(Auth)
@@ -75,7 +77,7 @@ private data class EnqueueRow(
     @SerialName("assigned_disc") val assignedDisc: String? = null,
 )
 
-class SupabaseMatchmakingRepository(private val client: SupabaseClient) : MatchmakingRepository {
+internal class SupabaseMatchmakingRepository(private val client: SupabaseClient) : MatchmakingRepository {
     override suspend fun enqueueOrMatch(): EnqueueResult {
         val row = client.postgrest.rpc("enqueue_or_match").decodeList<EnqueueRow>().single()
         return if (!row.matched) EnqueueResult.Waiting else EnqueueResult.Matched(
@@ -116,7 +118,7 @@ private data class SubmitResultParams(
     @SerialName("p_clock") val clock: String? = null,
 )
 
-class SupabaseOnlineMatchRepository(private val client: SupabaseClient) : OnlineMatchRepository {
+internal class SupabaseOnlineMatchRepository(private val client: SupabaseClient) : OnlineMatchRepository {
     override suspend fun ackMatchStarted(matchId: String): MatchStartAck = MatchStartAck(
         serverStatus = client.postgrest.rpc("ack_match_started", AckParams(matchId)).decodeSingle(),
     )
@@ -140,9 +142,19 @@ class SupabaseOnlineMatchRepository(private val client: SupabaseClient) : Online
     }
 }
 
-class SupabaseAuthGateway(private val client: SupabaseClient) : AuthGateway {
+internal class SupabaseAuthGateway(private val client: SupabaseClient) : AuthGateway {
     override suspend fun currentSession(): UserSession? = client.auth.currentUserOrNull()?.let {
         UserSession(it.id, it.email ?: it.id)
+    }
+
+    override suspend fun signIn(email: String, password: String): UserSession {
+        require(email.isNotBlank()) { "email is required" }
+        require(password.isNotBlank()) { "password is required" }
+        client.auth.signInWith(Email) {
+            this.email = email
+            this.password = password
+        }
+        return requireNotNull(currentSession())
     }
 
     override suspend fun signIn(): UserSession = currentSession()
@@ -182,7 +194,7 @@ private data class SubmitVerificationParams(
     @SerialName("p_evidence_path") val evidencePath: String,
 )
 
-class SupabaseProfileRepository(private val client: SupabaseClient) : ProfileRepository {
+internal class SupabaseProfileRepository(private val client: SupabaseClient) : ProfileRepository {
     override suspend fun get(userId: String): Profile {
         val row = client.from("profiles").select { filter { eq("id", userId) } }.decodeSingle<ProfileRow>()
         val rating = client.from("ratings").select { filter { eq("user_id", userId) } }.decodeSingle<RatingRow>()
@@ -195,7 +207,7 @@ class SupabaseProfileRepository(private val client: SupabaseClient) : ProfileRep
     }
 }
 
-class SupabaseGameRecordRepository(private val client: SupabaseClient) : GameRecordRepository {
+internal class SupabaseGameRecordRepository(private val client: SupabaseClient) : GameRecordRepository {
     override suspend fun recent(userId: String, limit: Int): List<GameRecord> = client.from("game_records")
         .select { filter { eq("players", "{$userId}") }; limit(limit.toLong()) }
         .decodeList<GameRecordRow>().map(GameRecordRow::toDomain)
@@ -221,7 +233,7 @@ private data class GameRecordRow(
     )
 }
 
-class SupabaseCredentialRepository(
+internal class SupabaseCredentialRepository(
     private val client: SupabaseClient,
     private val userId: String,
 ) : CredentialRepository {
@@ -265,18 +277,30 @@ class SupabaseCredentialRepository(
 @Serializable
 data class SignalingEnvelope(
     val matchId: String,
-    val senderId: String,
+    val senderUserId: String,
     val type: String,
     val sdp: String,
     val protocolVersion: Int = CURRENT_PROTOCOL_VERSION,
 )
 
+@Serializable
+private data class SignalingRow(
+    @SerialName("match_id") val matchId: String,
+    @SerialName("sender_id") val senderUserId: String,
+    @SerialName("signal_type") val type: String,
+    val sdp: String,
+    @SerialName("protocol_version") val protocolVersion: Int,
+) {
+    fun toEnvelope() = SignalingEnvelope(matchId, senderUserId, type, sdp, protocolVersion)
+}
+
 interface SupabaseSignalingDataSource {
     suspend fun publish(envelope: SignalingEnvelope)
     fun subscribe(matchId: String, onEnvelope: (SignalingEnvelope) -> Unit): AutoCloseable
+    fun close() {}
 }
 
-class SupabaseRealtimeSignalingDataSource(
+internal class SupabaseRealtimeSignalingDataSource(
     private val client: SupabaseClient,
     private val scope: CoroutineScope,
 ) : SupabaseSignalingDataSource {
@@ -284,10 +308,14 @@ class SupabaseRealtimeSignalingDataSource(
     private val jobs = mutableMapOf<String, Job>()
 
     override suspend fun publish(envelope: SignalingEnvelope) {
+        validate(envelope)
+        client.from("match_signaling").insert(
+            SignalingRow(envelope.matchId, envelope.senderUserId, envelope.type, envelope.sdp, envelope.protocolVersion),
+        )
         val channel = channels[envelope.matchId] ?: open(envelope.matchId)
         channel.broadcast("signal", buildJsonObject {
             put("matchId", envelope.matchId)
-            put("senderId", envelope.senderId)
+            put("senderUserId", envelope.senderUserId)
             put("type", envelope.type)
             put("sdp", envelope.sdp)
             put("protocolVersion", envelope.protocolVersion)
@@ -297,8 +325,27 @@ class SupabaseRealtimeSignalingDataSource(
     override fun subscribe(matchId: String, onEnvelope: (SignalingEnvelope) -> Unit): AutoCloseable {
         val job = scope.launch {
             val channel = open(matchId)
-            channel.broadcastFlow<SignalingEnvelope>(event = "signal").onEach(onEnvelope).launchIn(this)
+            val delivered = mutableSetOf<String>()
+            fun deliver(envelope: SignalingEnvelope) {
+                if (envelope.matchId != matchId) return
+                runCatching { validate(envelope) }.onSuccess {
+                    val key = "${envelope.senderUserId}|${envelope.type}|${envelope.sdp}|${envelope.protocolVersion}"
+                    if (delivered.add(key)) onEnvelope(envelope)
+                }
+            }
+            val realtimeJob = launch {
+                channel.broadcastFlow<SignalingEnvelope>(event = "signal")
+                    .catch { /* malformed/unknown broadcasts are ignored */ }
+                    .collect(::deliver)
+            }
+            runCatching {
+                client.from("match_signaling").select { filter { eq("match_id", matchId) } }
+                    .decodeList<SignalingRow>()
+                    .forEach { deliver(it.toEnvelope()) }
+            }
+            realtimeJob.join()
         }
+        jobs[matchId] = job
         return AutoCloseable {
             job.cancel()
             scope.launch {
@@ -308,7 +355,63 @@ class SupabaseRealtimeSignalingDataSource(
         }
     }
 
+    override fun close() {
+        jobs.values.forEach(Job::cancel)
+        jobs.clear()
+        channels.values.toList().forEach { channel ->
+            scope.launch { client.realtime.removeChannel(channel) }
+        }
+        channels.clear()
+    }
+
     private suspend fun open(matchId: String): io.github.jan.supabase.realtime.RealtimeChannel = channels.getOrPut(matchId) {
         client.channel("match:$matchId")
     }.also { it.subscribe(blockUntilSubscribed = true) }
+
+    private fun validate(envelope: SignalingEnvelope) {
+        require(envelope.protocolVersion == CURRENT_PROTOCOL_VERSION)
+        require(envelope.matchId.isNotBlank() && envelope.senderUserId.isNotBlank())
+        require(envelope.type == "OFFER" || envelope.type == "ANSWER")
+        require(envelope.sdp.length in 1..16_384)
+    }
+}
+
+/** Composition root for Supabase infrastructure. SDK types never cross this boundary. */
+class SupabaseComponent private constructor(
+    val authGateway: AuthGateway,
+    val matchmakingRepository: MatchmakingRepository,
+    val onlineMatchRepository: OnlineMatchRepository,
+    val profileRepository: ProfileRepository,
+    val gameRecordRepository: GameRecordRepository,
+    val signalingDataSource: SupabaseSignalingDataSource,
+    private val client: SupabaseClient,
+    private val scope: CoroutineScope,
+) : AutoCloseable {
+    fun credentialRepository(userId: String): CredentialRepository = SupabaseCredentialRepository(client, userId)
+
+    override fun close() {
+        signalingDataSource.close()
+        scope.cancel()
+    }
+
+    internal companion object {
+        fun create(client: SupabaseClient, scope: CoroutineScope): SupabaseComponent = SupabaseComponent(
+            authGateway = SupabaseAuthGateway(client),
+            matchmakingRepository = SupabaseMatchmakingRepository(client),
+            onlineMatchRepository = SupabaseOnlineMatchRepository(client),
+            profileRepository = SupabaseProfileRepository(client),
+            gameRecordRepository = SupabaseGameRecordRepository(client),
+            signalingDataSource = SupabaseRealtimeSignalingDataSource(client, scope),
+            client = client,
+            scope = scope,
+        )
+    }
+}
+
+/** Android composition root; callers receive only application-owned ports. */
+object SupabaseModule {
+    fun create(config: SupabaseConfig? = null, scope: CoroutineScope): Result<SupabaseComponent> =
+        SupabaseClientFactory.create(config ?: SupabaseClientFactory.config()).map { client ->
+            SupabaseComponent.create(client, scope)
+        }
 }

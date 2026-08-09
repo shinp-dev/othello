@@ -24,7 +24,7 @@ The current MVP assumption is that a user can start a local game without Supabas
 | `:analysis:api` | `AnalysisEngine`, settings and result contracts | Match implementation |
 | `:analysis:edax` | Android-local Edax adapter; JNI can replace the unavailable production adapter | Match, Supabase |
 | `:transport:webrtc` | Android WebRTC SDK wiring and ICE configuration boundary | Game Core rules |
-| `:data:supabase` | Android Supabase SDK wiring and signaling data sources | Game Core rules |
+| `:data:supabase` | Android Supabase SDK wiring, Composition Root, and signaling data sources | Game Core rules |
 
 ## Dependency direction
 
@@ -38,7 +38,7 @@ data:supabase -> feature ports / core contracts
 feature:match -X-> feature:profile / feature:credential
 ```
 
-`core:game` has no Android dependency. `feature:match` only consumes `GameState` and transport ports. A build-time boundary check fails if match source references `analysis`.
+`core:game` has no Android dependency. `feature:match` only consumes `GameState` and transport ports. A build-time boundary check fails if match source references `analysis`. Supabase SDK types are private to `:data:supabase`; `SupabaseModule` exposes only application-owned ports. WebRTC SDK types are private to `:transport:webrtc`; callers receive `MatchTransport`, payloads, and primitive diagnostics.
 
 ## Ownership
 

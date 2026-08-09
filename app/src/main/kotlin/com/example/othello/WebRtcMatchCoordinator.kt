@@ -6,11 +6,13 @@ import com.example.othello.data.supabase.SupabaseSignalingDataSource
 import com.example.othello.game.Disc
 import com.example.othello.match.OnlineMatchController
 import com.example.othello.match.OnlineMatchRepository
+import com.example.othello.match.MatchDiagnostics
 import com.example.othello.matchmaking.MatchAssignment
 import com.example.othello.transport.webrtc.AndroidWebRtcTransport
 import com.example.othello.transport.webrtc.AndroidWebRtcTransportFactory
 import com.example.othello.transport.webrtc.DefaultIceServers
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /** Owns the P2P session outside Compose so Activity recreation does not create a second peer. */
@@ -21,6 +23,7 @@ class WebRtcMatchCoordinator(
     private val signaling: SupabaseSignalingDataSource,
     repository: OnlineMatchRepository,
     private val scope: CoroutineScope,
+    private val debugAutoPlay: Boolean = false,
 ) : AutoCloseable {
     private val transport = AndroidWebRtcTransportFactory(context.applicationContext)
         .create(assignment.matchId, DefaultIceServers.publicStun) as AndroidWebRtcTransport
@@ -30,14 +33,38 @@ class WebRtcMatchCoordinator(
         transport,
         repository,
     )
+
+    fun diagnostics(): MatchDiagnostics = controller.diagnostics(userId, assignment.opponentId)
     private var subscription: AutoCloseable? = null
+    private var autoPlaySubscription: AutoCloseable? = null
+    private var autoPlayJob: Job? = null
+    private var autoPlayInFlight = false
+    private var finishInFlight = false
     private var started = false
 
     fun start() {
         if (started) return
         started = true
+        if (debugAutoPlay) {
+            autoPlaySubscription = controller.observe { view ->
+                if (view.matchState.status == com.example.othello.match.MatchStatus.PLAYING &&
+                    view.game.currentPlayer == view.localDisc &&
+                    view.game.legalMoves.isNotEmpty() && !autoPlayInFlight
+                ) {
+                    autoPlayInFlight = true
+                    autoPlayJob = scope.launch {
+                        try { controller.play(view.game.legalMoves.first()) } finally { autoPlayInFlight = false }
+                    }
+                } else if (view.matchState.status == com.example.othello.match.MatchStatus.FINISHING && !finishInFlight) {
+                    finishInFlight = true
+                    autoPlayJob = scope.launch {
+                        try { controller.finishNormally() } finally { finishInFlight = false; autoPlayJob = null }
+                    }
+                }
+            }
+        }
         subscription = signaling.subscribe(assignment.matchId) { envelope ->
-            if (envelope.senderId == userId) return@subscribe
+            if (envelope.senderUserId == userId) return@subscribe
             scope.launch { handle(envelope) }
         }
         if (assignment.assignedDisc.name == "BLACK") {
@@ -67,6 +94,8 @@ class WebRtcMatchCoordinator(
 
     override fun close() {
         subscription?.close()
+        autoPlaySubscription?.close()
+        autoPlayJob?.cancel()
         controller.close()
     }
 }

@@ -19,6 +19,13 @@ const val CURRENT_PROTOCOL_VERSION: Int = 1
 
 enum class TransportState { NEW, CONNECTING, OPEN, CLOSING, CLOSED, FAILED }
 
+data class TransportDiagnostics(
+    val state: TransportState,
+    val iceState: String = "UNKNOWN",
+    val peerConnectionState: String = "UNKNOWN",
+    val dataChannelState: String = "UNKNOWN",
+)
+
 sealed interface CommandValidation {
     data class Accepted(val state: GameState) : CommandValidation
     data class Duplicate(val commandId: String) : CommandValidation
@@ -39,6 +46,7 @@ interface MatchTransport {
     suspend fun send(command: MoveCommand)
     fun observe(onCommand: (MoveCommand) -> Unit): AutoCloseable
     fun observeState(onState: (TransportState) -> Unit): AutoCloseable = AutoCloseable { }
+    fun diagnostics(): TransportDiagnostics = TransportDiagnostics(TransportState.NEW)
     fun close() { }
 }
 

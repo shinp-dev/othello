@@ -5,6 +5,7 @@ import com.example.othello.network.MatchTransport
 import com.example.othello.network.MoveCommand
 import com.example.othello.network.MoveCommandJson
 import com.example.othello.network.TransportState
+import com.example.othello.network.TransportDiagnostics
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.webrtc.DataChannel
 import org.webrtc.IceCandidate
@@ -47,6 +48,9 @@ class AndroidWebRtcTransport(
     private val peerConnection: PeerConnection
     private var dataChannel: DataChannel? = null
     private var state: TransportState = TransportState.NEW
+    private var iceState = "NEW"
+    private var peerConnectionState = "NEW"
+    private var dataChannelState = "NEW"
     private val dataChannelOpen = kotlinx.coroutines.CompletableDeferred<Unit>()
     private val iceGatheringComplete = kotlinx.coroutines.CompletableDeferred<Unit>()
 
@@ -108,6 +112,13 @@ class AndroidWebRtcTransport(
         return AutoCloseable { stateListeners -= onState }
     }
 
+    override fun diagnostics(): TransportDiagnostics = TransportDiagnostics(
+        state = state,
+        iceState = iceState,
+        peerConnectionState = peerConnectionState,
+        dataChannelState = dataChannelState,
+    )
+
     override fun close() {
         updateState(TransportState.CLOSING)
         dataChannel?.close()
@@ -145,9 +156,9 @@ class AndroidWebRtcTransport(
             override fun onBufferedAmountChange(previousAmount: Long) = Unit
             override fun onStateChange() {
                 when (channel.state()) {
-                    DataChannel.State.OPEN -> { updateState(TransportState.OPEN); dataChannelOpen.complete(Unit) }
-                    DataChannel.State.CLOSING -> updateState(TransportState.CLOSING)
-                    DataChannel.State.CLOSED -> updateState(TransportState.CLOSED)
+                    DataChannel.State.OPEN -> { dataChannelState = "OPEN"; updateState(TransportState.OPEN); dataChannelOpen.complete(Unit) }
+                    DataChannel.State.CLOSING -> { dataChannelState = "CLOSING"; updateState(TransportState.CLOSING) }
+                    DataChannel.State.CLOSED -> { dataChannelState = "CLOSED"; updateState(TransportState.CLOSED) }
                     else -> Unit
                 }
             }
@@ -173,6 +184,14 @@ class AndroidWebRtcTransport(
         override fun onDataChannel(channel: DataChannel) { dataChannel = channel; attach(channel) }
         override fun onSignalingChange(newState: PeerConnection.SignalingState) = Unit
         override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState) {
+            iceState = newState.name
+            peerConnectionState = when (newState) {
+                PeerConnection.IceConnectionState.CONNECTED, PeerConnection.IceConnectionState.COMPLETED -> "CONNECTED"
+                PeerConnection.IceConnectionState.DISCONNECTED -> "DISCONNECTED"
+                PeerConnection.IceConnectionState.FAILED -> "FAILED"
+                PeerConnection.IceConnectionState.CLOSED -> "CLOSED"
+                else -> newState.name
+            }
             if (newState == PeerConnection.IceConnectionState.FAILED) updateState(TransportState.FAILED)
             if (newState == PeerConnection.IceConnectionState.DISCONNECTED) updateState(TransportState.CLOSED)
         }

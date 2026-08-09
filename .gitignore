@@ -6,3 +6,4 @@ local.properties
 captures/
 .DS_Store
 supabase/.temp/
+build/e2e/

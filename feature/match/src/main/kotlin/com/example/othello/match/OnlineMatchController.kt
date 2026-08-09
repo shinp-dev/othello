@@ -27,6 +27,7 @@ data class OnlineMatchViewState(
     val error: String? = null,
     val commandCountSent: Int = 0,
     val commandCountReceived: Int = 0,
+    val localStartAcked: Boolean = false,
 )
 
 /** Coordinates local game rules, DataChannel validation and result submission. */
@@ -71,7 +72,7 @@ class OnlineMatchController(
             try {
                 repository.ackMatchStarted(matchId)
                 started = true
-                update { copy(matchState = MatchState(MatchStatus.PLAYING), message = "対局中") }
+                update { copy(matchState = MatchState(MatchStatus.PLAYING), message = "対局中", localStartAcked = true) }
                 return true
             } catch (error: Throwable) {
                 failure = error
@@ -97,6 +98,8 @@ class OnlineMatchController(
     }
 
     suspend fun resign(): MatchFinishResult? = finish(FinishReason.RESIGNATION)
+
+    suspend fun finishNormally(): MatchFinishResult? = finish(FinishReason.NORMAL)
 
     suspend fun onTimeout(): MatchFinishResult? = finish(FinishReason.TIMEOUT)
 
@@ -163,6 +166,26 @@ class OnlineMatchController(
     private fun update(transform: OnlineMatchViewState.() -> OnlineMatchViewState) {
         state = state.transform()
         listeners.toList().forEach { it(state) }
+    }
+
+    fun diagnostics(userId: String, opponentId: String?): MatchDiagnostics {
+        val transport = transport.diagnostics()
+        return MatchDiagnostics(
+            matchId = matchId,
+            userId = userId,
+            localDisc = localDisc.name,
+            opponentId = opponentId,
+            sessionStatus = state.matchState.status,
+            iceState = transport.iceState,
+            peerConnectionState = transport.peerConnectionState,
+            dataChannelState = transport.dataChannelState,
+            packetsSent = state.commandCountSent,
+            packetsReceived = state.commandCountReceived,
+            ply = state.game.ply,
+            stateHash = state.game.stateHash(),
+            lastError = state.error,
+            localStartAcked = state.localStartAcked,
+        )
     }
 
     override fun close() {
