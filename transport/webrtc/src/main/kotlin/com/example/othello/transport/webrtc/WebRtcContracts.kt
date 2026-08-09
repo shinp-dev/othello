@@ -153,7 +153,7 @@ class AndroidWebRtcTransport(
             }
             override fun onMessage(buffer: DataChannel.Buffer) {
                 val payload = StandardCharsets.UTF_8.decode(buffer.data).toString()
-                MoveCommandJson.decode(payload).onSuccess { commandListeners.toList().forEach { it(command) } }
+                MoveCommandJson.decode(payload).onSuccess { decodedCommand -> commandListeners.toList().forEach { it(decodedCommand) } }
                     .onFailure { updateState(TransportState.FAILED) }
             }
         })
