@@ -20,6 +20,8 @@ android {
 
 dependencies {
     implementation(project(":core:game"))
+    implementation(project(":core:auth"))
+    implementation(project(":core:network"))
     implementation(project(":core:designsystem"))
     implementation(project(":feature:match"))
     implementation(project(":feature:matchmaking"))
