@@ -101,5 +101,3 @@ begin
   return deleted_count;
 end;
 $$;
-
-comment on table storage.buckets is 'The verification bucket is private and created by migration 202608090009.';
