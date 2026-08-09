@@ -11,5 +11,7 @@ jobs:
       - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew test
+      - run: ./gradlew lint
       - run: ./gradlew assembleDebug
       - run: pwsh ./scripts/check-boundaries.ps1
+      - run: pwsh ./scripts/check-sql-security.ps1

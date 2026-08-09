@@ -16,6 +16,7 @@ sealed interface MatchCommand {
     data object ResultDisputed : MatchCommand
     data object SignalingFailed : MatchCommand
     data object Disconnected : MatchCommand
+    data object Retry : MatchCommand
     data object Reset : MatchCommand
 }
 
@@ -57,8 +58,18 @@ object MatchStateMachine {
                 MatchCommand.ResultDisputed -> MatchStatus.DISPUTED
                 else -> null
             }
-            MatchStatus.SIGNALING_FAILED, MatchStatus.DISCONNECTED, MatchStatus.PENDING_RESULT, MatchStatus.DISPUTED,
-            MatchStatus.CONFIRMED -> if (command === MatchCommand.Reset) MatchStatus.IDLE else null
+            MatchStatus.SIGNALING_FAILED, MatchStatus.DISCONNECTED -> when (command) {
+                MatchCommand.Retry -> MatchStatus.WAITING
+                MatchCommand.Reset -> MatchStatus.IDLE
+                else -> null
+            }
+            MatchStatus.PENDING_RESULT -> when (command) {
+                MatchCommand.ResultConfirmed -> MatchStatus.CONFIRMED
+                MatchCommand.ResultDisputed -> MatchStatus.DISPUTED
+                MatchCommand.Reset -> MatchStatus.IDLE
+                else -> null
+            }
+            MatchStatus.DISPUTED, MatchStatus.CONFIRMED -> if (command === MatchCommand.Reset) MatchStatus.IDLE else null
         }
         return if (next == null) MatchTransition.Rejected(state, "${command::class.simpleName} is not allowed from ${state.status}")
         else MatchTransition.Accepted(MatchState(next))

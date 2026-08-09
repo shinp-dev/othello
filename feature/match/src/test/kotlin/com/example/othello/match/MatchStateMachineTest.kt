@@ -26,4 +26,12 @@ class MatchStateMachineTest {
         assertIs<MatchTransition.Rejected>(result)
         assertEquals(state, result.state)
     }
+
+    @Test fun pendingResultResolvesAndTransportFailuresCanRetry() {
+        val pending = MatchState(MatchStatus.PENDING_RESULT)
+        assertEquals(MatchStatus.CONFIRMED, (MatchStateMachine.reduce(pending, MatchCommand.ResultConfirmed) as MatchTransition.Accepted).state.status)
+        assertEquals(MatchStatus.DISPUTED, (MatchStateMachine.reduce(pending, MatchCommand.ResultDisputed) as MatchTransition.Accepted).state.status)
+        val disconnected = MatchState(MatchStatus.DISCONNECTED)
+        assertEquals(MatchStatus.WAITING, (MatchStateMachine.reduce(disconnected, MatchCommand.Retry) as MatchTransition.Accepted).state.status)
+    }
 }

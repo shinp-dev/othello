@@ -4,5 +4,6 @@ compatibility_date = "2026-08-09"
 
 [vars]
 SUPABASE_URL = "https://replace-me.supabase.co"
+SUPABASE_VERIFICATION_BUCKET = "verification-evidence"
 # Set with: wrangler secret put SUPABASE_SERVICE_ROLE_KEY
 # Set with: wrangler secret put ADMIN_TOKEN

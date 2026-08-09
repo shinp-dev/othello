@@ -35,7 +35,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.othello.designsystem.OthelloTheme
 import com.example.othello.game.Disc
-import com.example.othello.game.GameStatus
 import com.example.othello.game.Position
 import com.example.othello.match.LocalMatchController
 import com.example.othello.match.LocalMatchViewState
@@ -88,11 +87,7 @@ private fun MatchScreen(onBack: () -> Unit) {
         ScoreHeader(viewState)
         OthelloBoard(viewState, controller)
         Text(viewState.message, style = MaterialTheme.typography.titleMedium, modifier = Modifier.align(Alignment.CenterHorizontally))
-        val gameOver = viewState.game.status is GameStatus.Finished
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = controller::pass, modifier = Modifier.weight(1f), enabled = !gameOver) { Text("パス") }
-            Button(onClick = controller::reset, modifier = Modifier.weight(1f)) { Text("新しい対局") }
-        }
+        Button(onClick = controller::reset, modifier = Modifier.fillMaxWidth()) { Text("新しい対局") }
         Text("合法手をタップして着手します。対局中の通信はまだ開始していません。", style = MaterialTheme.typography.bodySmall)
     }
 }

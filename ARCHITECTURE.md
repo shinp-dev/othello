@@ -22,7 +22,9 @@ The current MVP assumption is that a user can start a local game without Supabas
 | `:feature:profile` | Profile presentation/query boundary | Rating calculations |
 | `:feature:credential` | Federation credential submission/review boundary | Rating |
 | `:analysis:api` | `AnalysisEngine`, settings and result contracts | Match implementation |
-| `:analysis:edax` | Android-local Edax adapter; JNI can replace the MVP stub | Match, Supabase |
+| `:analysis:edax` | Android-local Edax adapter; JNI can replace the unavailable production adapter | Match, Supabase |
+| `:transport:webrtc` | Android WebRTC SDK wiring and ICE configuration boundary | Game Core rules |
+| `:data:supabase` | Android Supabase SDK wiring and signaling data sources | Game Core rules |
 
 ## Dependency direction
 
@@ -31,6 +33,8 @@ app -> feature/* -> core/*
 app -> analysis:edax -> analysis:api -> core:game
 feature:review -> analysis:api
 feature:match -X-> analysis:edax
+transport:webrtc -> core:network
+data:supabase -> feature ports / core contracts
 feature:match -X-> feature:profile / feature:credential
 ```
 
@@ -53,7 +57,11 @@ The Android client never contains a service-role key. It cannot mark a rating, m
 
 `Board` is a compact immutable `IntArray` value object exposed only through safe operations. `GameState.apply(Move)` is a pure transition: it rejects a non-legal move, flips all captured lines, advances the turn, handles one pass, and ends after consecutive passes or a full board. `PositionHash` is deterministic and is used by the P2P contract.
 
-## Match state machine
+## Client Session State vs Server Persisted Match State
+
+The Android state machine (`IDLE`, `WAITING`, `SIGNALING`, `P2P_CONNECTED`, `PLAYING`, `FINISHING`, `CONFIRMED`, `PENDING_RESULT`, `DISPUTED`) describes one device's session. Supabase cannot observe the P2P channel continuously, so it does not mirror these states. The additive migration adds `matches.server_status` with only `CREATED`, `PENDING_RESULT`, `CONFIRMED`, `DISPUTED`, and `ABANDONED`; the legacy `matches.status` column is retained for rollback compatibility and is not authoritative for new clients.
+
+## Client match state machine
 
 ```text
 IDLE -> WAITING -> SIGNALING -> P2P_CONNECTED -> PLAYING -> FINISHING -> CONFIRMED
@@ -69,7 +77,8 @@ The state machine is a pure reducer. UI observes state; it does not decide trans
 2. The offer is delivered to the waiting participant through private Supabase Realtime signaling only.
 3. The answer is returned, DataChannel opens, and the signaling subscription is removed.
 4. Each move is sent only on DataChannel. Every command contains `matchId`, `ply`, `move`, `commandId`, and `previousStateHash`.
-5. Receiver validates command idempotency, player turn, ply, legality and hash. Any mismatch becomes a protocol error/disputed path.
+5. Receiver validates the server-assigned remote disc, command fingerprint, idempotency, ply, legality and hash. A reused command id with a different payload is a protocol error.
+6. If the next player has no legal move, both sides apply a forced pass locally and append the same `--` canonical token; no pass button is shown in normal UI.
 
 ## Finalization and rating
 
@@ -79,7 +88,7 @@ Both players submit immutable move history, result, final hash and finish reason
 
 ## Review / Edax
 
-`ReviewSession` owns cursor and variations and never mutates `GameRecord`. `AnalysisEngine` lives behind `analysis:api`; the review feature can ask it to evaluate every legal move. The MVP adapter returns a deterministic local evaluation so the UI contract is testable; JNI/Edax can replace the adapter later. Evaluation values are never persisted.
+`ReviewSession` owns cursor and variations and never mutates `GameRecord`. `AnalysisEngine` lives behind `analysis:api`; the review feature can ask it to evaluate every legal move. `EvaluationScore` carries perspective and `EXACT`/`HEURISTIC`/`UNAVAILABLE` kind. The heuristic engine is test/debug-only; production returns `解析を利用できません` until Edax JNI is bundled. Evaluation values are never persisted. `BookSource.ImportedBook` models an app-private imported Edax Book path without forcing Android Storage Access Framework into pure Kotlin.
 
 ## Federation verification
 
@@ -94,7 +103,11 @@ Users may self-declare a credential. A verification submission uploads evidence 
 - Match cannot reference Edax; review alone can reference `AnalysisEngine`.
 - Game records are immutable after finalization.
 - SQL enables RLS and exposes narrow RPCs instead of client-owned status updates.
+- Matchmaking snapshots official `ratings.current_rating`, uses TTL queue rows and `FOR UPDATE SKIP LOCKED`; client rating input is not accepted.
+- `submit_match_result` and `finalize_match_v2` are participant-scoped and idempotent. Rating history has a `(user_id, match_id)` uniqueness guard, and records/history are pruned to bounded recent windows.
+- Credential approval updates submission and credential state in one service-role RPC; the Worker deletes the returned evidence object after the atomic state update.
 
 ## Change log
 
 - 2026-08-09: Initial architecture recorded before implementation. Empty repository assumption documented. Local two-player mode is the safe executable MVP while Supabase/WebRTC/Edax ports remain replaceable.
+- 2026-08-09: Additive hardening recorded. Server persisted match state is separated from device session state; official-Rating matchmaking, result submission, idempotent finalization, bounded records, public profile projection, and credential admin RPC were added without destructive schema conversion.

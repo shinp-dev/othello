@@ -30,6 +30,28 @@ class GameCoreTest {
         }
     }
 
+    @Test fun eightDirectionFlipUsesOneCaptureImplementation() {
+        val state = GameState(Board.fromRows(listOf(
+            "........", ".B.B.B..", "..WWW...", ".BW.WB..", "..WWW...", ".B.B.B..", "........", "........",
+        )))
+        val outcome = state.play(Position(3, 3)) as MoveOutcome.Played
+        assertEquals(
+            setOf(
+                Position(2, 2), Position(2, 3), Position(2, 4),
+                Position(3, 2), Position(3, 4),
+                Position(4, 2), Position(4, 3), Position(4, 4),
+            ),
+            outcome.flipped.toSet(),
+        )
+        assertEquals(8, outcome.flipped.size)
+    }
+
+    @Test fun canonicalMovesRoundTripIncludingPass() {
+        val moves = listOf(Position(2, 3), null, Position(7, 7), Position(0, 0))
+        assertEquals("d3--h8a1", CanonicalMoves.encode(moves))
+        assertEquals(moves, CanonicalMoves.decode("d3--h8a1"))
+    }
+
     @Test fun passOnlyWhenThereAreNoLegalMoves() {
         val state = GameState(Board.fromRows(listOf("BBBBBBB.", "BBBBBBBB", "BBBBBBBB", "BBBBBBBB", "BBBBBBBB", "BBBBBBBB", "BBBBBBBB", "BBBBBBBB")), Disc.WHITE)
         assertTrue(state.legalMoves.isEmpty())

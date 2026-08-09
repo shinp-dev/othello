@@ -15,6 +15,13 @@
 5. **Verification**
    - Run unit tests, Android build/lint where the local SDK is available, and dependency boundary checks.
 
+## Hardening completed in the current slice
+
+- Official-rating matchmaking RPC with queue TTL, cancellation, heartbeat, atomic candidate locking, and random color assignment.
+- Participant-only idempotent result submission and locked, explicit black/white finalization with server-side rating updates.
+- Additive `server_status`, canonical move storage path, per-user 50-record / 100-rating-history retention, and public profile projection.
+- Auth bootstrap trigger, atomic federation review RPC, Worker-side evidence deletion, remote-disc/fingerprint P2P validation, forced pass, and typed analysis scores.
+
 ## MVP assumptions
 
 - Local two-player mode is the first runnable vertical slice and is explicitly labeled in the UI.
