@@ -16,4 +16,8 @@ $supabaseBuild = Get-Content 'data/supabase/build.gradle.kts' -Raw
 if ($supabaseBuild -match '(?m)^\s*api\((platform\(|"io\.github\.jan\.supabase|"io\.ktor)') {
     Write-Error 'Supabase SDK and Ktor dependencies must remain implementation-only'; exit 1
 }
+$designSystemBuild = Get-Content 'core/designsystem/build.gradle.kts' -Raw
+if ($designSystemBuild -notmatch 'org\.jetbrains\.kotlin\.plugin\.compose') {
+    Write-Error 'core:designsystem must apply the Compose compiler plugin to keep its composable ABI compatible'; exit 1
+}
 Write-Output 'dependency boundary check passed: match does not reference analysis and game is pure Kotlin'

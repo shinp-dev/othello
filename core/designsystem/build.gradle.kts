@@ -1,5 +1,6 @@
 plugins {
     id("com.android.library")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android { namespace = "com.example.othello.core.designsystem"; compileSdk = 36 }
