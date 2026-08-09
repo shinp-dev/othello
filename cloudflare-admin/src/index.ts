@@ -16,14 +16,19 @@ export default {
         body: JSON.stringify({ p_submission_id: action[1], p_decision: decision }),
       });
       if (!review.ok) return review;
-      const evidencePath = await review.json() as unknown;
+      const actualStatus = await review.json() as unknown;
+      const cleanup = await supabase(env, "/rest/v1/rpc/get_verification_evidence_cleanup", {
+        method: "POST",
+        body: JSON.stringify({ p_submission_id: action[1] }),
+      });
+      const evidencePath = cleanup.ok ? await cleanup.json() as unknown : null;
       if (typeof evidencePath === "string" && evidencePath.length > 0 && await deleteEvidence(env, evidencePath)) {
         await supabase(env, "/rest/v1/rpc/mark_verification_evidence_deleted", {
           method: "POST",
           body: JSON.stringify({ p_submission_id: action[1] }),
         });
       }
-      return json({ id: action[1], status: decision });
+      return json({ id: action[1], status: actualStatus });
     }
     return json({ error: "not found" }, 404);
   },

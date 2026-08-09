@@ -15,3 +15,9 @@ jobs:
       - run: ./gradlew assembleDebug
       - run: pwsh ./scripts/check-boundaries.ps1
       - run: pwsh ./scripts/check-sql-security.ps1
+      - uses: supabase/setup-cli@v1
+        with: { version: latest }
+      - run: supabase start
+      - run: supabase test db
+      - if: always()
+        run: supabase stop

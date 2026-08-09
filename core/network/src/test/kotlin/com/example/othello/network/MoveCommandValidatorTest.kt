@@ -25,13 +25,14 @@ class MoveCommandValidatorTest {
         assertEquals(ProtocolViolation.HASH_MISMATCH, (validator.validate(state, hashMismatch) as CommandValidation.Rejected).violation)
     }
 
-    @Test fun illegalMoveIsRejectedWithoutMarkingCommandHandled() {
+    @Test fun firstRejectedPayloadIsReservedAndSamePayloadIsDuplicate() {
         val state = GameState()
         val validator = MoveCommandValidator("match-1", Disc.BLACK)
         val command = MoveCommand("match-1", 0, Position(0, 0), "command-1", state.stateHash())
         assertEquals(ProtocolViolation.ILLEGAL_MOVE, (validator.validate(state, command) as CommandValidation.Rejected).violation)
+        assertIs<CommandValidation.Duplicate>(validator.validate(state, command))
         val validRetry = command.copy(move = Position(2, 3))
-        assertIs<CommandValidation.Accepted>(validator.validate(state, validRetry))
+        assertEquals(ProtocolViolation.COMMAND_ID_REUSE, (validator.validate(state, validRetry) as CommandValidation.Rejected).violation)
     }
 
     @Test fun wrongRemoteDiscIsRejectedAndReusedCommandPayloadIsNotDuplicate() {

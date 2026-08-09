@@ -1,4 +1,4 @@
-$sql = Get-Content 'supabase/migrations/202608090002_hardening_additive.sql' -Raw
+$sql = (Get-ChildItem 'supabase/migrations/*.sql' | Sort-Object Name | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
 $requiredPatterns = @(
     'create type public.server_match_status',
     'alter table public.matches add column server_status',
@@ -15,8 +15,27 @@ $requiredPatterns = @(
     'create (or replace )?view public.public_profiles',
     'credential ownership required',
     'auth.role\(\) <> ''service_role''',
-    'grant execute on function public.enqueue_or_match\(\) to authenticated'
+    'grant execute on function public.enqueue_or_match\(\) to authenticated',
+    'revoke execute on function public.prune_user_game_records\(uuid\) from public, anon, authenticated',
+    'revoke execute on function public.prune_rating_history\(uuid\) from public, anon, authenticated',
+    'create table if not exists public.active_match_participants',
+    'user_id uuid primary key',
+    'create or replace function public.abandon_match',
+    'created_expires_at',
+    'returns public.server_match_status',
+    "p_result not in \('BLACK_WIN', 'WHITE_WIN', 'DRAW'\)",
+    'p_clock.*pg_column_size',
+    'get_verification_evidence_cleanup',
+    'review decision conflict',
+    'cleanup_terminal_matches',
+    'alter default privileges in schema public revoke execute on functions from public'
 )
 $missing = $requiredPatterns | Where-Object { $sql -notmatch $_ }
 if ($missing) { $missing | ForEach-Object { Write-Error "Missing SQL security contract: $_" }; exit 1 }
+if (Test-Path 'analysis/edax/src/main/kotlin/com/example/othello/analysis/edax/HeuristicTestAnalysisEngine.kt') {
+    Write-Error 'HeuristicTestAnalysisEngine must not be part of the production source set'; exit 1
+}
+if (-not (Test-Path 'supabase/tests/202608090003_hardening.sql')) {
+    Write-Error 'pgTAP hardening test is missing'; exit 1
+}
 Write-Output 'SQL security contract check passed'

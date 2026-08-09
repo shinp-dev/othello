@@ -21,6 +21,7 @@
 - Participant-only idempotent result submission and locked, explicit black/white finalization with server-side rating updates.
 - Additive `server_status`, canonical move storage path, per-user 50-record / 100-rating-history retention, and public profile projection.
 - Auth bootstrap trigger, atomic federation review RPC, Worker-side evidence deletion, remote-disc/fingerprint P2P validation, forced pass, and typed analysis scores.
+- Review follow-up: one-user active-match reservation/lease, participant-only abandon, atomic submit/finalize, terminal retention cleanup, Storage owner validation, retryable evidence cleanup, strict result payloads, deny-by-default internal RPCs, and pgTAP coverage.
 
 ## MVP assumptions
 

@@ -10,7 +10,7 @@ import com.example.othello.analysis.api.MoveEvaluation
 import com.example.othello.analysis.api.ReviewPosition
 import com.example.othello.game.MoveOutcome
 
-/** Test/debug-only deterministic heuristic. It must never be presented as Edax. */
+/** Test/debug-only deterministic heuristic. It is not part of the production artifact. */
 class HeuristicTestAnalysisEngine : AnalysisEngine {
     override suspend fun analyze(position: ReviewPosition, settings: AnalysisSettings): AnalysisResult =
         AnalysisResult(position.state.legalMoves.map { move ->

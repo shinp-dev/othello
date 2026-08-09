@@ -16,6 +16,9 @@
 ./gradlew :app:assembleDebug
 pwsh ./scripts/check-boundaries.ps1
 pwsh ./scripts/check-sql-security.ps1
+supabase start
+supabase test db
+supabase stop
 ```
 
 Android Studioでルートを開いて同期し、`app` configurationを実行することもできます。リポジトリにはGradle Wrapperを含めています。
@@ -32,12 +35,12 @@ WebRTC SDKとSupabase SDKの具体実装は、それぞれ`transport:webrtc`と`
 2. `supabase/migrations/202608090001_init.sql`、続けて`202608090002_hardening_additive.sql`をSupabase SQL EditorまたはSupabase CLIで適用します。
 3. Android側へservice-role keyを置かず、AuthユーザーのJWTと公開anon keyだけをアプリ設定へ渡します。
 4. 新規AuthユーザーはDB triggerで`profiles`/`ratings`へbootstrapされます。マッチングは`enqueue_or_match()`だけを使用し、公式Rating snapshotとTTLをDB側で管理します。
-5. 結果提出は`submit_match_result(...)`、確定は`finalize_match_v2(...)`だけを使用します。参加者以外・二重Rating更新・不一致結果はDB側で拒否または`DISPUTED`になります。
+5. 結果提出は`submit_match_result(...)`を使用します。2件目の提出時に同一transaction内で自動finalizeされ、`finalize_match_v2(...)`はreconciliation用に残します。参加者以外・二重Rating更新・不一致結果はDB側で拒否または`DISPUTED`になります。
 6. `public_profiles`は公開実績専用projectionです。rating history、証明画像、本名、evidence pathは含みません。
 
 ## Cloudflare Admin
 
-`cloudflare-admin`は段級位申請の管理BFFです。service-role keyはWorker secretにだけ置き、`ADMIN_TOKEN`もWorker secretに置きます。承認・却下は`review_verification_submission` RPCでsubmissionとcredentialを原子的に更新し、返された証明オブジェクトをWorkerからStorage削除します。ブラウザへservice-role keyを配布しません。
+`cloudflare-admin`は段級位申請の管理BFFです。service-role keyはWorker secretにだけ置き、`ADMIN_TOKEN`もWorker secretに置きます。Storage bucketは`verification`、object名は`<auth.uid()>/<filename>`とし、提出RPCがStorage ownerとprefixを検証します。承認・却下は`review_verification_submission` RPCで原子的に更新し、WorkerはDBが発行する`get_verification_evidence_cleanup`のpathだけを削除します。削除失敗時は同じ管理操作で再試行でき、成功後はpathをnull化します。ブラウザへservice-role keyを配布しません。
 
 ```powershell
 cd cloudflare-admin
@@ -52,6 +55,13 @@ npm run deploy
 MVP後は `MatchTransport` にWebRTC DataChannel実装を追加し、Supabase RealtimeはSDP offer/answerの確立時だけ使用します。P2P接続後に着手や時計をSupabaseへ送信しません。Android実機2台での確認は、Auth設定、同一Supabase project、TURN/STUN設定、2台のqueue参加、DataChannel成立、双方の同一棋譜・hash確認、結果提出の順で行います。
 
 `applicationId = com.example.othello` は開発用の仮値です。Store公開前に正式な所有ドメイン由来のIDを決定し、公開後に変更しない運用へ移行します。
+
+`matches`のCREATED leaseは5分で、`abandon_match`または`cleanup_stale_created_matches`でactive予約を解放します。CONFIRMED/DISPUTED/ABANDONEDのterminal match、game record、30日経過のsubmissionは`cleanup_terminal_matches`でretention条件を満たしたものから削除します。Supabase Cron/pg_cronを使う場合は、service role相当で次を1時間ごとに実行します。
+
+```sql
+select public.cleanup_stale_created_matches();
+select public.cleanup_terminal_matches();
+```
 
 ## Edax / OSS
 

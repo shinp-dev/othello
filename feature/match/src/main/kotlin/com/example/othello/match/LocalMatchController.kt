@@ -5,6 +5,7 @@ import com.example.othello.game.GameStatus
 import com.example.othello.game.MoveOutcome
 import com.example.othello.game.Position
 import com.example.othello.game.Disc
+import com.example.othello.game.TurnResolver
 
 data class LocalMatchViewState(
     val game: GameState = GameState(),
@@ -32,27 +33,12 @@ class LocalMatchController {
         }
     }
 
-    fun pass() {
-        when (val outcome = viewState.game.pass()) {
-            is MoveOutcome.Passed -> advance(outcome.state, viewState.moves + null, "${outcome.state.currentPlayer.japaneseName()}の手番です（パスしました）")
-            is MoveOutcome.Rejected -> update(viewState.game, viewState.moves, "パスできる合法手がありません")
-            is MoveOutcome.Played -> Unit
-        }
-    }
-
     fun reset() { update(GameState(), emptyList(), "黒の手番です") }
 
     private fun advance(game: GameState, moves: List<Position?>, defaultMessage: String) {
-        var next = game
-        var nextMoves = moves
-        var forcedPasses = 0
-        while (next.status is GameStatus.InProgress && next.legalMoves.isEmpty()) {
-            when (val pass = next.pass()) {
-                is MoveOutcome.Passed -> { next = pass.state; nextMoves += null; forcedPasses++ }
-                is MoveOutcome.Rejected, is MoveOutcome.Played -> break
-            }
-        }
-        update(next, nextMoves, if (forcedPasses == 0) defaultMessage else "${next.currentPlayer.japaneseName()}の手番です（自動パス）")
+        val resolution = TurnResolver.resolveForcedPasses(game)
+        val nextMoves = moves + List(resolution.forcedPasses) { null }
+        update(resolution.state, nextMoves, if (resolution.forcedPasses == 0) defaultMessage else "${resolution.state.currentPlayer.japaneseName()}の手番です（自動パス）")
     }
 
     private fun update(game: GameState, moves: List<Position?>, defaultMessage: String) {

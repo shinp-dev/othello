@@ -104,8 +104,11 @@ Users may self-declare a credential. A verification submission uploads evidence 
 - Game records are immutable after finalization.
 - SQL enables RLS and exposes narrow RPCs instead of client-owned status updates.
 - Matchmaking snapshots official `ratings.current_rating`, uses TTL queue rows and `FOR UPDATE SKIP LOCKED`; client rating input is not accepted.
-- `submit_match_result` and `finalize_match_v2` are participant-scoped and idempotent. Rating history has a `(user_id, match_id)` uniqueness guard, and records/history are pruned to bounded recent windows.
-- Credential approval updates submission and credential state in one service-role RPC; the Worker deletes the returned evidence object after the atomic state update.
+- `active_match_participants.user_id` is the database invariant for one active match per user. CREATED matches have a five-minute lease; `abandon_match` and stale cleanup release reservations without changing rating.
+- `submit_match_result` stores idempotently and auto-finalizes when both submissions exist; `finalize_match_v2` remains participant-scoped reconciliation. Payload enums, hashes, clock size, and canonical token format are checked in SQL.
+- Credential evidence must be a `verification/<auth.uid()>/...` Storage-owned object. Review is idempotent/conflict-safe; the Worker receives cleanup paths from the DB and can retry deletion before the path is nulled.
+- Terminal matches, records, and submissions have retention/cleanup RPCs. Internal pruning and cleanup functions have no execute permission for `anon`, `authenticated`, or `PUBLIC`; SECURITY DEFINER functions use an empty search path.
+- DataChannel commands carry real moves only. `TurnResolver` deterministically adds `--` locally on both peers; command IDs reserve their first payload even when that payload is rejected.
 
 ## Change log
 
