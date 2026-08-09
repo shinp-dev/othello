@@ -124,7 +124,9 @@ select is((select count(*)::int from public.rating_history where match_id = '000
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
 select is((select count(*)::int from public.game_records where players @> array['00000000-0000-0000-0000-000000000003'::uuid]), 1, 'array containment finds a record where caller is black or white');
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
+set role authenticated;
 select is((select count(*)::int from public.game_records), 0, 'record RLS hides other users games');
+reset role;
 
 insert into auth.users (id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data)
 values
