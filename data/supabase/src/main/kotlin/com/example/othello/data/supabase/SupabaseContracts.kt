@@ -246,7 +246,10 @@ class SupabaseCredentialRepository(
         require(mimeType in setOf("image/jpeg", "image/png", "image/webp")) { "verification evidence MIME type is not allowed" }
         require(fileName.substringAfterLast('/').isNotBlank() && '/' !in fileName.substringAfterLast('/'))
         val path = "$userId/${fileName.substringAfterLast('/')}"
-        client.storage.from("verification").upload(path, bytes, upsert = false)
+        client.storage.from("verification").upload(path, bytes) {
+            upsert = false
+            contentType = mimeType
+        }
         return path
     }
 
@@ -298,7 +301,7 @@ class SupabaseRealtimeSignalingDataSource(
         return AutoCloseable {
             job.cancel()
             scope.launch {
-                channels.remove(matchId)?.let { client.removeChannel(it) }
+                channels.remove(matchId)?.let { channel -> client.realtime.removeChannel(channel) }
                 jobs.remove(matchId)?.cancel()
             }
         }
