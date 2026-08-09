@@ -56,10 +56,12 @@ MVP後は `MatchTransport` にWebRTC DataChannel実装を追加し、Supabase Re
 
 `applicationId = com.example.othello` は開発用の仮値です。Store公開前に正式な所有ドメイン由来のIDを決定し、公開後に変更しない運用へ移行します。
 
-`matches`のCREATED leaseは5分で、`abandon_match`または`cleanup_stale_created_matches`でactive予約を解放します。CONFIRMED/DISPUTED/ABANDONEDのterminal match、game record、30日経過のsubmissionは`cleanup_terminal_matches`でretention条件を満たしたものから削除します。Supabase Cron/pg_cronを使う場合は、service role相当で次を1時間ごとに実行します。
+`matches`のCREATED leaseは5分のsignaling用です。DataChannel成立後、両participantが`ack_match_started`を一度呼ぶと、P2P開始事実と24時間のbounded play leaseを記録します。PENDING_RESULTには30日の結果待ち期限を設定し、期限切れはABANDONEDへ遷移してからreservationを解放します。CONFIRMED/DISPUTED/ABANDONEDのterminal match、game record、30日経過のsubmissionはmaintenance pathでretention条件を満たしたものから削除します。matchmaking hot pathではqueue/signaling leaseだけを処理します。Supabase Cron/pg_cronを使う場合は、service role相当で次を1時間ごとに実行します。
 
 ```sql
 select public.cleanup_stale_created_matches();
+select public.cleanup_expired_pending_results();
+select public.cleanup_expired_started_matches();
 select public.cleanup_terminal_matches();
 ```
 

@@ -21,6 +21,15 @@ $requiredPatterns = @(
     'create table if not exists public.active_match_participants',
     'user_id uuid primary key',
     'create or replace function public.abandon_match',
+    'create or replace function public.ack_match_started',
+    'match_start_acks',
+    'cleanup_expired_pending_results',
+    'p2p_started_at',
+    'play_lease_expires_at',
+    'matches_created_lease_idx',
+    'matches_retention_idx',
+    'insert into storage.buckets',
+    'verification objects owner insert',
     'created_expires_at',
     'returns public.server_match_status',
     "p_result not in \('BLACK_WIN', 'WHITE_WIN', 'DRAW'\)",
@@ -37,5 +46,9 @@ if (Test-Path 'analysis/edax/src/main/kotlin/com/example/othello/analysis/edax/H
 }
 if (-not (Test-Path 'supabase/tests/202608090003_hardening.sql')) {
     Write-Error 'pgTAP hardening test is missing'; exit 1
+}
+$testSql = Get-Content 'supabase/tests/202608090003_hardening.sql' -Raw
+if ($testSql -notmatch 'from pg_proc p') {
+    Write-Error 'pgTAP privilege query must include FROM pg_proc p'; exit 1
 }
 Write-Output 'SQL security contract check passed'

@@ -52,6 +52,11 @@ class GameCoreTest {
         assertEquals(moves, CanonicalMoves.decode("d3--h8a1"))
     }
 
+    @Test fun emptyCanonicalMovesRoundTripForZeroPlyFinish() {
+        assertEquals("", CanonicalMoves.encode(emptyList()))
+        assertEquals(emptyList(), CanonicalMoves.decode(""))
+    }
+
     @Test fun passOnlyWhenThereAreNoLegalMoves() {
         val state = GameState(Board.fromRows(listOf("BBBBBBB.", "BBBBBBBB", "BBBBBBBB", "BBBBBBBB", "BBBBBBBB", "BBBBBBBB", "BBBBBBBB", "BBBBBBBB")), Disc.WHITE)
         assertTrue(state.legalMoves.isEmpty())
