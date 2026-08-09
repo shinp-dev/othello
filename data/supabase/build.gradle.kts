@@ -26,6 +26,7 @@ android {
 dependencies {
     implementation(project(":core:auth"))
     implementation(project(":core:network"))
+    implementation(project(":core:game"))
     implementation(project(":feature:matchmaking"))
     implementation(project(":feature:match"))
     implementation(project(":feature:profile"))
@@ -38,4 +39,5 @@ dependencies {
     implementation("io.github.jan-tennert.supabase:storage-kt")
     implementation("io.ktor:ktor-client-android:3.2.3")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 }
