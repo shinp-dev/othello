@@ -1,25 +1,26 @@
 # ちゃんりば 研究データ機能 大枠設計
 
-- Status: Proposed design（未実装）
+- Status: Product decisions accepted（未実装）
 - Repository baseline: `260c1381663fe76c405f33e02be2ac0cc6c831f0`
+- Previous design document commit: `3f92338593beda96c8afeac6e5edcfba3d7b2dcc`
 - Reviewed at: 2026-08-11
 - Scope: 対局後に「人間がその局面で何を選び、その後どうなったか」を集約公開する機能
 
-この文書は、実装前の設計判断を記録する。以下では、現行コード・migrationから確認できる事実を「現行の事実」、今後採用する案を「推奨設計」、プロダクト判断が残るものを「未確定」と明記する。
+この文書は、実装前の設計判断を記録する。以下では、現行コード・migrationから確認できる事実を「現行の事実」、今回確定した研究機能の仕様を「確定設計」、実装担当が合理的に選択できる事項を「実装時判断」と明記する。
 
 ## 0. 結論
 
 推奨するのは、次のハイブリッド方式である。
 
 1. 個人向け `game_records` とは別に、研究専用のコンパクトな確定棋譜ソースを長期保持する。
-2. 研究ソースには、サーバーで取得した確定時刻、結果、finish reason、各参加者の対局前rating、Opt-in期間を保存する。
+2. account lifetimeから独立した内部 `research_subject_id` を導入し、研究ソースには、サーバーで取得した確定時刻、結果、finish reason、各同意済みsubjectの対局前rating、participation periodを保存する。
 3. Androidから研究用rawデータを投稿させない。`CONFIRMED` 遷移をDBで検出し、研究用snapshotを作る。
 4. 信頼済みbackendがcanonical movesを独立に合法手再生し、受理した棋譜だけを集計する。
-5. 集計の中間層では、局面ごとに「ユーザー別の選択回数」を保持する。公開層ではユーザーIDを完全に除いたaggregate snapshotだけを保持する。
+5. 集計の中間層では、局面ごとに「research subject別の選択回数」を保持する。公開層ではsubject IDを完全に除いたaggregate snapshotだけを保持する。
 6. Androidは、Opt-in設定・自分のeligibility・threshold通過済みaggregateだけをRPCから取得する。raw tableをSELECTしない。
 7. `1ユーザー = 総weight 1` はイベント数ではなく、局面ごとのユーザー内選択比率を先に計算してからユーザー間平均することで保証する。
 
-この方式は後述の案Dに相当する。個人GameRecordの最新50件制限と研究データの長期育成を分離しつつ、Opt-out・account deletion・rating bucket変更・期間変更時の再集計可能性を残す。
+この方式は後述の案Dに相当する。個人GameRecordの最新50件制限と研究データの長期育成を分離しつつ、Opt-out後とaccount deletion後も同意済み寄与を保持し、rating bucket変更・期間変更時の再集計可能性を残す。
 
 ## 1. 現行実装の調査結果
 
@@ -48,14 +49,14 @@
 
 | Table | 現行の事実 | 研究機能での扱い |
 | --- | --- | --- |
-| `profiles` | Auth作成時にtriggerで作成。表示名を持つ。account deletion後も匿名tombstoneとして残る | contributorの内部FK先には利用可能。ただし公開研究APIへID・表示名を出さない |
+| `profiles` | Auth作成時にtriggerで作成。表示名を持つ。account deletion後も表示上のtombstoneとして残る | research contributorのFK先には使わない。account削除後の研究retentionをprofile tombstoneへ依存させない |
 | `ratings` | 現在rating・peakを保持。Androidは更新不能 | 研究では現在値を使わず、対局確定時のrating beforeをsnapshotする |
 | `rating_history` | 1 user / matchでunique。確定時に2行追加。ユーザーごと最新100件へprune | 長期研究の再集計元にはできない。確定時に `rating - delta` を研究側へcopyする |
 | `matches` | server statusは `CREATED/PENDING_RESULT/CONFIRMED/DISPUTED/ABANDONED`。participantのみSELECT | `CONFIRMED` 遷移だけを研究captureの起点とする |
 | `match_submissions` | 両participantのcanonical moves/result/hash/finish reason一致を確認。確定後に削除 | 研究側から直接参照し続けない |
 | `game_records` | 1 match 1行。canonical moves、result、final hash、players、時刻、time control、finish reasonを保持 | capture時の信頼済みsource。研究長期保存は別tableへcopyし、以後FK依存しない |
 | `user_game_records` | userとGameRecordの参照。各userの最新50参照を保持 | 研究retentionと分離する。研究tableから参照しない |
-| `account_deletion_requests` | Androidは要求のみ。trusted Workerがprivate data削除・Auth削除・完了処理 | 研究contributionのretraction/anonymizationを既存削除workflowへ追加する必要がある |
+| `account_deletion_requests` | Androidは要求のみ。trusted Workerがprivate data削除・Auth削除・完了処理 | 削除要求受付時の新規capture停止と、Auth削除前のresearch subject unlinkを既存workflowへ追加する |
 | `match_signaling` / notification / ACK / active reservation | online session用 | 研究機能から参照しない |
 | credential / verification tables | private evidence管理 | 研究機能から参照しない |
 
@@ -105,7 +106,7 @@
 - private rating、rating history、credential、verification、本人のrecord参照は削除される。
 - opponentのshared immutable GameRecordを壊さないため、profile UUIDは匿名tombstoneとして残り得る。
 
-研究機能を追加すると、account deletion完了前に研究contributionを処理する段階が必要になる。削除ポリシーは第9章の未確定事項である。
+研究機能を追加すると、削除要求受付時にactive participation periodを閉じて新規captureと閲覧を止め、Auth identity削除前にaccount UUIDとresearch subjectのlinkを不可逆に外す段階が必要になる。すでにcaptureされ、validatorによりACCEPTEDとなる寄与とaggregate weightは削除しない。
 
 ### 1.7 再利用できる部分と変更が必要な部分
 
@@ -126,7 +127,7 @@
 - 1 user weightを保証するprivate aggregation中間層。
 - threshold適用済みの公開RPC。
 - Give-to-Get eligibility。
-- Opt-out/account deletion時の研究data処理。
+- Consent version、Opt-out後の将来capture停止、account deletion時のresearch subject unlink。
 - `:feature:research` と `:data:supabase` の新しいport実装。
 - research table/RPCを含むboundary/pgTAP/security contract。
 
@@ -137,7 +138,7 @@ flowchart LR
     M["Online match / feature:match"] -->|"既存結果提出のみ"| F["Supabase finalization"]
     F -->|"CONFIRMED時のO(1) snapshot"| S["research_private source"]
     S --> V["Trusted research validator / aggregator"]
-    V --> U["User-position private stats"]
+    V --> U["Subject-position private stats"]
     U --> A["Published aggregate generation"]
     A --> R["Eligibility + threshold RPC"]
     R --> D["data:supabase"]
@@ -160,14 +161,14 @@ flowchart LR
 - `anon` / `authenticated` / `PUBLIC` へschema usage・table権限を与えない。
 - client-facing RPCだけ `public` に置き、`SECURITY DEFINER SET search_path = ''`、schema-qualified query、明示GRANTを使う。
 - `CONFIRMED` transitionでは研究snapshotをO(1)で作るだけにし、棋譜再生・集計は行わない。
-- capture対象はOpt-in中のparticipantだけ。相手がOFFでも、ONユーザー自身の選択だけをcontributionとして数える案を推奨する。
+- capture対象は、`CONFIRMED` の線形化点でcurrent consent versionへ同意済みのactive participation periodを持つparticipantだけ。相手がOFFでも、ON側本人の選択だけをcontributionとして数える。
 
 ### Trusted validator / aggregator
 
 - Androidとは別のtrusted backendで動かす。既存Cloudflare Workerの拡張または専用workerを候補とする。
 - service-role secretはworker secretとしてのみ保持する。
 - pending research gameをlease付きでclaimし、canonical lineを独立再生する。
-- validation、position extraction、user-position再計算、aggregate generation作成を担当する。
+- validation、position extraction、subject-position再計算、aggregate generation作成を担当する。
 - provider固有typeをAndroidへ公開しない。
 
 ### Edaxとの関係
@@ -184,59 +185,89 @@ flowchart LR
 
 | 項目 | 設計 |
 | --- | --- |
-| 目的 | eligibility、公開threshold、normalization、collection状態をversion管理 |
+| 目的 | eligibility、公開threshold、normalization、collection状態とcurrent consentをversion管理 |
 | PK | `policy_version bigint` |
-| 重要column | `effective_at`, `eligibility_min_games=10`, `eligibility_window_days=90`, `position_min_users=100`, `move_min_users=20`, `min_decisions_per_qualifying_game=1`, `ruleset_version`, `normalization_version`, `collection_enabled`, `is_active` |
-| FK | なし |
+| 重要column | `effective_at`, `research_consent_version integer`, `eligibility_min_games=10`, `eligibility_window_days=90`, `position_min_users=100`, `move_min_users=20`, `min_decisions_per_qualifying_game=10`, `ruleset_version`, `normalization_version`, `collection_enabled`, `is_active` |
+| FK | `research_consent_version -> consent_versions` |
 | UNIQUE | active rowが1つだけになるpartial unique |
 | Index | `is_active`, `effective_at desc` |
-| Retention | 永続。過去versionを削除しない |
+| Retention | 参照中および監査・再集計に必要な期間、過去versionを長期保持 |
 
-値をcode constantだけにせず、変更履歴を残す。Androidがthresholdを決定してはならない。
+値をcode constantだけにせず、変更履歴を残す。Androidがthresholdやcurrent consent versionを決定してはならない。active policyの切替は、captureと直列化する単一のpolicy pointer更新として扱う。
 
-### 3.2 `research_private.participation_periods`
+### 3.2 `research_private.consent_versions`
 
 | 項目 | 設計 |
 | --- | --- |
-| 目的 | 明示Opt-inの期間と再Opt-in世代を保持 |
+| 目的 | 明示同意文書を整数versionで識別し、同意時の内容を監査可能にする |
+| PK | `consent_version integer` |
+| 重要column | `effective_at`, `document_sha256`, `summary`, `created_at` |
+| FK | なし |
+| UNIQUE | `document_sha256` |
+| Index | `effective_at desc` |
+| Retention | participation periodまたはpolicyから参照される間と、監査に必要な期間長期保持 |
+
+初期値は `research_consent_version = 1` とする。本文自体はversion管理されたrepository内resourceで提供し、DBのdigestと一致させる。特定法制度上の「匿名加工情報」等の用語は、適合性を別途確認しない限り使わない。
+
+### 3.3 `research_private.research_subjects`
+
+| 項目 | 設計 |
+| --- | --- |
+| 目的 | account lifetimeと独立して、`1 user = total weight 1` の内部単位を保持 |
+| PK | `research_subject_id uuid`（推測不能なrandom UUID） |
+| 重要column | `account_user_id uuid null`, `link_state=LINKED/DELETION_PENDING/UNLINKED`, `linked_at`, `unlinked_at`, `created_at` |
+| FK | `profiles` / `auth.users` へのFKは張らない |
+| UNIQUE | `account_user_id is not null` のpartial unique |
+| Index | linked account lookup用partial unique、`link_state` |
+| Retention | contributionのweight維持・再集計に必要な期間長期保持。寄与を保持する間はUNLINKED subjectも保持 |
+
+`account_user_id` は、本人向けRPCをsubjectへ解決するための一時的なaccount linkである。account deletion時はactive periodを閉じ、`account_user_id = null`、`link_state = UNLINKED` とする。research側にはaccount UUIDのhash、profile FK、旧accountへ戻す別mappingを残さない。unlink後のsubjectは「サービスaccountから切り離された研究用内部subject」であり、法的・数学的な匿名性を主張するものではない。
+
+同じ人物が後日新しいaccountを作成しても新規subjectを作り、過去subjectへ再接続しない。このためaccount再作成や複数accountを横断した「一人」を技術的に統合はしないが、各subjectについて局面総weight 1を厳守する。これはSybil対策とは別問題である。
+
+### 3.4 `research_private.participation_periods`
+
+| 項目 | 設計 |
+| --- | --- |
+| 目的 | 明示Opt-inの期間、再Opt-in世代、同意versionを保持 |
 | PK | `participation_id uuid` |
-| 重要column | `user_id`, `started_at`, `ended_at`, `policy_version`, `consent_document_version`, `created_at` |
-| FK | `user_id -> profiles.id`; `policy_version -> policy_versions` |
-| UNIQUE | `ended_at is null` のactive期間はuserごとに最大1件 |
-| Index | `(user_id, started_at desc)`, active partial index |
-| Retention | account deletion policyに従う。それ以外はconsent auditとして長期 |
+| 重要column | `research_subject_id`, `started_at`, `ended_at`, `policy_version_at_start`, `consent_version`, `created_at` |
+| FK | `research_subject_id -> research_subjects`; `policy_version_at_start -> policy_versions`; `consent_version -> consent_versions` |
+| UNIQUE | `ended_at is null` のopen期間はsubjectごとに最大1件。`(participation_id, research_subject_id)`もunique |
+| Index | `(research_subject_id, started_at desc)`, open partial index |
+| Retention | consent provenanceと過去contributionの再集計に必要な期間長期保持 |
 
-再Opt-inでは過去rowを再openせず、新しいrowを作る。これがeligibility resetの境界になる。
+有効な参加状態は、open periodがあり、subjectが `LINKED` で、periodの `consent_version` がactive policyのcurrent consent versionと一致する場合だけである。version mismatchのopen periodはcollectionにも閲覧にも使わない。再同意・再Opt-inでは既存periodを閉じて新しいrowを作り、eligibilityを0から開始する。過去rowを再openしない。
 
-### 3.3 `research_private.games`
+### 3.5 `research_private.games`
 
 | 項目 | 設計 |
 | --- | --- |
 | 目的 | 個人GameRecordから独立した、再集計可能なcompact research source |
 | PK | `research_game_id bigint generated identity` |
-| 重要column | `source_match_key bytea`, `canonical_moves`, `result`, `finish_reason`, `final_position_hash`, `time_control`, `confirmed_at`, `ruleset_version`, `validation_status`, `validator_version`, `attempt_count`, `lease_expires_at`, `processed_at`, `rejection_code` |
-| FK | `source_match_id`や`game_records`へのFKは張らない |
+| 重要column | `source_match_key bytea`, `source_kind=ONLINE`, `canonical_moves`, `result`, `finish_reason`, `final_position_hash`, `time_control`, `confirmed_at`, `ruleset_version`, `validation_status`, `validator_version`, `attempt_count`, `lease_expires_at`, `processed_at`, `rejection_code` |
+| FK | `source_match_id`、`game_records`、profile/auth tableへのFKは張らない |
 | UNIQUE | `source_match_key`。match UUIDのserver-side digest等を使い、二重captureを防止 |
 | Index | `(validation_status, lease_expires_at, confirmed_at)`, `confirmed_at` |
-| Retention | ACCEPTEDはcontributorが1人以上いる間長期。REJECTEDは診断期間後（推奨30日）削除。contributor 0件なら削除可能 |
+| Retention | ACCEPTEDは研究機能の提供・再集計に必要な期間長期保持。REJECTEDは診断期間後（推奨30日）削除可能 |
 
-直接のmatch FKを持たないため、個人GameRecord pruningやterminal match cleanup後も残る。canonical lineはprivateであり一般clientへ返さない。
+直接のmatch FKを持たないため、個人GameRecord pruningやterminal match cleanup後も残る。`source_match_key` は一般clientへ返さず、元match UUID自体や可逆mappingを保存しない。canonical lineはprivateであり一般clientへ返さない。active consentを持つparticipantが0人ならresearch game自体を作らない。
 
-### 3.4 `research_private.game_contributors`
+### 3.6 `research_private.game_contributors`
 
 | 項目 | 設計 |
 | --- | --- |
-| 目的 | どのOpt-in userの選択を1 contributionとして扱うかを保持 |
-| PK | `(research_game_id, user_id)` |
-| 重要column | `participation_id`, `disc`, `rating_before`, `rating_algorithm_version`, `outcome_from_user_perspective`, `confirmed_at`, `decision_count`, `contribution_status`, `accepted_at` |
-| FK | `research_game_id -> games on delete cascade`; `(participation_id,user_id) -> participation_periods` composite FK; `user_id -> profiles.id` |
-| UNIQUE | user/matchは1行だけ。source matchとの組合せで二重寄与不能 |
-| Index | `(participation_id, confirmed_at desc)`、`(user_id, contribution_status)` |
-| Retention | Opt-out/account deletion policyに従う |
+| 目的 | どの同意済みresearch subjectの選択を1 contributionとして扱うかを保持 |
+| PK | `(research_game_id, research_subject_id)` |
+| 重要column | `participation_id`, `disc`, `rating_before`, `rating_algorithm_version`, `outcome_from_subject_perspective`, `confirmed_at`, `decision_count`, `contribution_status=PENDING/ACCEPTED/REJECTED`, `accepted_at` |
+| FK | `research_game_id -> games on delete cascade`; `research_subject_id -> research_subjects`; `(participation_id,research_subject_id) -> participation_periods` |
+| UNIQUE | subject/gameは1行だけ。source matchとの組合せで二重寄与不能 |
+| Index | `(participation_id, confirmed_at desc)`, `(research_subject_id, contribution_status)` |
+| Retention | ACCEPTEDはperiod close、Opt-out、consent version変更、account unlink後も研究機能に必要な期間長期保持 |
 
-`rating_before` はclient入力ではなく、確定transactionの `rating_history.rating - delta` からcopyする。現在ratingで後付け分類しない。
+`rating_before` はclient入力ではなく、確定transactionの `rating_history.rating - delta` からcopyする。現在ratingで後付け分類しない。`decision_count` はvalidatorが、そのsubjectのdiscで実際に選択した合法手だけを数える。0手終了はACCEPTEDにできるがaggregateへ加えるdecisionがなく、eligibilityにも数えない。
 
-### 3.5 `research_private.positions`
+### 3.7 `research_private.positions`
 
 | 項目 | 設計 |
 | --- | --- |
@@ -248,13 +279,13 @@ flowchart LR
 | Index | unique indexでlookup。必要ならposition public token hash |
 | Retention | sourceまたはaggregateから参照される間長期 |
 
-v1のposition identityは盤面の黒bitboard、白bitboard、side-to-moveである。`ply`、wall-clock、user、match、consecutive pass数をkeyに含めない。選択可能な局面だけを記録し、forced passやterminal positionはchoice positionとして数えない。
+v1のposition identityは盤面の黒bitboard、白bitboard、side-to-moveである。`ply`、wall-clock、subject、match、consecutive pass数をkeyに含めない。選択可能な局面だけを記録し、forced passやterminal positionはchoice positionとして数えない。
 
 既存 `GameState.stateHash()` はFNV hashにcurrent player、pass数、plyを連結するため、研究DBのlossless keyとしては使わない。公開tokenは例として `r8v1:<black-hex>:<white-hex>:B|W` のようにversion付き・可逆・衝突なしとする。
 
 v1では回転・鏡映・色反転による同一視を行わない。将来D4対称正規化を導入する場合は `normalization_version` を上げ、raw research sourceから別generationを再構築する。
 
-### 3.6 `research_private.aggregation_generations`
+### 3.8 `research_private.aggregation_generations`
 
 | 項目 | 設計 |
 | --- | --- |
@@ -265,7 +296,7 @@ v1では回転・鏡映・色反転による同一視を行わない。将来D4�
 | Index | `(status, started_at)`, `published_at desc` |
 | Retention | current + 直前1generationを推奨。古いものは削除可能 |
 
-### 3.7 `research_private.aggregation_segments`
+### 3.9 `research_private.aggregation_segments`
 
 | 項目 | 設計 |
 | --- | --- |
@@ -279,57 +310,57 @@ v1では回転・鏡映・色反転による同一視を行わない。将来D4�
 
 Androidから任意のmin/max ratingや任意期間を渡させない。固定segmentだけを選択可能にし、differencing attackを抑える。v1は `ALL` のみでよい。
 
-### 3.8 `research_private.user_position_totals`
+### 3.10 `research_private.subject_position_totals`
 
 | 項目 | 設計 |
 | --- | --- |
 | 目的 | 1 user weightの分母 `N(u,p)` を保持するprivate/rebuildable中間表 |
-| PK | `(generation_id, segment_key, position_id, user_id)` |
+| PK | `(generation_id, segment_key, position_id, research_subject_id)` |
 | 重要column | `occurrence_count` |
-| FK | generation、segment、position、profile |
+| FK | generation、segment、position、research subject |
 | UNIQUE | PKそのもの |
-| Index | `(generation_id,segment_key,position_id)`, `(user_id,generation_id)` |
+| Index | `(generation_id,segment_key,position_id)`, `(research_subject_id,generation_id)` |
 | Retention | rebuildable cache。active/previous generationのみ |
 
-### 3.9 `research_private.user_position_moves`
+### 3.11 `research_private.subject_position_moves`
 
 | 項目 | 設計 |
 | --- | --- |
-| 目的 | userごとのmove選択回数と結果内訳を保持 |
-| PK | `(generation_id, segment_key, position_id, user_id, move_index)` |
+| 目的 | subjectごとのmove選択回数と結果内訳を保持 |
+| PK | `(generation_id, segment_key, position_id, research_subject_id, move_index)` |
 | 重要column | `choice_count`, `win_count`, `draw_count`, `loss_count` |
-| FK | 対応するuser_position_total、position、generation |
+| FK | 対応するsubject_position_total、position、generation |
 | UNIQUE | PKそのもの |
-| Index | `(generation_id,segment_key,position_id,move_index)`、`(user_id,generation_id)` |
+| Index | `(generation_id,segment_key,position_id,move_index)`, `(research_subject_id,generation_id)` |
 | Retention | rebuildable cache。active/previous generationのみ |
 
-### 3.10 `research_private.position_aggregates`
+### 3.12 `research_private.position_aggregates`
 
 | 項目 | 設計 |
 | --- | --- |
 | 目的 | position全体の公開判定用aggregate |
 | PK | `(generation_id, segment_key, position_id)` |
-| 重要column | `unique_users`, `generated_at` |
+| 重要column | `unique_contributors`, `generated_at` |
 | FK | generation、segment、position |
 | UNIQUE | PKそのもの |
 | Index | `(generation_id,segment_key,position_id)` |
 | Retention | generationと同じ |
 
-### 3.11 `research_private.move_aggregates`
+### 3.13 `research_private.move_aggregates`
 
 | 項目 | 設計 |
 | --- | --- |
 | 目的 | moveの公開判定、選択率、結果率を返す |
 | PK | `(generation_id, segment_key, position_id, move_index)` |
-| 重要column | `unique_users`, `choice_weight_sum numeric`, `win_weight_sum numeric`, `draw_weight_sum numeric`, `loss_weight_sum numeric`, `child_position_id` |
+| 重要column | `unique_contributors`, `choice_weight_sum numeric`, `win_weight_sum numeric`, `draw_weight_sum numeric`, `loss_weight_sum numeric`, `child_position_id` |
 | FK | generation、segment、position、child position |
 | UNIQUE | PKそのもの |
 | Index | `(generation_id,segment_key,position_id)` |
 | Retention | generationと同じ |
 
-### 3.12 Retraction/rebuild work
+### 3.14 Account unlink lifecycle
 
-account deletionで大量のpositionを再計算する可能性があるため、`research_private.retraction_jobs` のような明示的work tableを置く。`user_id`、reason、status、cursor、attempt、requested/completed時刻を持ち、同一userのactive jobをuniqueにする。汎用job frameworkへ広げず、用途をresearch retractionへ限定する。
+research contributionを削除しないため、account deletion向けの寄与削除jobやaffected-position rebuildは設けない。削除要求受付transactionでactive periodを閉じ、subjectを `DELETION_PENDING` にする。その後、既存account deletion Workerがservice-onlyかつidempotentなunlink処理を呼び、別transactionで `account_user_id = null / UNLINKED` へ移す。retry時にlinked subjectが見つからなければ成功済みとして扱う。unlink処理はcontributor、research game、subject-position stats、published aggregateを変更しない。
 
 ## 4. GameRecordと研究データの分離方針
 
@@ -338,11 +369,11 @@ account deletionで大量のpositionを再計算する可能性があるため�
 | 案 | 長所 | 短所 | 評価 |
 | --- | --- | --- | --- |
 | A. `game_records` を長期化 | 最小実装。既存canonical lineを直接使える | 最新50件のbounded storageを破壊。個人閲覧retentionと研究retentionが結合。account deletion・privacy境界が曖昧 | 非推奨 |
-| B. 研究用raw棋譜を別保存 | compactで再集計しやすい。rating/期間/opening定義変更に強い | raw lineとuser linkをprivateに長期保持する。集計時に毎回棋譜再生が必要 | 単独では不足 |
+| B. 研究用raw棋譜を別保存 | compactで再集計しやすい。rating/期間/opening定義変更に強い | raw lineとsubject linkをprivateに長期保持する。集計時に毎回棋譜再生が必要 | 単独では不足 |
 | C. 局面decisionだけ長期保存 | GameRecordから完全分離。削除・局面queryが明快 | 1 game約60行で容量とindex負荷が大きい。opening再分類やnormalization変更に弱くなりやすい | Free運用では主sourceにしない |
-| D. 研究raw source + user-position中間 + 公開snapshot | compactな再集計source、正確なweight、速い公開query、削除再計算を両立 | pipelineとgeneration管理が必要 | 推奨 |
+| D. 研究raw source + subject-position中間 + 公開snapshot | compactな再集計source、正確なweight、速い公開query、account unlink後の再集計を両立 | pipelineとgeneration管理が必要 | 推奨 |
 
-推奨Dでは、長期のsource of truthは `research_private.games` と `game_contributors` である。user-position tablesと公開aggregateは再構築可能な派生データとする。個人GameRecordを削除しても研究sourceは残り、逆に研究contributionを削除しても本人の最新50GameRecordには影響しない。
+推奨Dでは、長期のsource of truthは `research_private.games`、`research_subjects`、`participation_periods`、`game_contributors` である。subject-position tablesと公開aggregateは再構築可能な派生データとする。個人GameRecordを削除しても研究sourceは残る。Opt-outまたはaccount deletionで個人向けdataを処理しても、同意中にcaptureされた研究sourceとweightは維持される。
 
 ## 5. データフロー
 
@@ -356,13 +387,13 @@ sequenceDiagram
     A->>DB: submit_match_result x2
     DB->>DB: compare submissions / rating / GameRecord
     DB->>DB: server_status = CONFIRMED
-    DB->>DB: active Opt-in participantsだけresearch snapshot
+    DB->>DB: current consentに同意中のsubjectsだけsnapshot
     W->>DB: pending gameをlease付きclaim
     W->>W: canonical lineを独立合法手再生
-    W->>DB: positions + user-position statsをidempotent更新
+    W->>DB: positions + subject-position statsをidempotent更新
     W->>DB: complete generationをatomic publish
     UI->>DB: authenticated position aggregate RPC
-    DB->>DB: current Opt-in + 10 games / 90 daysを確認
+    DB->>DB: current period + consent + 10 qualifying games / 90 daysを確認
     DB->>DB: position 100 / move 20 thresholdを適用
     DB-->>UI: user識別子なしのpublished moves + その他
 ```
@@ -370,15 +401,34 @@ sequenceDiagram
 詳細:
 
 1. 既存online finalizationが `CONFIRMED` 以外なら何もしない。
-2. `CONFIRMED` への初回遷移時に、active Opt-in期間を持つparticipantだけをcaptureする。
+2. `CONFIRMED` への初回遷移をcaptureの唯一の境界時点とし、その線形化点でcurrent consent versionに同意済みのactive periodを持つparticipantだけをcaptureする。
 3. captureはcanonical sourceとserver-side rating snapshotを数行INSERTするだけ。棋譜再生はしない。
 4. workerは `FOR UPDATE SKIP LOCKED` 相当とleaseでgameを一度だけclaimする。
 5. 初期盤面から全tokenを再生し、合法手、pass、final hash、NORMAL終局結果を検証する。
 6. 実際に選択肢が存在した局面だけを抽出する。forced passは選択として数えない。
-7. Opt-in contributorがその局面で打ったmoveだけをそのuserの統計へ加える。OFFのopponentのmoveを、そのopponentの寄与として数えない。
-8. 同一user/positionの全履歴から分母とmove比率を再計算する。global aggregateへ対局1件をそのまま加算しない。
+7. Opt-in contributorがその局面で打ったmoveだけをそのsubjectの統計へ加える。OFFのopponentのmoveを、そのopponentの寄与として数えない。
+8. 同一subject/positionの全履歴から分母とmove比率を再計算する。global aggregateへ対局1件をそのまま加算しない。
 9. 完成したgenerationだけをpublishする。
 10. RPCはeligibilityとthresholdを毎回server-sideで再確認して返す。
+
+### Captureの線形化点とrace
+
+境界時点はmatch開始時ではなく、既存finalization transactionが初めて `server_status = CONFIRMED` を成立させる瞬間とする。この同一transaction内でresearch snapshotを作るため、棋譜・rating・同意状態の組合せが一意に決まる。実装では次の順序でlockする。
+
+1. active policy pointerをshare lockし、`collection_enabled` とcurrent `research_consent_version` を固定する。
+2. participantにlinkされたresearch subjectをUUID昇順で `FOR UPDATE` lockする。
+3. `link_state = LINKED`、削除要求中でないこと、open periodがあること、periodのconsent versionがcurrentと一致することを再確認する。
+4. 条件を満たすsideだけ `games` / `game_contributors` をidempotent INSERTする。0 sideならresearch rowを作らない。
+
+Opt-out、再同意、account deletion request受付も同じsubject rowをlockする。current consent versionの切替は同じpolicy pointerをexclusive lockする。これにより、並行操作はDBのlock取得順で次のどちらかへ必ず線形化される。
+
+- 対局開始時ONでも、Opt-outが先にcommitしてからCONFIRMEDならcaptureしない。CONFIRMEDが先ならcaptureし、その寄与は後のOFFで削除しない。
+- 対局開始時OFFでも、current consentへ同意した新periodが先にcommitしてからCONFIRMEDなら、その対局のON側decisionをcaptureする。研究提供の同意境界は対局開始ではなくCONFIRMEDであることをconsent/UIに明示する。
+- CONFIRMEDとOpt-outが同時なら、同じsubject lockで先に線形化された操作が決める。二重判定や中間状態はない。
+- consent version切替が先なら旧version periodは不一致となりcaptureしない。CONFIRMEDが先なら、その時点でcurrentだったversionに基づくcaptureを保持する。
+- account deletion request受付が先ならperiodを閉じ `DELETION_PENDING` にするためcaptureしない。CONFIRMEDが先ならcapture済み寄与を保持し、その後account linkだけを外す。
+
+worker validationがOpt-outやaccount unlinkより後になっても、CONFIRMED時点でcapture済みのPENDING contributionは取消さない。合法性検証に合格すればACCEPTEDへ進め、失敗なら通常どおりREJECTEDにする。
 
 ### Validation rule
 
@@ -393,7 +443,7 @@ sequenceDiagram
 
 ## 6. `1ユーザー = 総weight 1` の正確な集計
 
-position `p`、server-defined segment `s`、user `u`、move `m` を考える。
+position `p`、server-defined segment `s`、research subject `u`、move `m` を考える。account deletion後も同じsubjectを用いるため、unlinkによってweightは変わらない。
 
 - `N(u,p,s)`: user `u` がposition `p` で何らかのmoveを選んだ回数
 - `N(u,p,m,s)`: そのうちmove `m` を選んだ回数
@@ -421,21 +471,21 @@ rating segmentごとに集計する場合、各対局の `rating_before` がそ�
 
 ### Position
 
-- `U(p,s) = count(distinct user_id)`。
+- `U(p,s) = count(distinct research_subject_id)`。UIでは「unique contributors」と表現する。
 - `U(p,s) >= active_policy.position_min_users` のときだけpositionを公開可能。
 - 99以下では `INSUFFICIENT_SAMPLE` のみ返し、実数99を返さない。
 - start position、任意ply、final前、variationのいずれも同じ判定を使う。
 
 ### Move
 
-- `U(p,m,s) = count(distinct user_id where N(u,p,m,s) > 0)`。
+- `U(p,m,s) = count(distinct research_subject_id where N(u,p,m,s) > 0)`。
 - 20以上のmoveだけcoordinate、choice rate、result rate、move unique countを個別表示する。
 - 19以下のmoveはcoordinate別統計を返さない。
 
 ### その他
 
 - suppressed move集合の `choice_weight_sum`、win/draw/loss weightを合算して1つの `OTHER` を返す。
-- `OTHER` のunique usersは、suppressed moveのunique数の単純和ではなく、suppressed moveのどれかを選んだ `distinct user_id` のunionで計算する。
+- `OTHER` のunique contributorsは、suppressed moveのunique数の単純和ではなく、suppressed moveのどれかを選んだ `distinct research_subject_id` のunionで計算する。
 - `OTHER` unionが20未満ならexact unique countは返さず、nullまたは「20未満」とする。
 - `OTHER` は複数moveの集合なのでchild drill-downを提供しない。
 
@@ -450,106 +500,75 @@ Thresholdはquery時にactive policyから読む。20を変更した場合、mov
 
 ## 8. Give-to-Get eligibility
 
-### Rule
+### 確定rule
 
 current participation periodについて、次をすべて満たす場合だけeligibleとする。
 
-1. active Opt-in期間が存在する。
-2. `contribution_status = ACCEPTED`。
-3. `decision_count >= min_decisions_per_qualifying_game`。推奨初期値は1。
-4. `confirmed_at >= server_now - 90 days`。
-5. distinct research game数が10以上。
+1. callerのaccountへlinkされたsubjectが `LINKED` で、open participation periodが存在する。
+2. periodのconsent versionがactive policyのcurrent `research_consent_version` と一致する。
+3. `source_kind = ONLINE`、`contribution_status = ACCEPTED`。
+4. trusted validatorが合法手再生・result・final hashの整合性検証を完了している。
+5. 本人の `decision_count >= min_decisions_per_qualifying_game`。初期値は10。
+6. `confirmed_at >= server_now - 90 days` かつ、そのcontributionがcurrent participation periodに属する。
+7. 上記を満たすdistinct research game数が10以上。
 
 90日境界はserverの`timestamptz`で `[now - interval, now]`、下限inclusiveとする。Android時刻を使わない。
 
+aggregate inclusionとeligibilityは分離する。`ACCEPTED` かつ `decision_count` が1〜9のgameでは、その合法なdecisionをaggregateへ含めるが、Give-to-Getの1局には数えない。0手終了はdecisionがないためaggregateにも加算せず、eligibilityの水増しにも使えない。
+
 ### RPC behavior
 
-- `set_research_participation(true)`: active期間がなければ新しいperiodを作る。idempotent。
-- `set_research_participation(false)`: active期間をserver時刻でclose。idempotent。以後のaggregate RPCは即拒否。
-- `get_research_participation_status()`: ON/OFF、current periodのqualifying count、required count、window days、eligibleを返す。自分の情報だけ。
+- `set_research_participation(true, accepted_consent_version)`: current versionと一致する明示同意だけを受理する。有効な同version periodがすでにあればidempotent。OFF後またはversion mismatch後は旧periodを再openせず、新periodを作る。
+- `set_research_participation(false, null)`: open periodをserver時刻でclose。idempotent。以後のaggregate RPCは即拒否するが、過去contributionは変更しない。
+- `get_research_participation_status()`: ON/OFF、`RECONSENT_REQUIRED`、current consent version、current periodのqualifying count、required count、window days、eligibleを返す。自分の情報だけ。
 - `get_research_position(...)`: 毎回current periodと件数をDBで検証する。clientの `eligible=true` を信用しない。
 
-再Opt-inでは新しいperiodを作り、件数は0から始める。過去periodの10局をcurrent eligibilityへ流用しない。90日経過で10未満へ落ちた場合も、次のRPCで自動失効する。Cronだけに依存しない。
+再Opt-inまたは再同意では新しいperiodを作り、件数は0から始める。過去periodの局数をcurrent eligibilityへ流用しない。90日経過で10未満へ落ちた場合も、次のRPCで自動失効する。Cronだけに依存しない。
 
 ## 9. Opt-in / Opt-out / account deletion
 
-### 9.1 Opt-in時点
+### 9.1 Consent versionとOpt-in
 
-推奨:
-
-- match開始時ではなく、`CONFIRMED` が成立した時点でactive Opt-inかを判定する。
-- OFFのまま終了した過去対局を、後からONにしただけでretroactive captureしない。
+- 研究参加ONにはcurrent `research_consent_version` への明示同意を必須とする。初期versionは1。
+- current versionとopen periodのversionが一致しなければ、参加は有効とみなさず、新規captureも閲覧も許可しない。
+- 再同意では旧periodを閉じ、新periodを開始する。旧periodのqualifying gamesは流用しない。
 - feature launch以前のGameRecordは、当時の研究同意がないためbackfillしない。
+- consentは、研究参加中のonline対局を集合知へ提供すること、個人scoutingとして公開しないこと、集合統計として公開すること、OFF後は新規提供と閲覧を止めるが過去寄与は利用継続すること、account削除後もaccount linkを外して寄与を保持する場合があること、raw dataを一般clientへ出さないこと、Give-to-Get方式であることを含む。
 
-### 9.2 片方だけOpt-inした対局
+### 9.2 Opt-in判定時点
 
-推奨案:
+`CONFIRMED` 成立時点を唯一の判定境界とする。match開始時の状態はsnapshotしない。OFFのままCONFIRMEDになった過去対局を後日のON操作でbackfillしない。ON/OFF/consent/deletionとのraceは第5章の共通lock規約で線形化する。
 
-- 片方だけONでも、そのuser自身が選んだmoveだけを寄与として受理する。
-- OFF userはcontributor rowを持たず、その選択はweightへ入れない。
-- full canonical lineは合法再生の文脈としてprivate research sourceへ保持され得るが、OFF userのIDをresearch contributorとして保存・公開しない。
+### 9.3 片方だけOpt-inした対局
 
-影響:
+- 片方だけONでも、ON側subject自身が選んだmoveだけを寄与として受理する。
+- OFF側にはcontributor rowを作らず、OFF側のdecisionをそのsubjectのweightへ入れない。
+- full canonical lineはON側decisionの合法性・局面文脈を検証するprivate sourceとして保持できる。ただしOFF側のaccount/subject IDをresearch contributorとして保存せず、一般clientへraw lineを公開しない。
+- participationはmatch単位ではなくsubject単位の同意である。相手がOFFであることを理由にON側の提供を無効にしない。
 
-- 長所: 参加率が低い初期でも10局/100usersへ到達しやすい。個人単位Opt-inという仕様に自然。
-- 短所: private canonical lineにはOFF opponentの着手文脈も含まれる。consent/privacy説明にこの点を明記する必要がある。
+### 9.4 Opt-out
 
-代替案:
+- Opt-outは「過去同意の撤回」ではなく「今後の提供停止」と定義する。
+- OFF transactionでopen periodをserver時刻により閉じる。これより後に線形化されたCONFIRMEDから新しいcontributionを作らない。
+- aggregate RPCはOFF transaction直後から拒否し、Androidのmemory cacheもclearする。
+- OFF前にcapture済みのPENDING/ACCEPTED contributionは削除せず、集計対象状態も変更しない。PENDINGはvalidator結果に従ってACCEPTEDまたはREJECTEDへ進める。
+- 過去ACCEPTED contributionとaggregate weightは保持し、Opt-outを理由としたaggregate再生成は行わない。
+- 再Opt-inは新periodを開始し、Give-to-Get countを0から計算する。過去periodのcontribution自体は残すが、新periodの資格へ旧局数を流用しない。
 
-- 両participantがONのmatchだけを研究対象にする。privacy説明は単純になるが、初期のdata成長とGive-to-Get達成が大幅に遅くなる。
+### 9.5 Account deletion
 
-これは実装前に確定が必要なプロダクト判断である。本設計の推奨は片側Opt-in対応。
+- account deletion request受付transactionでsubjectをlockし、open periodを閉じ、`link_state = DELETION_PENDING` とする。以後の新規captureと閲覧を止める。
+- 既存Workerはprivate account dataの既存処理に加え、Auth identity削除前にservice-only unlinkを実行する。
+- unlinkは `account_user_id` をnullにして `UNLINKED` とする。research tableには旧account UUID、profile FK、旧account UUIDのhash、復元用mappingを残さない。
+- `research_subject_id`、participation periods、ACCEPTED contributors、compact source、subject-position stats、aggregate weightは保持する。account deletionを理由に再集計やthreshold後退を発生させない。
+- unlink後も同一subject内の全履歴をまとめられるため、`1 user = total weight 1`、rating bucket変更、期間segment変更、aggregate再生成を維持できる。
+- 新しく作成されたaccountは新subjectを受け取り、過去subjectへ再接続しない。
+- unlink RPCはidempotentとし、Worker retryで既にlinkがなければ成功済みを返す。research subjectを削除・再生成しない。
+- account/profile/auth identityとの直接linkは消えるが、raw研究データを運営者が管理権限で扱えるという前提は変わらず、完全匿名や特定法制度上の匿名加工を保証するものではない。
 
-### 9.3 Opt-out後の過去contribution
+### 9.6 Retention表現
 
-推奨案: 過去に同意のうえACCEPTEDになったcontributionは残す。
-
-- OFF以後の新規captureを止める。
-- 集合データ閲覧資格は即時失効。
-- 再ONは新periodで再資格化。
-- 公開aggregateには「寄与時点でOpt-inだったuser」の過去データが残る。
-
-影響:
-
-- Privacy: 同意文に「OFFは将来提供と閲覧を停止し、既に集約へ反映された過去寄与は残る」を明記する必要がある。
-- 統計品質: thresholdや率がOFF操作で大きく揺れない。長期集合知と相性がよい。
-- 実装コスト: 低い。eligibility closeだけでよい。
-
-代替案: OFFで過去contributionもretractする。
-
-- Privacy: 撤回の意味が最も強い。
-- 統計品質: 100/20境界が逆戻りし、公開position/moveが消える。selection rateも変動する。
-- 実装コスト: userが関与した全positionの再計算と新generation publishが必要。
-- UX: OFF直後の閲覧拒否は即時にできるが、aggregateからの削除完了まで別SLAが必要。
-
-### 9.4 Account deletion
-
-推奨案: userに紐づく研究contributorとuser-position統計を削除し、影響positionを再集計してからaccount deletionをCOMPLETEDにする。
-
-- userが唯一のcontributorだったresearch gameは削除する。
-- opponentもcontributorであるshared research gameは残し、削除userのcontributor linkとweightだけを除く。
-- aggregate generationの切替完了前にAuth deletion workflowを完了扱いにしない。
-- participation periodsもuser linkを含むため削除する。
-
-影響:
-
-- Privacy: 個人に紐づく研究寄与とweightを消せる。shared canonical lineはopponentの寄与sourceとして残り得るため、完全な棋譜消去ではない。
-- 統計品質: 多少変動するが、account deletion頻度に限定される。
-- 実装コスト: retraction job、affected position rebuild、retryが必要。
-
-代替案A: userが関与したshared research gameごと削除する。
-
-- 最も強い削除。削除userの着手文脈も残らない。
-- opponentが正当に提供した寄与まで失われる。
-- current shared GameRecord保持方針より厳しい。
-
-代替案B: contributor IDを不可逆なsubject tokenへ切り替え、aggregateを残す。
-
-- 統計品質とコストは最良。
-- 「削除後も過去行動が内部で同一subjectとして残る」ため、privacy expectationが弱い。
-- stable tokenを破棄して再Opt-in userを別人扱いすると、1人が複数weightを持ち得る。採用しない。
-
-Opt-outとaccount deletionの過去寄与ポリシーは、consent文面・privacy policy・削除UXへ直結するため、実装前にユーザー判断が必要である。
+research source、subject、contributionは「研究機能の提供・再集計に必要な期間、長期保持する」と表現し、無期限保持は約束しない。サービス終了、研究方式変更、法令・policy変更、明示的なdata migrationや運営上のretention変更を妨げない。
 
 ## 10. RLS / RPC / API境界
 
@@ -557,8 +576,8 @@ Opt-outとaccount deletionの過去寄与ポリシーは、consent文面・priva
 
 | RPC | Role | 内容 |
 | --- | --- | --- |
-| `set_research_participation(boolean)` | authenticated | caller自身のOpt-in periodだけを開始/終了 |
-| `get_research_participation_status()` | authenticated | caller自身のON/OFF、進捗、eligibility、active policy値 |
+| `set_research_participation(enabled, accepted_consent_version)` | authenticated | caller自身の明示同意済みperiodだけを開始/終了。ON時はcurrent version一致必須 |
+| `get_research_participation_status()` | authenticated | caller自身のON/OFF、再同意要否、current consent version、進捗、eligibility、active policy値 |
 | `get_research_position(position_token, segment_key)` | authenticated | eligibilityと100/20 threshold適用済みaggregateだけを返す |
 
 `get_research_position` responseの推奨shape:
@@ -566,8 +585,8 @@ Opt-outとaccount deletionの過去寄与ポリシーは、consent文面・priva
 - `available`: boolean
 - `reason`: `AVAILABLE / NOT_ELIGIBLE / INSUFFICIENT_SAMPLE / UNKNOWN_POSITION`
 - `generation_id`, `segment_key`, `published_at`
-- positionの `unique_users`（公開可能時のみ）
-- 公開moveごとのcoordinate、choice rate、実戦win/draw/loss rate、unique users、`can_explore`
+- positionの `unique_contributors`（公開可能時のみ）
+- 公開moveごとのcoordinate、choice rate、実戦win/draw/loss rate、unique contributors、`can_explore`
 - `OTHER` aggregate
 - active threshold値とmetric説明
 
@@ -586,7 +605,7 @@ Opt-outとaccount deletionの過去寄与ポリシーは、consent文面・priva
 - pending research game claim/lease/retry
 - validation完了・reject
 - aggregation generation build/publish
-- account deletion retraction
+- account deletion request時のcapture停止とresearch subject unlink
 - maintenance cleanup
 
 すべて `PUBLIC/anon/authenticated` からexecute不可、service_roleだけに明示grantする。raw/private tableはData APIへ直接公開しない。
@@ -601,7 +620,7 @@ Supabase/Postgresの通常viewはcreator権限で動作する場合があり、�
 | --- | --- |
 | Androidがraw研究行を偽造 | client INSERT/UPDATEなし。CONFIRMED triggerからのみcapture |
 | 両clientが同じ不正棋譜を提出 | trusted validatorが初期盤面から合法再生。研究側でreject |
-| 同一match二重寄与 | source match key unique + `(game,user)` PK + idempotent worker |
+| 同一match二重寄与 | source match key unique + `(game,research_subject)` PK + idempotent worker |
 | 1 userの大量対局で操作 | position内でuser total weightを1へ正規化 |
 | 大量account/Sybil | weight正規化では防げない。Auth abuse監視、account age/verification等は将来policy。thresholdだけをSybil耐性と誤認しない |
 | Rating偽装 | rating beforeはserver rating_historyからsnapshot。client parameterなし |
@@ -611,7 +630,10 @@ Supabase/Postgresの通常viewはcreator権限で動作する場合があり、�
 | 特定player scouting | user/opponent/player filter、個人履歴API、match linkを設けない |
 | OFF後の端末cache閲覧 | research cacheはmemory-only。OFF/sign-outでclear。RPCは毎回server eligibility確認 |
 | Ingest worker二重実行 | lease、`SKIP LOCKED`、attempt、idempotent unique constraint |
-| IngestとOpt-out/account deletion race | user単位lock。capture、period close、retractionを直列化。deletion request中userは新規capture不可 |
+| IngestとOpt-out/account deletion race | subject単位lock。capture、period close、deletion pending、unlinkを直列化。deletion request中subjectは新規capture不可 |
+| Consent version切替とのrace | active policy pointerをcapture時にlock。旧version periodはcollection/閲覧とも無効 |
+| Account削除後の直接逆参照 | subjectのaccount linkをnull化し、profile/auth FK・account hash・復元mappingをresearch schemaへ残さない |
+| Unlinkによるweight消失 | contributorとsubject IDを維持し、unlinkではaggregate/sourceを変更しない |
 | 部分的aggregate公開 | immutable generationを完成後にatomic pointer switch |
 | service-role漏洩 | Android/repositoryへ置かず、trusted runtime secretのみ。logへtoken/raw JWTを出さない |
 
@@ -628,7 +650,7 @@ Supabase/Postgresの通常viewはcreator権限で動作する場合があり、�
 ### Storage
 
 - compact canonical lineは最大240文字で、research game + contributorは概ね小さい。
-- 容量支配要因はuser-position中間表とそのindexである。
+- 容量支配要因はsubject-position中間表とそのindexである。
 - 60 decisions/game、派生rowとindexを合計150〜300 bytes/decisionと仮定すると、概算9〜18 KB/gameになる。これは設計用の粗い推定であり、実migration後に `pg_column_size` と `pg_total_relation_size` で測定する。
 - 既存tableと安全余裕を考えると、Free 500 MBは数万局規模のpilotには使えても、無期限の本番研究基盤としては保証できない。
 
@@ -644,7 +666,7 @@ Supabase/Postgresの通常viewはcreator権限で動作する場合があり、�
 
 - finalization hot pathは数行snapshotだけ。
 - validation/aggregationはworkerまたはCronのbatchで行う。
-- 1 gameごとにpublic aggregateを全面再構築しない。user/positionのaffected keyだけincremental更新し、定期full rebuildで監査する。
+- 1 gameごとにpublic aggregateを全面再構築しない。subject/positionのaffected keyだけincremental更新し、定期full rebuildで監査する。
 - 大きなpolicy/rating bucket変更は新generationをoff-pathでbuildして切り替える。
 - Supabase CronはSQL/function/HTTP jobを実行できるが、公式推奨どおり長時間・高並列jobを避ける。worker batchは小さく再開可能にする。
 
@@ -660,14 +682,14 @@ Supabase/Postgresの通常viewはcreator権限で動作する場合があり、�
 
 実装時は次の順序を推奨する。既存dataのretroactive backfillは行わない。
 
-1. `research_private` schema、policy versions、participation periods、deny-by-default privilegeを追加する。collectionはOFF。
-2. Opt-in/status RPCとpgTAPを追加する。既存online機能へ影響させない。
-3. research games/contributors/positionsとcapture triggerを追加する。triggerはcollection OFFならno-op。
-4. trusted validatorを実装し、Coreと共有したfixtureでboard/side/pass/final hashをcross-testする。
-5. private user-position tables、generation、segment、aggregate tableを追加する。
-6. 100/20/OTHER/child thresholdとGive-to-Getを行うpublic RPCを追加する。
-7. Opt-out/account deletion方針を確定し、既存Workerの削除順序へresearch retractionを組み込む。
-8. `:feature:research`、`:data:supabase` adapter、SettingsのOpt-in、Review表示を追加する。live match moduleへ依存を加えない。
+1. `research_private` schema、consent versions、policy versions、research subjects、participation periods、deny-by-default privilegeを追加する。`research_consent_version=1` を登録し、collectionはOFFにする。
+2. 明示同意付きOpt-in/status RPC、current consent mismatch、再Opt-in period resetのpgTAPを追加する。既存online機能へ影響させない。
+3. research games/contributors/positionsとcapture triggerを追加する。triggerはcollection OFFならno-op。subject/policy lock順とCONFIRMED線形化点をcontract testで固定する。
+4. account deletion request受付時のperiod close/`DELETION_PENDING` と、既存Workerから呼ぶidempotent subject unlinkを追加する。research sourceやaggregateを削除する処理は入れない。
+5. trusted validatorを実装し、Coreと共有したfixtureでboard/side/pass/final hashをcross-testする。
+6. private subject-position tables、generation、segment、aggregate tableを追加する。
+7. 100/20/OTHER/child thresholdと、current period・current consent・decision 10以上を判定するGive-to-Get RPCを追加する。
+8. `:feature:research`、`:data:supabase` adapter、SettingsのOpt-in/consent、Review表示を追加する。live match moduleへ依存を加えない。
 9. Hosted setup、maintenance、capacity alert、privacy/consent文書を更新する。
 10. 全testとload/capacity計測後に `collection_enabled=true`。feature launch前GameRecordは取り込まない。
 
@@ -685,14 +707,26 @@ Supabase/Postgresの通常viewはcreator権限で動作する場合があり、�
 - result rateもuser正規化後に計算される。
 - rating bucketはlower inclusive / upper exclusive。境界値を両側で確認。
 - 90日ちょうどはeligible、90日+最小単位は除外。
-- current period 9局では不可、10局目ACCEPTED後に可。
-- 0 decision gameはqualifying countへ入らない。
-- Opt-out transaction直後にaggregate RPCが拒否される。
-- 再Opt-inは新periodで0局から始まり、旧periodを数えない。
-- account deletion policyどおりcontributorとaggregateが処理される。
+- current periodのqualifying gameが9局では不可、10局目後に可。
+- `ACCEPTED + decision_count=9` はeligibilityを増やさないが、9個の合法decisionはaggregateへ入る。
+- `ACCEPTED + decision_count=10` はeligibilityを1増やし、decisionもaggregateへ入る。
+- validator REJECTED、またはCONFIRMEDでもvalidator未完了のgameはeligibilityを増やさず、aggregateにも入らない。
+- 0 decision gameはqualifying countを増やさず、aggregateにもdecisionを追加しない。
+- ON中にACCEPTED contributionを作ってからOFFにしても、contributor/source/subject-position/aggregate値が残る。
+- Opt-out transaction直後にaggregate RPCが拒否され、OFF後にCONFIRMEDとなったmatchはcaptureされない。
+- Opt-out前にcapture済みPENDING rowは、OFF後のworker validation成功でACCEPTEDになりaggregateへ入る。
+- 再Opt-inは新periodで0局から始まり、旧periodのqualifying gamesを数えない一方、過去research contributionとaggregateは残る。
+- account deletion requestでperiodが閉じてcapture/閲覧が止まり、unlink後もcontributor/source/aggregate値が維持される。
+- account/profile/private dataは既存削除policyどおり処理され、research subjectから旧account UUID・profile・Auth identityを直接resolveできない。
+- account deletion Worker retry、unlink RPC再実行でsubject/contribution/aggregateが壊れない。
+- unlink前後で同一subjectのposition weight合計とunique contributor数が変化しない。
+- 削除後に同じ人物が新accountを作っても新subjectとなり、旧subjectへ自動・手動再接続されない。
+- Black ON / White OFFではBlack decisionsだけ、Black OFF / White ONではWhite decisionsだけが対応subjectへ入る。
+- OFF側にはcontributor rowを作らず、OFF側decisionをOFF側のweightとして集計しない。
+- consent version一致でcollection/閲覧が可能。不一致では両方不可で `RECONSENT_REQUIRED`。再同意は新periodを作る。
 - duplicate match capture、duplicate worker completionでも1 contributionだけ。
 - concurrent worker claimで同じgameを2 workerが処理しない。
-- concurrent Opt-out/finalizationの結果が直列化され、同意境界が曖昧にならない。
+- CONFIRMED vs Opt-out、CONFIRMED vs account deletion request、CONFIRMED vs consent version切替がsubject/policy lockで一意に直列化される。
 - GameRecord/user_game_records/matchをprune後もresearch sourceとaggregateが残る。
 - parent公開でもchild 99ならdrill-down不可、child 100で可。
 - DISPUTED/PENDING_RESULT/ABANDONEDはcaptureされない。
@@ -709,11 +743,13 @@ Supabase/Postgresの通常viewはcreator権限で動作する場合があり、�
 - NORMAL resultとterminal disc count不一致。
 - Kotlin Game Coreとvalidatorが同じfixtureで全decision position/legal move setを返す。
 - symmetryをv1で適用しないこと。
-- contributor color以外のmoveをそのuserへ加算しないこと。
+- contributor color以外のmoveをそのsubjectへ加算しないこと。
+- decision countがsubject自身の合法な選択だけを数え、forced passとopponent moveを含めないこと。
 
 ### Android unit/UI tests
 
 - OFF/ON/progress/eligible state。
+- consent version 1の明示同意、再同意要求、同意文の必須説明。
 - OFFでもonline、records、Edax、variationが利用可能。
 - Edax unavailableでもresearch表示は独立。research unavailableでもEdaxは独立。
 - ply/variation移動時のstale research resultを破棄。
@@ -728,40 +764,50 @@ Supabase/Postgresの通常viewはcreator権限で動作する場合があり、�
 - hot position、unique midgame tailの双方でaggregation時間を計測。
 - generation rebuild中も旧generationだけが返る。
 - worker crash、lease expiry、retry、poison game隔離。
-- account deletionが多数positionへ影響してもbatch再開できる。
+- 大量のaccount unlinkでもcontribution再計算は発生せず、idempotent unlink batchを再開できる。
 
 ## 15. 不変条件
 
 以下が破れたら設計バグである。
 
-1. `CONFIRMED` 以外のmatchが研究aggregateへ入らない。
-2. Opt-inでないuserの選択を、そのuserのcontributionとして数えない。
-3. 同一 `(source match, user)` が2回寄与しない。
-4. server-side legal replayに失敗したgameがeligibilityやaggregateへ入らない。
-5. rating bucketはclient値や現在ratingではなく、server snapshotのrating beforeを使う。
-6. 任意のposition/segment/userについてmove weight合計が1である。
-7. userの対局数を増やしても、そのpositionでの総weightは1を超えない。
-8. position unique 100未満のaggregateをclientへ返さない。
-9. move unique 20未満の個別統計をclientへ返さない。
-10. childはparentと独立して100 unique条件を満たす。
-11. Opt-out直後から集合研究データを閲覧できない。
-12. 再Opt-in時に旧periodの提供局数で即eligibleにならない。
-13. raw research source、user-position中間、contributor IDを一般clientが取得できない。
-14. 公開responseにuser、opponent、match、GameRecordを追跡できる識別子を含めない。
-15. GameRecord pruningが研究sourceをcascade deleteしない。
-16. 研究retentionが個人の最新50GameRecord保持数を増やさない。
-17. aggregate build途中のgenerationを公開しない。
-18. account deletionをCOMPLETEDにする時点で、採用した研究削除ポリシーが完了している。
-19. service-role secretをAndroid、APK/AAB、repository、client logへ置かない。
-20. live match、rating、WebRTC、clock、finish protocolが研究validator/aggregationの完了を待たない。
-21. Edax評価と人間実戦統計を同じmetricとして混同しない。
+1. `CONFIRMED` 以外のmatchをcaptureせず、validatorでACCEPTEDでないgameをaggregateやeligibilityへ入れない。
+2. current consent versionへ明示同意したactive periodを `CONFIRMED` 線形化点で持たないuserのdecisionを、そのuserの寄与として取得しない。
+3. Opt-outまたはaccount deletion request受付後に線形化されたCONFIRMEDから、新しいresearch contributionを作らない。
+4. Opt-out前にcaptureされACCEPTEDとなったresearch contributionは残り、aggregateから除外しない。
+5. Opt-out前にcapture済みのPENDING contributionは、OFFを理由に取消さずvalidator結果でACCEPTED/REJECTEDを決める。
+6. Account deletion後も採用済みresearch contribution、research subject、aggregate weightを保持する。
+7. Account deletion後、research contributionまたはsubjectから旧account/profile/Auth identityを直接逆参照できるFK・UUID・hash・復元mappingをresearch schemaに残さない。
+8. Account deletionによってaggregate weight、unique contributor数、選択率を失わない。
+9. 同一 `(source match, research subject)` が2回寄与しない。
+10. 片側Opt-inの場合、ON側本人のdecisionだけを寄与とし、OFF側decisionをOFF側のcontributionとして保存・集計しない。
+11. server-side legal replayに失敗したgameがeligibilityやaggregateへ入らない。
+12. `decision_count < 10` のgameをGive-to-Getのqualifying gameに数えない。
+13. `ACCEPTED` かつ `decision_count` が1〜9の合法decisionはaggregateへ寄与できる。
+14. active policyとconsent versionが一致するcurrent participation periodの直近90日で、10 qualifying games以上の場合だけeligibleである。
+15. Opt-out直後から集合研究データを閲覧できない。
+16. 再Opt-in・再同意時に旧periodの提供局数で即eligibleにならず、新periodで0から始める。
+17. consent version mismatchではcollectionも集合データ閲覧も許可しない。
+18. rating bucketはclient値や現在ratingではなく、server snapshotのrating beforeを使う。
+19. 任意のposition/segment/research subjectについてmove weight合計が1である。
+20. 同一subjectの対局数を増やしても、そのpositionでの総weightは1を超えない。
+21. position unique contributorが100未満のaggregateをclientへ返さない。
+22. move unique contributorが20未満の個別統計をclientへ返さない。
+23. childはparentと独立して100 unique条件を満たす。
+24. raw research source、subject-position中間、research subject IDを一般clientが取得できない。
+25. 公開responseにuser、subject、opponent、match、GameRecordを追跡できる識別子を含めず、個人playerを追跡できるAPIを提供しない。
+26. GameRecord pruning、profile tombstone、Auth deletionが研究sourceをcascade deleteしない。
+27. 研究retentionが個人の最新50GameRecord保持数を増やさない。
+28. aggregate build途中のgenerationを公開しない。
+29. service-role secretをAndroid、APK/AAB、repository、client logへ置かない。
+30. live match、rating、WebRTC、clock、finish protocolが研究validator/aggregationの完了を待たない。
+31. Edax評価と人間実戦統計を同じmetricとして混同しない。
 
 ## 16. 次のPRへ切り出す推奨タスク
 
 ### PR 2A: Research foundation / consent
 
-- private schema、policy version、participation periods。
-- Opt-in/status RPC。
+- private schema、consent/policy versions、research subjects、participation periods。
+- 明示同意付きOpt-in/status RPC、version mismatch、再同意period reset。
 - RLS/ACL/pgTAP。
 - Settings UIのOpt-inとconsent version。
 - まだcollection/閲覧はOFF。
@@ -773,10 +819,11 @@ Supabase/Postgresの通常viewはcreator権限で動作する場合があり、�
 - independent Reversi replay。
 - Game Coreとのfixture cross-test。
 - source match dedupe。
+- CONFIRMED/Opt-out/consent/deletion requestの共通lock順とrace test。
 
 ### PR 2C: Aggregation / privacy API
 
-- position dictionary、user weight中間表、generation/segment。
+- position dictionary、subject weight中間表、generation/segment。
 - 1 user weight algorithm。
 - 100/20/OTHER/child。
 - Give-to-Get RPC。
@@ -790,12 +837,12 @@ Supabase/Postgresの通常viewはcreator権限で動作する場合があり、�
 - stale result/cache/Opt-out clear。
 - live match dependency boundary。
 
-### PR 2E: Retraction / account deletion
+### PR 2E: Research identity lifecycle / account unlink
 
-- 確定したOpt-out/account deletion policy。
-- retraction job、affected-position rebuild。
-- existing Cloudflare Workerの削除順序更新。
-- deletion race/retry/pgTAP。
+- account deletion request受付時のperiod closeと `DELETION_PENDING`。
+- idempotent subject unlink。account UUID/FK/hash/mappingを残さずcontributionとweightを維持。
+- existing Cloudflare WorkerのAuth削除前の順序更新。
+- deletion/CONFIRMED race、retry、no-weight-loss、no-reverse-link pgTAP。
 
 ### PR 2F: Operations / launch
 
@@ -804,26 +851,20 @@ Supabase/Postgresの通常viewはcreator権限で動作する場合があり、�
 - Free容量実測。
 - collection feature flagを最後にON。
 
-## 17. 未確定事項の分類
+## 17. 残る判断事項の分類
 
-### 決めないと実装不能
+### 決めないと実装不能なプロダクト判断
 
-| 論点 | 推奨 | 代替 |
-| --- | --- | --- |
-| Opt-out時に過去寄与を残すか | 残す。将来captureと閲覧だけ停止 | 全retract。privacy強、再集計cost大 |
-| Account deletion時の寄与 | user linkとweightを削除し再集計 | anonymized維持、またはshared game全削除 |
-| 片側Opt-inを許すか | 許す。ON user自身のmoveだけ寄与 | 両者ON matchのみ |
-| qualifying game | ACCEPTEDかつ本人decision 1以上 | finish reasonや最低plyをさらに制限 |
-| consent文面/version | 過去寄与retentionとshared line文脈を明示 | policyに合わせて変更 |
+なし。Opt-out後の過去寄与保持、account deletion時のidentity unlinkと寄与保持、片側Opt-in、`decision_count >= 10` のqualifying game、整数consent versionと必須説明は確定済みである。
 
-### 実装中でも決められる
+### 実装時に技術判断できる
 
 - trusted validatorを既存Cloudflare Workerへ入れるか、専用workerへ分けるか。
 - worker batch size、lease時間、retry回数。
 - REJECTED sourceの診断retention（推奨30日）。
 - public unique usersをexact表示するか `100+ / 500+` のbucket表示にするか。
 - generation publish頻度。v1推奨は数時間〜日次で、Realtimeにはしない。
-- user-position中間表の物理圧縮・partition・index詳細。
+- subject-position中間表の物理圧縮・partition・index詳細。
 
 ### 後から変更可能
 
@@ -838,11 +879,16 @@ Supabase/Postgresの通常viewはcreator権限で動作する場合があり、�
 ## 18. 次のSol高実装フェーズへ渡すための確定仕様
 
 - 基準はmerge commit `260c1381663fe76c405f33e02be2ac0cc6c831f0`。
-- 研究提供は明示Opt-in。OFFでもonline、GameRecord、Edax、local/variation機能は制限しない。
-- 閲覧資格はactive Opt-inかつcurrent participation periodで直近90日10 qualifying games。OFFで即失効、再ONは新periodで0から。
+- 研究提供は整数versionで管理するcurrent consentへの明示Opt-in。OFFでもonline、GameRecord、Edax、local/variation機能は制限しない。consent mismatchではcollection/閲覧とも無効。
+- capture境界は `CONFIRMED` 線形化点。active policy、subject、participation periodを共通lock順で確認し、Opt-out・consent変更・deletion requestとのraceを一意に決める。
+- 片側Opt-inを許可し、ON側本人のdecisionだけを寄与として保存・集計する。
+- 閲覧資格はcurrent consentに一致するactive participation periodで、直近90日以内に `ACCEPTED` かつ本人 `decision_count >= 10` のonline gameが10局以上。OFFで即失効、再ON/再同意は新periodで0から。
+- `ACCEPTED` かつdecision 1〜9のgameは合法decisionをaggregateへ含めるが、eligibilityには数えない。0手終了はどちらも増やさない。
 - 研究対象はserver `CONFIRMED`、final hashあり、trusted validatorで合法再生できたonline gameだけ。PENDING/DISPUTED/ABANDONEDは除外。
 - 個人GameRecordと研究retentionを分離する。研究sourceはGameRecord/matchへFKを張らず、pruning後も再集計可能にする。
-- 推奨保存方式は、private compact research game + contributor snapshot + rebuildable user-position stats + immutable published aggregate generation。
+- 保存方式は、account独立のresearch subject + private compact research game + contributor snapshot + rebuildable subject-position stats + immutable published aggregate generation。
+- Opt-outは将来提供と閲覧だけを止め、過去にcapture/ACCEPTEDされた寄与を削除せず、集計対象状態も変更しない。
+- Account deletionはresearch contribution削除ではなくidentity unlinkとする。subjectのaccount linkをnull化し、旧accountへ戻すFK/hash/mappingを残さず、過去寄与とweightを維持する。新accountを過去subjectへ再接続しない。
 - position keyは8x8 black/white bitboard + side-to-move + ruleset/normalization version。v1はsymmetry統合なし。forced passはchoiceとして数えない。
 - 1 user weightは、position内でuserのmove頻度を先に1へ正規化し、その後user間平均する。global event count平均は禁止。
 - positionは100 unique users以上で公開。moveは20 unique users以上のみ個別公開。未満はOTHERへ統合。childは独立して100条件を再判定。
@@ -850,5 +896,5 @@ Supabase/Postgresの通常viewはcreator権限で動作する場合があり、�
 - Androidへraw研究データ、user ID、match ID、opponent filterを渡さない。client-facing surfaceはeligibility/threshold適用済みRPCだけ。
 - live match moduleからresearchへ依存させない。Edaxは従来どおりlocal Review専用で、Review UIだけが座標上で研究値と比較する。
 - heavy validation/aggregationはfinalization hot pathで行わず、trusted workerのlease付きidempotent batchで行う。
-- account deletion完了前に、採用した研究削除ポリシーをretry可能に完了させる。
-- 実装開始前に決める残件は、Opt-out過去寄与、account deletion過去寄与、片側Opt-in、qualifying game、consent文面の5点。本文の推奨値をdefault案とする。
+- account deletion完了前に、capture停止・period close・subject unlinkをretry可能に完了させる。研究weightの再集計・削除は行わない。
+- 実装開始前に決める未確定のプロダクト仕様はない。worker配置やbatch size等は第17章の実装時判断に従う。
