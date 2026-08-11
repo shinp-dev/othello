@@ -32,6 +32,7 @@ dependencies {
     implementation(project(":feature:profile"))
     implementation(project(":feature:records"))
     implementation(project(":feature:credential"))
+    implementation(project(":feature:research"))
     implementation(platform("io.github.jan-tennert.supabase:bom:3.6.0"))
     implementation("io.github.jan-tennert.supabase:auth-kt")
     implementation("io.github.jan-tennert.supabase:postgrest-kt")

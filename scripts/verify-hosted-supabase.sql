@@ -27,6 +27,15 @@ select jsonb_build_object(
   'deletion_request_rpc', to_regprocedure('public.request_account_deletion()') is not null,
   'deletion_prepare_rpc', to_regprocedure('public.prepare_account_deletion(uuid)') is not null,
   'deletion_complete_rpc', to_regprocedure('public.complete_account_deletion(uuid)') is not null,
+  'research_private_schema', to_regnamespace('research_private') is not null,
+  'research_status_rpc', to_regprocedure('public.get_research_participation_status()') is not null,
+  'research_participation_rpc', to_regprocedure('public.set_research_participation(boolean,integer)') is not null,
+  'research_collection_disabled', exists (
+    select 1 from research_private.policy_versions where is_active and not collection_enabled
+  ),
+  'research_private_acl',
+    not has_schema_privilege('authenticated', 'research_private', 'USAGE')
+    and not has_schema_privilege('anon', 'research_private', 'USAGE'),
   'profiles_select', has_table_privilege('authenticated', 'public.profiles', 'SELECT'),
   'profile_name_update', has_column_privilege('authenticated', 'public.profiles', 'display_name', 'UPDATE'),
   'ratings_select', has_table_privilege('authenticated', 'public.ratings', 'SELECT'),

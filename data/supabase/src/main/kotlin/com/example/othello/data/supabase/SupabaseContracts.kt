@@ -22,6 +22,8 @@ import com.example.othello.records.FinishReason
 import com.example.othello.records.GameRecord
 import com.example.othello.records.GameRecordRepository
 import com.example.othello.records.MatchResult
+import com.example.othello.research.ResearchParticipationRepository
+import com.example.othello.research.ResearchParticipationStatus
 import com.example.othello.game.CanonicalMoves
 import com.example.othello.game.Disc
 import io.github.jan.supabase.auth.Auth
@@ -506,6 +508,71 @@ internal class SupabaseRealtimeSignalingDataSource(
     }
 }
 
+@Serializable
+private data class SetResearchParticipationParams(
+    @SerialName("p_enabled") val enabled: Boolean,
+    @SerialName("p_accepted_consent_version") val acceptedConsentVersion: Int? = null,
+)
+
+@Serializable
+private data class ResearchParticipationStatusRow(
+    @SerialName("participation_on") val participationOn: Boolean,
+    @SerialName("current_consent_version") val currentConsentVersion: Int,
+    @SerialName("agreed_consent_version") val agreedConsentVersion: Int? = null,
+    @SerialName("reconsent_required") val reconsentRequired: Boolean,
+    @SerialName("research_subject_linked") val researchSubjectLinked: Boolean,
+    @SerialName("current_period_exists") val currentPeriodExists: Boolean,
+    @SerialName("current_participation_id") val currentParticipationId: String? = null,
+    @SerialName("current_period_started_at") val currentPeriodStartedAt: String? = null,
+    val eligible: Boolean,
+    @SerialName("can_view_research_data") val canViewResearchData: Boolean,
+    @SerialName("qualifying_game_count") val qualifyingGameCount: Int,
+    @SerialName("required_game_count") val requiredGameCount: Int,
+    @SerialName("window_days") val windowDays: Int,
+    @SerialName("collection_enabled") val collectionEnabled: Boolean,
+    @SerialName("collection_allowed") val collectionAllowed: Boolean,
+) {
+    fun toDomain() = ResearchParticipationStatus(
+        participationOn = participationOn,
+        currentConsentVersion = currentConsentVersion,
+        agreedConsentVersion = agreedConsentVersion,
+        reconsentRequired = reconsentRequired,
+        researchSubjectLinked = researchSubjectLinked,
+        currentPeriodExists = currentPeriodExists,
+        currentParticipationId = currentParticipationId,
+        currentPeriodStartedAtEpochMillis = currentPeriodStartedAt?.let(Instant::parse)?.toEpochMilli(),
+        eligible = eligible,
+        canViewResearchData = canViewResearchData,
+        qualifyingGameCount = qualifyingGameCount,
+        requiredGameCount = requiredGameCount,
+        windowDays = windowDays,
+        collectionEnabled = collectionEnabled,
+        collectionAllowed = collectionAllowed,
+    )
+}
+
+internal class SupabaseResearchParticipationRepository(
+    private val client: SupabaseClient,
+) : ResearchParticipationRepository {
+    override suspend fun status(): ResearchParticipationStatus = client.postgrest
+        .rpc("get_research_participation_status")
+        .decodeList<ResearchParticipationStatusRow>()
+        .single()
+        .toDomain()
+
+    override suspend fun setParticipation(
+        enabled: Boolean,
+        acceptedConsentVersion: Int?,
+    ): ResearchParticipationStatus = client.postgrest
+        .rpc(
+            "set_research_participation",
+            SetResearchParticipationParams(enabled, acceptedConsentVersion),
+        )
+        .decodeList<ResearchParticipationStatusRow>()
+        .single()
+        .toDomain()
+}
+
 /** Composition root for Supabase infrastructure. SDK types never cross this boundary. */
 class SupabaseComponent private constructor(
     val authGateway: AuthGateway,
@@ -514,6 +581,7 @@ class SupabaseComponent private constructor(
     val profileRepository: ProfileRepository,
     val accountDeletionRepository: AccountDeletionRepository,
     val gameRecordRepository: GameRecordRepository,
+    val researchParticipationRepository: ResearchParticipationRepository,
     val signalingDataSource: SupabaseSignalingDataSource,
     private val client: SupabaseClient,
     private val scope: CoroutineScope,
@@ -533,6 +601,7 @@ class SupabaseComponent private constructor(
             profileRepository = SupabaseProfileRepository(client),
             accountDeletionRepository = SupabaseAccountDeletionRepository(client),
             gameRecordRepository = SupabaseGameRecordRepository(client),
+            researchParticipationRepository = SupabaseResearchParticipationRepository(client),
             signalingDataSource = SupabaseRealtimeSignalingDataSource(client, scope),
             client = client,
             scope = scope,

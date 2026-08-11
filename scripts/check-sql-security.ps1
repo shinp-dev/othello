@@ -56,6 +56,20 @@ $requiredPatterns = @(
     'create or replace function public\.complete_account_deletion',
     'create or replace function public\.get_account_deletion_evidence',
     'account deletion is pending',
+    'create schema if not exists research_private',
+    'create table research_private\.consent_versions',
+    'create table research_private\.policy_versions',
+    'create table research_private\.research_subjects',
+    'create table research_private\.participation_periods',
+    'research_subject_one_link_per_account_idx',
+    'research_participation_one_open_idx',
+    'collection_enabled boolean not null default false',
+    'create or replace function public\.get_research_participation_status',
+    'create or replace function public\.set_research_participation',
+    'set search_path = ''''',
+    'revoke all on table[\s\S]*research_private\.consent_versions[\s\S]*from public, anon, authenticated',
+    'grant execute on function public\.get_research_participation_status\(\) to authenticated',
+    'grant execute on function public\.set_research_participation\(boolean, integer\) to authenticated',
     "coalesce\(nullif\(btrim\(new\.raw_user_meta_data ->> 'display_name'\), ''\), 'プレイヤー'\)"
 )
 $missing = $requiredPatterns | Where-Object { $sql -notmatch $_ }
@@ -73,5 +87,10 @@ if ($testSql -notmatch 'from pg_proc p') {
 $onlineRepair = Get-Content 'supabase/migrations/202608090013_online_contract_repairs.sql' -Raw
 if ($onlineRepair -match '(?s)create or replace function public\.enqueue_or_match\(\).*?cleanup_stale_created_matches') {
     Write-Error 'enqueue_or_match must not run global stale-match cleanup'; exit 1
+}
+$researchFoundation = Get-Content 'supabase/migrations/202608110018_research_foundation_consent.sql' -Raw
+if ($researchFoundation -match 'create\s+table\s+research_private\.(games|game_contributors|subject_position)' -or
+    $researchFoundation -match 'create\s+trigger') {
+    Write-Error 'research foundation migration must not implement match capture, contribution, aggregation, or triggers'; exit 1
 }
 Write-Output 'SQL security contract check passed'

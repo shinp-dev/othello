@@ -32,7 +32,7 @@ supabase link --project-ref <project-ref>
 supabase db push
 ```
 
-DashboardのSQL Editorを使う場合も、`202608090001_init.sql` から`202608090017_product_integrity_and_deletion.sql`までを順番に適用します。途中失敗時の部分適用を避けるため、まとめて実行する場合は `begin;` / `commit;` で囲みます。
+DashboardのSQL Editorを使う場合も、`202608090001_init.sql` から`202608110018_research_foundation_consent.sql`までを順番に適用します。途中失敗時の部分適用を避けるため、まとめて実行する場合は `begin;` / `commit;` で囲みます。
 
 適用後、`scripts/verify-hosted-supabase.sql` をSQL Editorで実行します。`realtime_tables` は `2`、ほかはすべて `true` であることを確認します。これにより次を同時に確認できます。
 
@@ -41,6 +41,7 @@ DashboardのSQL Editorを使う場合も、`202608090001_init.sql` から`202608
 - privateな `verification` bucket、5 MiB上限、JPEG/PNG/WebP制限
 - Androidクライアントに必要な最小Data API権限
 - account deletionのservice-role-only準備/完了RPCと匿名profile tombstone
+- research private schema、Consent/participation RPC、`collection_enabled = false`
 
 ## Auth
 
@@ -76,6 +77,7 @@ $env:OTHELLO_E2E_PLAYER_B_PASSWORD='<player-b-password>'
 3. A/Bが同一Projectへログインできる。
 4. Queue参加、Realtime signaling、DataChannel成立、両者start ACKまで到達する。
 5. 同一棋譜の結果提出で `CONFIRMED`、GameRecord 1件、Rating更新1回になる。
+6. 研究参加をON/OFFでき、研究収集は準備中（`collection_enabled = false`）と表示される。
 
 ## 信頼済み管理Worker
 
