@@ -143,6 +143,11 @@ if ($researchActions -match 'password\s+''' -or
     $researchActions -match 'collection_enabled\s*=\s*true') {
     Write-Error 'research Actions migration must not contain credentials, enable login, or activate collection'; exit 1
 }
+$researchPlatformAcl = Get-Content 'supabase/migrations/202608110023_research_batch_platform_acl.sql' -Raw
+if ($researchPlatformAcl -notmatch "to_regprocedure\('public\.rls_auto_enable\(\)'\)" -or
+    $researchPlatformAcl -notmatch 'revoke execute on function public\.rls_auto_enable\(\) from public') {
+    Write-Error 'Hosted platform event-trigger helper must not remain ambiently executable'; exit 1
+}
 $researchWorkflow = Get-Content '.github/workflows/research-batch.yml' -Raw
 if ($researchWorkflow -match 'SERVICE_ROLE' -or $researchWorkflow -match 'service_role') {
     Write-Error 'research Actions workflow must use the limited database credential, never service_role'; exit 1

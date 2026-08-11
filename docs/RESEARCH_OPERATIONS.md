@@ -25,11 +25,16 @@ Apply migrations in filename order:
 7. `202608110022_research_actions_batch.sql`
 8. Verify the `research_batch` role is `NOLOGIN`, has no private-table access,
    and can execute only the batch wrapper functions.
+9. `202608110023_research_batch_platform_acl.sql`
+10. Verify Hosted Supabase's `public.rls_auto_enable()` event-trigger helper
+    is not ambiently executable and the batch role still has exactly eight
+    application-schema functions.
 
 Migration 021 is required in production because it completes the account
 deletion boundary introduced by PR 2E. Migration 022 moves only the delayed
-research batch executor to GitHub Actions. Do not edit or re-run an already
-applied migration. Inspect the result after each file.
+research batch executor to GitHub Actions. Migration 023 closes an ambient ACL
+present on Hosted Supabase but absent from the local stack. Do not edit or
+re-run an already applied migration. Inspect the result after each file.
 
 ## Worker configuration
 

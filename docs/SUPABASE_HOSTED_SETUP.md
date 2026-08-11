@@ -32,10 +32,10 @@ supabase link --project-ref <project-ref>
 supabase db push
 ```
 
-Current repository endpoint: `202608110022_research_actions_batch.sql`.
-Apply migrations `001` through `022` in filename order. Migrations 020–022 add the
+Current repository endpoint: `202608110023_research_batch_platform_acl.sql`.
+Apply migrations `001` through `023` in filename order. Migrations 020–023 add the
 private aggregation/privacy boundary, account unlink lifecycle, and least-privilege
-Actions batch executor; none enables collection. The active policy must remain
+Actions batch executor/Hosted ACL hardening; none enables collection. The active policy must remain
 `collection_enabled = false` until
 the separate operations/launch phase.
 
