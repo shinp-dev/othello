@@ -282,6 +282,14 @@ async function processAccountDeletion(env: Env, userId: string): Promise<Respons
   });
   if (!prepared.ok) return prepared;
 
+  // The account link must be removed before Auth deletion. This call is
+  // service-only and idempotent so a worker crash can safely retry it.
+  const unlinked = await supabase(env, "/rest/v1/rpc/unlink_research_subject", {
+    method: "POST",
+    body: JSON.stringify({ p_user_id: userId }),
+  });
+  if (!unlinked.ok) return unlinked;
+
   const authDeleted = await supabase(env, `/auth/v1/admin/users/${userId}`, { method: "DELETE" });
   if (!authDeleted.ok && authDeleted.status !== 404) return authDeleted;
 

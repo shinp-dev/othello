@@ -1,6 +1,6 @@
 -- Run with `supabase test db` against local Supabase/Postgres + pgTAP.
 begin;
-select plan(252);
+select plan(266);
 
 select ok(not has_function_privilege('anon', 'public.prune_user_game_records(uuid)', 'execute'), 'anon cannot execute prune_user_game_records');
 select ok(not has_function_privilege('authenticated', 'public.prune_user_game_records(uuid)', 'execute'), 'authenticated cannot execute prune_user_game_records');
@@ -313,6 +313,8 @@ select is((select count(*)::int from research_private.games), 3, 'repeated captu
 select is((select count(*)::int from research_private.game_contributors), 4, 'repeated capture cannot duplicate a subject contribution');
 
 select public.request_account_deletion();
+select is((select link_state from research_private.research_subjects where account_user_id = '00000000-0000-0000-0000-000000000008'), 'DELETION_PENDING', 'deletion request marks the linked research subject pending');
+select is((select count(*)::int from research_private.participation_periods pp join research_private.research_subjects s using (research_subject_id) where s.account_user_id = '00000000-0000-0000-0000-000000000008' and pp.ended_at is null), 0, 'deletion request closes the open research period');
 select pg_temp.create_research_match('00000000-0000-0000-0000-000000000206');
 select is((select count(*)::int from research_private.games), 4, 'deletion-requested Black does not prevent opted-in White capture');
 select ok((select count(*) = 1 and bool_and(disc = 'WHITE')
@@ -909,6 +911,28 @@ select is((select count(*)::int from public.user_game_records where user_id = '0
 select is((select count(*)::int from public.user_game_records where user_id = '00000000-0000-0000-0000-000000000005'), 0, 'deleted user record references are removed');
 select is(public.complete_account_deletion('00000000-0000-0000-0000-000000000005'), 'COMPLETED', 'trusted worker completes deletion after Auth removal');
 select is((select status from public.account_deletion_requests where user_id = '00000000-0000-0000-0000-000000000005'), 'COMPLETED', 'completed deletion status is retained for audit');
+
+-- Research 2E: account deletion unlinks identity without touching research data.
+select ok(to_regprocedure('public.unlink_research_subject(uuid)') is not null, 'trusted research subject unlink RPC exists');
+select ok(not has_function_privilege('authenticated', 'public.unlink_research_subject(uuid)', 'execute'), 'authenticated users cannot unlink research subjects');
+select ok(has_function_privilege('service_role', 'public.unlink_research_subject(uuid)', 'execute'), 'only the trusted service role can unlink research subjects');
+create temporary table unlink_snapshot on commit drop as
+select s.research_subject_id,
+       (select count(*) from research_private.game_contributors c where c.research_subject_id = s.research_subject_id and c.contribution_status = 'ACCEPTED')::int as accepted_count
+  from research_private.research_subjects s
+ where s.account_user_id = '00000000-0000-0000-0000-000000000008';
+select is((select public.unlink_research_subject('00000000-0000-0000-0000-000000000008')), 'UNLINKED', 'trusted unlink moves a deletion-pending subject to UNLINKED');
+select is((select count(*)::int from research_private.research_subjects where research_subject_id = (select research_subject_id from unlink_snapshot)), 1, 'unlink retains the research subject row');
+select ok((select account_user_id is null and link_state = 'UNLINKED' and unlinked_at is not null from research_private.research_subjects where research_subject_id = (select research_subject_id from unlink_snapshot)), 'unlink removes the account link without leaving a tombstone UUID');
+select is((select count(*)::int from research_private.participation_periods where research_subject_id = (select research_subject_id from unlink_snapshot) and ended_at is null), 0, 'unlink leaves no open participation period');
+select is((select count(*)::int from research_private.game_contributors where research_subject_id = (select research_subject_id from unlink_snapshot) and contribution_status = 'ACCEPTED'), (select accepted_count from unlink_snapshot), 'unlink preserves accepted research contributions');
+select is((select public.unlink_research_subject('00000000-0000-0000-0000-000000000008')), 'ALREADY_UNLINKED', 'repeated trusted unlink is idempotent');
+select is((select count(*)::int from research_private.research_subjects where account_user_id = '00000000-0000-0000-0000-000000000008'), 0, 'unlinked subject cannot be resolved back to the deleted account');
+select ok(not exists (select 1 from information_schema.columns where table_schema = 'research_private' and table_name in ('games', 'game_contributors') and column_name = 'account_user_id'), 'research source and contributors have no account UUID column');
+select set_config('request.jwt.claim.role', 'authenticated', false);
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000008', false);
+select throws_ok($$select public.unlink_research_subject('00000000-0000-0000-0000-000000000008')$$, 'P0001', 'admin service role required', 'authenticated callers cannot invoke the service-only unlink RPC');
+select set_config('request.jwt.claim.role', 'service_role', false);
 
 select * from finish();
 rollback;
