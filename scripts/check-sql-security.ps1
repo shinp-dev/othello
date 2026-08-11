@@ -81,6 +81,21 @@ $requiredPatterns = @(
     'grant execute on function public\.claim_research_validation_batch\(integer, integer\) to service_role',
     'grant execute on function public\.complete_research_validation\(bigint, uuid, integer, boolean, text, integer, integer\) to service_role',
     'revoke all on table research_private\.games, research_private\.game_contributors[\s\S]*from public, anon, authenticated',
+    'create table research_private\.positions',
+    'create table research_private\.aggregation_generations',
+    'create table research_private\.subject_position_totals',
+    'create table research_private\.subject_position_moves',
+    'create table research_private\.position_aggregates',
+    'create table research_private\.move_aggregates',
+    'create table research_private\.published_generation',
+    'create or replace function public\.claim_research_aggregation_build',
+    'create or replace function public\.append_research_aggregation_game',
+    'create or replace function public\.publish_research_aggregation',
+    'create or replace function public\.fail_research_aggregation',
+    'create or replace function public\.get_research_position',
+    'grant execute on function public\.get_research_position\(text, text\) to authenticated',
+    'grant execute on function public\.publish_research_aggregation\(bigint, uuid\) to service_role',
+    'count\(distinct sm\.research_subject_id\)',
     "coalesce\(nullif\(btrim\(new\.raw_user_meta_data ->> 'display_name'\), ''\), 'プレイヤー'\)"
 )
 $missing = $requiredPatterns | Where-Object { $sql -notmatch $_ }
@@ -110,5 +125,10 @@ if ($researchCapture -match 'subject_position|position_aggregates|move_aggregate
 }
 if ($researchCapture -match 'grant execute on function research_private\.capture_confirmed_match\(uuid\) to service_role') {
     Write-Error 'confirmed capture must not expose a backfill-capable service entry point'; exit 1
+}
+$researchAggregation = Get-Content 'supabase/migrations/202608110020_research_aggregation_privacy.sql' -Raw
+if ($researchAggregation -match 'update\s+research_private\.policy_versions\s+set\s+collection_enabled\s*=\s*true' -or
+    $researchAggregation -match 'create\s+trigger') {
+    Write-Error 'research aggregation migration must not enable collection or add live-match triggers'; exit 1
 }
 Write-Output 'SQL security contract check passed'
