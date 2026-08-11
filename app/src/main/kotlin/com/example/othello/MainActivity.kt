@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.othello.auth.UserSession
+import com.example.othello.auth.SignUpResult
 import com.example.othello.analysis.edax.EdaxDataManager
 import com.example.othello.analysis.edax.ProductionAnalysisEngine
 import com.example.othello.designsystem.OthelloTheme
@@ -104,6 +105,8 @@ private fun OthelloApp(
     val component = sessionOwner.component
     var session by remember { mutableStateOf<UserSession?>(null) }
     var loginError by remember { mutableStateOf<String?>(null) }
+    var authNotice by remember { mutableStateOf<String?>(null) }
+    var authNoticeIsError by remember { mutableStateOf(false) }
     val matchmaking = sessionOwner.matchmaking
     var matchmakingState by remember { mutableStateOf(matchmaking?.state) }
     var p2pCoordinator by remember(sessionOwner) { mutableStateOf(sessionOwner.coordinator) }
@@ -115,7 +118,10 @@ private fun OthelloApp(
     LaunchedEffect(component) {
         runCatching { component?.authGateway?.currentSession() }
             .onSuccess { session = it }
-            .onFailure { loginError = it.message ?: "セッション確認に失敗しました" }
+            .onFailure {
+                loginError = it.message ?: "セッション確認に失敗しました"
+                authNoticeIsError = true
+            }
     }
     LaunchedEffect(session) {
         if (session == null) {
@@ -224,19 +230,55 @@ private fun OthelloApp(
                 configurationError = componentResult.exceptionOrNull()?.message,
                 session = session,
                 loginError = loginError,
+                authNotice = authNotice,
+                authNoticeIsError = authNoticeIsError,
                 onLogin = { email, password ->
                     val auth = component?.authGateway ?: return@HomeScreen
                     scope.launch {
                         runCatching { auth.signIn(email, password) }
-                            .onSuccess { session = it; loginError = null }
-                            .onFailure { loginError = it.message ?: "ログインに失敗しました" }
+                            .onSuccess {
+                                session = it
+                                loginError = null
+                                authNotice = null
+                            }
+                            .onFailure {
+                                loginError = it.message ?: "ログインに失敗しました"
+                                authNoticeIsError = true
+                            }
+                    }
+                },
+                onSignUp = { email, password ->
+                    val auth = component?.authGateway ?: return@HomeScreen
+                    scope.launch {
+                        runCatching { auth.signUp(email, password) }
+                            .onSuccess { result ->
+                                loginError = null
+                                when (result) {
+                                    is SignUpResult.SignedIn -> {
+                                        session = result.session
+                                        authNotice = "アカウントを作成しました"
+                                        authNoticeIsError = false
+                                    }
+                                    SignUpResult.EmailConfirmationRequired -> {
+                                        authNotice = "確認メールを送信しました。メール内のリンクを開いてからログインしてください。"
+                                        authNoticeIsError = false
+                                    }
+                                }
+                            }
+                            .onFailure {
+                                authNotice = it.message ?: "アカウント作成に失敗しました"
+                                authNoticeIsError = true
+                            }
                     }
                 },
                 onSignOut = {
                     scope.launch {
                         runCatching { component?.authGateway?.signOut() }
-                            .onSuccess { session = null; loginError = null }
-                            .onFailure { loginError = it.message ?: "ログアウトに失敗しました" }
+                            .onSuccess { session = null; loginError = null; authNotice = null }
+                            .onFailure {
+                                loginError = it.message ?: "ログアウトに失敗しました"
+                                authNoticeIsError = true
+                            }
                     }
                 },
                 onOnlineStart = { if (session != null) matchmaking?.let { scope.launch { it.enqueue() } } },
@@ -408,7 +450,10 @@ private fun HomeScreen(
     configurationError: String?,
     session: UserSession?,
     loginError: String?,
+    authNotice: String?,
+    authNoticeIsError: Boolean,
     onLogin: (String, String) -> Unit,
+    onSignUp: (String, String) -> Unit,
     onSignOut: () -> Unit,
     onOnlineStart: () -> Unit,
     onCancel: () -> Unit,
@@ -437,8 +482,28 @@ private fun HomeScreen(
                 visualTransformation = PasswordVisualTransformation(),
                 singleLine = true,
             )
-            Button(onClick = { onLogin(email, password) }, enabled = email.isNotBlank() && password.isNotBlank()) { Text("ログイン") }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(
+                    onClick = { onLogin(email, password) },
+                    enabled = email.isNotBlank() && password.isNotBlank(),
+                    modifier = Modifier.weight(1f),
+                ) { Text("ログイン") }
+                OutlinedButton(
+                    onClick = { onSignUp(email, password) },
+                    enabled = email.isNotBlank() && password.length >= 8,
+                    modifier = Modifier.weight(1f),
+                ) { Text("アカウント作成") }
+            }
             if (loginError != null) Text(loginError, color = MaterialTheme.colorScheme.error)
+            if (authNotice != null) {
+                Text(
+                    authNotice,
+                    color = if (authNoticeIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                )
+            }
         } else {
             Text("ログイン中: ${session.displayName}")
             OutlinedButton(onClick = onSignOut) { Text("ログアウト") }

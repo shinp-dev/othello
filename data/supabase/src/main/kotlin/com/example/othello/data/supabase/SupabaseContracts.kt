@@ -1,6 +1,7 @@
 package com.example.othello.data.supabase
 
 import com.example.othello.auth.AuthGateway
+import com.example.othello.auth.SignUpResult
 import com.example.othello.auth.UserSession
 import com.example.othello.credential.CredentialRepository
 import com.example.othello.credential.CredentialStatus
@@ -214,6 +215,17 @@ internal class SupabaseAuthGateway(private val client: SupabaseClient) : AuthGat
             this.password = password
         }
         return requireNotNull(currentSession())
+    }
+
+    override suspend fun signUp(email: String, password: String): SignUpResult {
+        require(email.isNotBlank()) { "email is required" }
+        require(password.length >= 8) { "password must be at least 8 characters" }
+        client.auth.signUpWith(Email) {
+            this.email = email
+            this.password = password
+        }
+        return currentSession()?.let(SignUpResult::SignedIn)
+            ?: SignUpResult.EmailConfirmationRequired
     }
 
     override suspend fun signIn(): UserSession = currentSession()

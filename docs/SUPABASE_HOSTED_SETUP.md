@@ -45,7 +45,8 @@ DashboardのSQL Editorを使う場合も、`202608090001_init.sql` から`202608
 ## Auth
 
 - Authentication > ProvidersでEmail providerを有効のままにする。
-- アプリはsign-up UIを持たないため、疎通用ユーザーA/BはAuthentication > Usersから作成する。
+- アプリの「アカウント作成」からEmail/Passwordユーザーを作成できる。確認メールを有効にする場合は、確認後にログインする。
+- 疎通用ユーザーA/Bを先に用意する場合は、Authentication > Usersから作成してもよい。
 - Dashboard作成時にAuto Confirm Userを有効にし、メール送信に依存させない。
 - A/Bのメールアドレスとパスワードはリポジトリへ保存しない。
 

@@ -8,7 +8,7 @@ transport tests are not a substitute for this run. Evidence is written below
 ## Required setup
 
 1. Start Docker Desktop and install the pinned Supabase CLI `2.101.0`. Run `supabase start` and apply all migrations.
-2. Create two local Auth users, for example `player-a@example.test` and `player-b@example.test`, without committing their passwords.
+2. Create two local Auth users from the in-app `アカウント作成` button, or from the Supabase Auth dashboard, for example `player-a@example.test` and `player-b@example.test`. Never commit their passwords.
 3. Build with emulator routing in untracked `local.properties`:
 
    ```properties
