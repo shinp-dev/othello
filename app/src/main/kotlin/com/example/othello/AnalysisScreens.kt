@@ -33,10 +33,23 @@ import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.launch
 
 @Composable
-internal fun SettingsScreen(onBack: () -> Unit, onAnalysis: () -> Unit, onAbout: () -> Unit) {
+internal fun SettingsScreen(
+    onBack: () -> Unit,
+    onAnalysis: () -> Unit,
+    onResearch: (() -> Unit)?,
+    onAbout: () -> Unit,
+) {
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SettingsHeader("設定", onBack)
         Button(onClick = onAnalysis, modifier = Modifier.fillMaxWidth()) { Text("解析") }
+        OutlinedButton(
+            onClick = { onResearch?.invoke() },
+            enabled = onResearch != null,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("研究参加") }
+        if (onResearch == null) {
+            Text("研究参加の設定にはログインが必要です", style = MaterialTheme.typography.bodySmall)
+        }
         OutlinedButton(onClick = onAbout, modifier = Modifier.fillMaxWidth()) { Text("このアプリについて") }
     }
 }
@@ -180,7 +193,7 @@ private fun AnalysisFileStatus(label: String, file: ImportedAnalysisFile?, requi
 }
 
 @Composable
-private fun SettingsHeader(title: String, onBack: () -> Unit) {
+internal fun SettingsHeader(title: String, onBack: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         OutlinedButton(onClick = onBack) { Text("戻る") }
         Text(title, style = MaterialTheme.typography.titleLarge)

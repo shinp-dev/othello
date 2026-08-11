@@ -1,10 +1,10 @@
-$liveModules = @('feature/match', 'feature/matchmaking')
+$liveModules = @('feature/match', 'feature/matchmaking', 'transport/webrtc')
 foreach ($liveModule in $liveModules) {
     $liveSources = Get-ChildItem -Path "$liveModule/src" -Recurse -File -ErrorAction SilentlyContinue
-    $violations = $liveSources | Select-String -Pattern 'analysis|edax' -CaseSensitive
+    $violations = $liveSources | Select-String -Pattern 'analysis|edax|research' -CaseSensitive
     if ($violations) { $violations | ForEach-Object { Write-Error $_.ToString() }; exit 1 }
     $liveBuild = Get-Content "$liveModule/build.gradle.kts" -Raw
-    if ($liveBuild -match 'analysis|edax') { Write-Error "$liveModule Gradle dependencies must not reference analysis/edax"; exit 1 }
+    if ($liveBuild -match 'analysis|edax|research') { Write-Error "$liveModule Gradle dependencies must not reference analysis/edax/research"; exit 1 }
 }
 $gameSources = Get-ChildItem -Path 'core/game/src' -Recurse -File -ErrorAction SilentlyContinue
 $gameViolations = $gameSources | Select-String -Pattern 'androidx|android\.content|supabase|webrtc|com\.google\.android' -CaseSensitive
@@ -54,4 +54,4 @@ $designSystemBuild = Get-Content 'core/designsystem/build.gradle.kts' -Raw
 if ($designSystemBuild -notmatch 'org\.jetbrains\.kotlin\.plugin\.compose') {
     Write-Error 'core:designsystem must apply the Compose compiler plugin to keep its composable ABI compatible'; exit 1
 }
-Write-Output 'dependency boundary check passed: live match is analysis-free; game/API/review and SDK boundaries are intact'
+Write-Output 'dependency boundary check passed: live match is analysis/research-free; game/API/review and SDK boundaries are intact'

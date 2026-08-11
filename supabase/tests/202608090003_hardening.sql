@@ -1,6 +1,6 @@
 -- Run with `supabase test db` against local Supabase/Postgres + pgTAP.
 begin;
-select plan(115);
+select plan(152);
 
 select ok(not has_function_privilege('anon', 'public.prune_user_game_records(uuid)', 'execute'), 'anon cannot execute prune_user_game_records');
 select ok(not has_function_privilege('authenticated', 'public.prune_user_game_records(uuid)', 'execute'), 'authenticated cannot execute prune_user_game_records');
@@ -55,6 +55,64 @@ select ok(not exists (
   select 1 from pg_proc where prosecdef and pronamespace = 'public'::regnamespace
     and proconfig @> array['search_path=public']
 ), 'public SECURITY DEFINER functions do not use search_path=public');
+select ok(to_regnamespace('research_private') is not null, 'private research schema exists');
+select ok(to_regclass('research_private.consent_versions') is not null, 'research consent versions exist');
+select ok(to_regclass('research_private.policy_versions') is not null, 'research policy versions exist');
+select ok(to_regclass('research_private.research_subjects') is not null, 'research subjects exist');
+select ok(to_regclass('research_private.participation_periods') is not null, 'research participation periods exist');
+select ok(not exists (
+  select 1 from pg_constraint
+   where conrelid = 'research_private.research_subjects'::regclass
+     and confrelid in ('auth.users'::regclass, 'public.profiles'::regclass)
+), 'research subjects have no Auth or profile foreign key');
+select is((select consent_version from research_private.consent_versions where consent_version = 1), 1, 'research consent version 1 is seeded');
+select ok((select not collection_enabled and eligibility_min_games = 10 and eligibility_window_days = 90
+  from research_private.policy_versions where is_active), 'active research policy is seeded with collection disabled');
+select ok(not has_schema_privilege('authenticated', 'research_private', 'usage'), 'authenticated cannot use the private research schema');
+select ok(not has_schema_privilege('anon', 'research_private', 'usage'), 'anon cannot use the private research schema');
+select ok(
+  (select bool_and(not has_table_privilege('authenticated', table_name, 'select')) from (values
+    ('research_private.consent_versions'), ('research_private.policy_versions'),
+    ('research_private.research_subjects'), ('research_private.participation_periods')
+  ) private_tables(table_name)),
+  'authenticated cannot directly read any private research table'
+);
+select ok(
+  (select bool_and(
+    not has_table_privilege('authenticated', table_name, 'insert')
+    and not has_table_privilege('authenticated', table_name, 'update')
+    and not has_table_privilege('authenticated', table_name, 'delete')
+  ) from (values
+    ('research_private.consent_versions'), ('research_private.policy_versions'),
+    ('research_private.research_subjects'), ('research_private.participation_periods')
+  ) private_tables(table_name)),
+  'authenticated cannot directly write any private research table'
+);
+select ok(
+  (select bool_and(
+    not has_table_privilege('anon', table_name, 'select')
+    and not has_table_privilege('anon', table_name, 'insert')
+    and not has_table_privilege('anon', table_name, 'update')
+    and not has_table_privilege('anon', table_name, 'delete')
+  ) from (values
+    ('research_private.consent_versions'), ('research_private.policy_versions'),
+    ('research_private.research_subjects'), ('research_private.participation_periods')
+  ) private_tables(table_name)),
+  'anon cannot directly read or write any private research table'
+);
+select ok(
+  (select bool_and(c.relrowsecurity) from pg_class c where c.oid in (
+    'research_private.consent_versions'::regclass,
+    'research_private.policy_versions'::regclass,
+    'research_private.research_subjects'::regclass,
+    'research_private.participation_periods'::regclass
+  )),
+  'RLS is enabled on every private research table'
+);
+select ok(has_function_privilege('authenticated', 'public.get_research_participation_status()', 'execute'), 'authenticated can read research status through RPC');
+select ok(has_function_privilege('authenticated', 'public.set_research_participation(boolean,integer)', 'execute'), 'authenticated can change research participation through RPC');
+select ok(not has_function_privilege('anon', 'public.get_research_participation_status()', 'execute'), 'anon cannot read research status');
+select ok(not has_function_privilege('anon', 'public.set_research_participation(boolean,integer)', 'execute'), 'anon cannot change research participation');
 
 -- Auth trigger fixtures. These are rolled back by Supabase's pgTAP runner.
 insert into auth.users (id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data)
@@ -66,6 +124,47 @@ values
  ('00000000-0000-0000-0000-000000000007', 'authenticated', 'authenticated', 'private-name@example.test', '', now(), '{}', '{}')
 on conflict (id) do nothing;
 select is((select display_name from public.profiles where id = '00000000-0000-0000-0000-000000000007'), 'プレイヤー', 'default public display name never derives from email');
+
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000007', false);
+select set_config('request.jwt.claim.role', 'authenticated', false);
+select ok(not (select participation_on from public.get_research_participation_status()), 'research participation starts OFF');
+select ok((select participation_on from public.set_research_participation(true, 1)), 'current consent opt-in turns participation ON');
+select is((select count(*)::int from research_private.research_subjects where account_user_id = '00000000-0000-0000-0000-000000000007'), 1, 'opt-in links exactly one research subject');
+select ok((select research_subject_id <> account_user_id from research_private.research_subjects where account_user_id = '00000000-0000-0000-0000-000000000007'), 'research subject ID is independent from account identity');
+select is((select count(*)::int from research_private.participation_periods where ended_at is null), 1, 'opt-in creates one open participation period');
+select public.set_research_participation(true, 1);
+select is((select count(*)::int from research_private.participation_periods), 1, 'repeated valid opt-in is idempotent');
+select throws_ok(
+  $$insert into research_private.research_subjects(account_user_id) values ('00000000-0000-0000-0000-000000000007')$$,
+  '23505', null, 'one account cannot have multiple linked research subjects'
+);
+select throws_ok(
+  $$insert into research_private.participation_periods(research_subject_id, policy_version_at_start, consent_version)
+    select s.research_subject_id, p.policy_version, p.research_consent_version
+      from research_private.research_subjects s cross join research_private.policy_versions p
+     where s.account_user_id = '00000000-0000-0000-0000-000000000007' and p.is_active$$,
+  '23505', null, 'one research subject cannot have multiple open participation periods'
+);
+select ok(not (select participation_on from public.set_research_participation(false)), 'opt-out turns participation OFF');
+select ok(not (select can_view_research_data from public.get_research_participation_status()), 'opt-out cannot retain research viewing eligibility');
+select is((select count(*)::int from research_private.participation_periods where ended_at is null), 0, 'opt-out closes the current period');
+select ok((select participation_on from public.set_research_participation(true, 1)), 're-opt-in starts participation again');
+select is((select count(*)::int from research_private.participation_periods), 2, 're-opt-in creates a new period instead of reopening the old one');
+
+insert into research_private.consent_versions(consent_version, effective_at, document_sha256, summary)
+values (2, now(), repeat('2', 64), 'test-only consent version 2');
+update research_private.policy_versions set is_active = false where is_active;
+insert into research_private.policy_versions(
+  effective_at, research_consent_version, eligibility_min_games, eligibility_window_days,
+  position_min_users, move_min_users, min_decisions_per_qualifying_game,
+  ruleset_version, normalization_version, collection_enabled, is_active
+) values (now(), 2, 10, 90, 100, 20, 10, 1, 1, false, true);
+select ok(not (select participation_on from public.get_research_participation_status()), 'consent mismatch is not active participation');
+select ok((select reconsent_required from public.get_research_participation_status()), 'consent mismatch requires re-consent');
+select ok(not (select collection_allowed from public.get_research_participation_status()), 'consent mismatch cannot collect research data');
+select ok((select participation_on from public.set_research_participation(true, 2)), 're-consent starts a current-version period');
+select is((select count(*)::int from research_private.participation_periods), 3, 're-consent creates another new period');
+select is((select count(*)::int from research_private.participation_periods where ended_at is null and consent_version = 2), 1, 'only one current-consent period remains open');
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
 select set_config('request.jwt.claim.role', 'authenticated', false);

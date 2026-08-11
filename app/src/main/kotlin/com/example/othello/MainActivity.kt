@@ -83,6 +83,7 @@ private enum class AppDestination {
     ACCOUNT_DELETION,
     SETTINGS,
     ANALYSIS_SETTINGS,
+    RESEARCH_SETTINGS,
     ABOUT,
     OSS_LICENSES,
 }
@@ -170,7 +171,9 @@ private fun OthelloApp(
             localMatch -> localMatch = false
             p2pCoordinator != null -> requestOnlineLeave()
             destination == AppDestination.REVIEW -> destination = AppDestination.RECORDS
-            destination == AppDestination.ANALYSIS_SETTINGS || destination == AppDestination.ABOUT -> destination = AppDestination.SETTINGS
+            destination == AppDestination.ANALYSIS_SETTINGS ||
+                destination == AppDestination.RESEARCH_SETTINGS ||
+                destination == AppDestination.ABOUT -> destination = AppDestination.SETTINGS
             destination == AppDestination.OSS_LICENSES -> destination = AppDestination.ABOUT
             else -> destination = AppDestination.HOME
         }
@@ -211,11 +214,18 @@ private fun OthelloApp(
             destination == AppDestination.SETTINGS -> SettingsScreen(
                 onBack = { destination = AppDestination.HOME },
                 onAnalysis = { destination = AppDestination.ANALYSIS_SETTINGS },
+                onResearch = if (session != null && component != null) {
+                    { destination = AppDestination.RESEARCH_SETTINGS }
+                } else null,
                 onAbout = { destination = AppDestination.ABOUT },
             )
             destination == AppDestination.ANALYSIS_SETTINGS -> AnalysisSettingsScreen(
                 manager = analysisDataManager,
                 onDataChanged = analysisEngine::clearCache,
+                onBack = { destination = AppDestination.SETTINGS },
+            )
+            destination == AppDestination.RESEARCH_SETTINGS && session != null && component != null -> ResearchSettingsScreen(
+                repository = component.researchParticipationRepository,
                 onBack = { destination = AppDestination.SETTINGS },
             )
             destination == AppDestination.ABOUT -> AboutScreen(
