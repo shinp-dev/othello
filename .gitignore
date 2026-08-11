@@ -11,3 +11,4 @@ supabase/.branches/
 build/e2e/
 cloudflare-admin/node_modules/
 cloudflare-admin/dist/
+cloudflare-admin/dist-batch/

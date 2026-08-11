@@ -32,10 +32,11 @@ supabase link --project-ref <project-ref>
 supabase db push
 ```
 
-Current repository endpoint: `202608110020_research_aggregation_privacy.sql`.
-Apply migrations `001` through `020` in filename order. Migration 020 adds only the
-private aggregation/generation pipeline and privacy-safe RPC boundary; it does not
-enable collection. The active policy must remain `collection_enabled = false` until
+Current repository endpoint: `202608110022_research_actions_batch.sql`.
+Apply migrations `001` through `022` in filename order. Migrations 020–022 add the
+private aggregation/privacy boundary, account unlink lifecycle, and least-privilege
+Actions batch executor; none enables collection. The active policy must remain
+`collection_enabled = false` until
 the separate operations/launch phase.
 
 After 019/020 are intentionally deployed, the trusted Worker can build one immutable
@@ -92,6 +93,6 @@ $env:OTHELLO_E2E_PLAYER_B_PASSWORD='<player-b-password>'
 
 ## 信頼済み管理Worker
 
-`cloudflare-admin/wrangler.toml`の`SUPABASE_URL`だけを対象Projectへ変更し、`SUPABASE_SERVICE_ROLE_KEY`と`ADMIN_TOKEN`は`wrangler secret put`で登録します。Gitへ値を保存しません。`SUPABASE_VERIFICATION_BUCKET`はmigrationが作る`verification`です。Worker Cronは10分ごとに削除要求を再実行し、Storage APIで証明画像を消してからDB匿名化とAuth Admin削除を行います。同じCronは、collection開始後に作成された研究gameを最大10件ずつ5分leaseでclaimし、独立したReversi validatorでACCEPTED/REJECTEDへ遷移させます。`collection_enabled=false`ではclaim対象自体が作られません。Cloudflare側で課金やカード登録を要求された場合はdeployせず、同じWorkerを別の信頼済み無料実行基盤へ配置します。
+`cloudflare-admin/wrangler.toml`の`SUPABASE_URL`だけを対象Projectへ変更し、`SUPABASE_SERVICE_ROLE_KEY`と`ADMIN_TOKEN`は`wrangler secret put`で登録します。Gitへ値を保存しません。`SUPABASE_VERIFICATION_BUCKET`はmigrationが作る`verification`です。Worker Cronは10分ごとに削除要求を再実行し、Storage APIで証明画像を消してからDB匿名化とAuth Admin削除を行います。Research validator / aggregationはGitHub Actionsの`Research batch` workflowが専用`research_batch` DB roleで実行します。Actionsへ`service_role`やDB owner passwordを渡してはいけません。`collection_enabled=false`ではbatch claimもno-opです。Cloudflare側で課金やカード登録を要求された場合はdeployしません。
 
 この環境を破棄しても、DB定義の正本は `supabase/migrations`、画面設定の正本はこの文書です。

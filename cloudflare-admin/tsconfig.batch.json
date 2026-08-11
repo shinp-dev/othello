@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "rootDir": "src",
+    "outDir": "dist-batch",
+    "noEmit": false
+  },
+  "include": ["src/research-validator.ts", "src/research-batch.ts"]
+}

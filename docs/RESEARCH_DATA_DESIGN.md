@@ -665,7 +665,7 @@ Supabase/Postgresの通常viewはcreator権限で動作する場合があり、�
 ### Computation
 
 - finalization hot pathは数行snapshotだけ。
-- validation/aggregationはworkerまたはCronのbatchで行う。
+- validation/aggregationはGitHub Actionsのscheduled single jobで行う。Cloudflare Worker Cronはaccount deletion等の軽量・期限優先処理へ限定する。
 - 1 gameごとにpublic aggregateを全面再構築しない。subject/positionのaffected keyだけincremental更新し、定期full rebuildで監査する。
 - 大きなpolicy/rating bucket変更は新generationをoff-pathでbuildして切り替える。
 - Supabase CronはSQL/function/HTTP jobを実行できるが、公式推奨どおり長時間・高並列jobを避ける。worker batchは小さく再開可能にする。
@@ -895,6 +895,6 @@ Supabase/Postgresの通常viewはcreator権限で動作する場合があり、�
 - rating帯はserverのrating before snapshotを使う。現在rating/client ratingを使わない。
 - Androidへraw研究データ、user ID、match ID、opponent filterを渡さない。client-facing surfaceはeligibility/threshold適用済みRPCだけ。
 - live match moduleからresearchへ依存させない。Edaxは従来どおりlocal Review専用で、Review UIだけが座標上で研究値と比較する。
-- heavy validation/aggregationはfinalization hot pathで行わず、trusted workerのlease付きidempotent batchで行う。
+- heavy validation/aggregationはfinalization hot pathで行わず、専用最小権限DB roleを使うGitHub Actionsのlease付き・bounded・idempotent batchで行う。Actionsへservice_roleは渡さない。
 - account deletion完了前に、capture停止・period close・subject unlinkをretry可能に完了させる。研究weightの再集計・削除は行わない。
 - 実装開始前に決める未確定のプロダクト仕様はない。worker配置やbatch size等は第17章の実装時判断に従う。
