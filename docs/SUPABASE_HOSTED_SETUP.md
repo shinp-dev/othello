@@ -32,7 +32,7 @@ supabase link --project-ref <project-ref>
 supabase db push
 ```
 
-DashboardのSQL Editorを使う場合も、`202608090001_init.sql` から`202608110018_research_foundation_consent.sql`までを順番に適用します。途中失敗時の部分適用を避けるため、まとめて実行する場合は `begin;` / `commit;` で囲みます。
+DashboardのSQL Editorを使う場合も、`202608090001_init.sql` から`202608110019_research_capture_validator.sql`までを順番に適用します。途中失敗時の部分適用を避けるため、まとめて実行する場合は `begin;` / `commit;` で囲みます。
 
 適用後、`scripts/verify-hosted-supabase.sql` をSQL Editorで実行します。`realtime_tables` は `2`、ほかはすべて `true` であることを確認します。これにより次を同時に確認できます。
 
@@ -41,7 +41,8 @@ DashboardのSQL Editorを使う場合も、`202608090001_init.sql` から`202608
 - privateな `verification` bucket、5 MiB上限、JPEG/PNG/WebP制限
 - Androidクライアントに必要な最小Data API権限
 - account deletionのservice-role-only準備/完了RPCと匿名profile tombstone
-- research private schema、Consent/participation RPC、`collection_enabled = false`
+- research private schema、Consent/participation RPC、compact source、service-only validator RPC
+- active research policyの`collection_enabled = false`（019適用だけでは収集開始しない）
 
 ## Auth
 
@@ -81,6 +82,6 @@ $env:OTHELLO_E2E_PLAYER_B_PASSWORD='<player-b-password>'
 
 ## 信頼済み管理Worker
 
-`cloudflare-admin/wrangler.toml`の`SUPABASE_URL`だけを対象Projectへ変更し、`SUPABASE_SERVICE_ROLE_KEY`と`ADMIN_TOKEN`は`wrangler secret put`で登録します。Gitへ値を保存しません。`SUPABASE_VERIFICATION_BUCKET`はmigrationが作る`verification`です。Worker Cronは10分ごとに削除要求を再実行し、Storage APIで証明画像を消してからDB匿名化とAuth Admin削除を行います。Cloudflare側で課金やカード登録を要求された場合はdeployせず、同じWorkerを別の信頼済み無料実行基盤へ配置します。
+`cloudflare-admin/wrangler.toml`の`SUPABASE_URL`だけを対象Projectへ変更し、`SUPABASE_SERVICE_ROLE_KEY`と`ADMIN_TOKEN`は`wrangler secret put`で登録します。Gitへ値を保存しません。`SUPABASE_VERIFICATION_BUCKET`はmigrationが作る`verification`です。Worker Cronは10分ごとに削除要求を再実行し、Storage APIで証明画像を消してからDB匿名化とAuth Admin削除を行います。同じCronは、collection開始後に作成された研究gameを最大10件ずつ5分leaseでclaimし、独立したReversi validatorでACCEPTED/REJECTEDへ遷移させます。`collection_enabled=false`ではclaim対象自体が作られません。Cloudflare側で課金やカード登録を要求された場合はdeployせず、同じWorkerを別の信頼済み無料実行基盤へ配置します。
 
 この環境を破棄しても、DB定義の正本は `supabase/migrations`、画面設定の正本はこの文書です。

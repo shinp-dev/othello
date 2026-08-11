@@ -2,7 +2,13 @@
   "name": "othello-admin",
   "private": true,
   "type": "module",
-  "scripts": { "dev": "wrangler dev", "deploy": "wrangler deploy", "typecheck": "tsc --noEmit" },
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "build:test": "tsc --outDir dist",
+    "test": "npm run build:test && node --test test/*.test.mjs"
+  },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260809.1",
     "typescript": "5.9.3",

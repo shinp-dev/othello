@@ -70,6 +70,17 @@ $requiredPatterns = @(
     'revoke all on table[\s\S]*research_private\.consent_versions[\s\S]*from public, anon, authenticated',
     'grant execute on function public\.get_research_participation_status\(\) to authenticated',
     'grant execute on function public\.set_research_participation\(boolean, integer\) to authenticated',
+    'create table research_private\.games',
+    'create table research_private\.game_contributors',
+    'capture_confirmed_match_for_research',
+    'source_match_key bytea not null unique',
+    'rating - rh\.delta',
+    'for update skip locked',
+    'create or replace function public\.claim_research_validation_batch',
+    'create or replace function public\.complete_research_validation',
+    'grant execute on function public\.claim_research_validation_batch\(integer, integer\) to service_role',
+    'grant execute on function public\.complete_research_validation\(bigint, uuid, integer, boolean, text, integer, integer\) to service_role',
+    'revoke all on table research_private\.games, research_private\.game_contributors[\s\S]*from public, anon, authenticated',
     "coalesce\(nullif\(btrim\(new\.raw_user_meta_data ->> 'display_name'\), ''\), 'プレイヤー'\)"
 )
 $missing = $requiredPatterns | Where-Object { $sql -notmatch $_ }
@@ -92,5 +103,12 @@ $researchFoundation = Get-Content 'supabase/migrations/202608110018_research_fou
 if ($researchFoundation -match 'create\s+table\s+research_private\.(games|game_contributors|subject_position)' -or
     $researchFoundation -match 'create\s+trigger') {
     Write-Error 'research foundation migration must not implement match capture, contribution, aggregation, or triggers'; exit 1
+}
+$researchCapture = Get-Content 'supabase/migrations/202608110019_research_capture_validator.sql' -Raw
+if ($researchCapture -match 'subject_position|position_aggregates|move_aggregates|aggregation_generations|get_research_position') {
+    Write-Error 'research capture migration must not implement aggregation, publication, or Review APIs'; exit 1
+}
+if ($researchCapture -match 'grant execute on function research_private\.capture_confirmed_match\(uuid\) to service_role') {
+    Write-Error 'confirmed capture must not expose a backfill-capable service entry point'; exit 1
 }
 Write-Output 'SQL security contract check passed'

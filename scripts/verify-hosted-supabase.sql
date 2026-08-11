@@ -30,12 +30,25 @@ select jsonb_build_object(
   'research_private_schema', to_regnamespace('research_private') is not null,
   'research_status_rpc', to_regprocedure('public.get_research_participation_status()') is not null,
   'research_participation_rpc', to_regprocedure('public.set_research_participation(boolean,integer)') is not null,
+  'research_compact_source',
+    to_regclass('research_private.games') is not null
+    and to_regclass('research_private.game_contributors') is not null,
+  'research_validator_rpc',
+    to_regprocedure('public.claim_research_validation_batch(integer,integer)') is not null
+    and to_regprocedure('public.complete_research_validation(bigint,uuid,integer,boolean,text,integer,integer)') is not null,
+  'research_validator_service_only',
+    not has_function_privilege('authenticated', 'public.claim_research_validation_batch(integer,integer)', 'EXECUTE')
+    and not has_function_privilege('authenticated', 'public.complete_research_validation(bigint,uuid,integer,boolean,text,integer,integer)', 'EXECUTE')
+    and has_function_privilege('service_role', 'public.claim_research_validation_batch(integer,integer)', 'EXECUTE')
+    and has_function_privilege('service_role', 'public.complete_research_validation(bigint,uuid,integer,boolean,text,integer,integer)', 'EXECUTE'),
   'research_collection_disabled', exists (
     select 1 from research_private.policy_versions where is_active and not collection_enabled
   ),
   'research_private_acl',
     not has_schema_privilege('authenticated', 'research_private', 'USAGE')
-    and not has_schema_privilege('anon', 'research_private', 'USAGE'),
+    and not has_schema_privilege('anon', 'research_private', 'USAGE')
+    and not has_table_privilege('authenticated', 'research_private.games', 'SELECT')
+    and not has_table_privilege('authenticated', 'research_private.game_contributors', 'SELECT'),
   'profiles_select', has_table_privilege('authenticated', 'public.profiles', 'SELECT'),
   'profile_name_update', has_column_privilege('authenticated', 'public.profiles', 'display_name', 'UPDATE'),
   'ratings_select', has_table_privilege('authenticated', 'public.ratings', 'SELECT'),
