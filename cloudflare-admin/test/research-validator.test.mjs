@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { validateResearchGame } from "../dist/research-validator.js";
+import { extractResearchDecisions, validateResearchGame } from "../dist/research-validator.js";
 
 const properties = Object.fromEntries(
   readFileSync(new URL("../../core/game/src/test/resources/research-validator-v1.properties", import.meta.url), "utf8")
@@ -80,4 +80,35 @@ test("non-normal draw is rejected as inconsistent with the online finish protoco
     }),
     { accepted: false, rejectionCode: "NON_NORMAL_DRAW" },
   );
+});
+
+test("aggregation extraction emits only the opted-in side and excludes passes", () => {
+  const decisions = extractResearchDecisions(normal, [{
+    researchSubjectId: "11111111-1111-4111-8111-111111111111",
+    disc: "BLACK",
+    outcome: "WIN",
+  }]);
+  assert.equal(decisions.length, Number(properties["normal.blackDecisionCount"]));
+  assert.ok(decisions.every(decision => decision.side === "BLACK"));
+  assert.ok(decisions.every(decision => /^[0-9a-f]{16}$/.test(decision.black_hex)));
+  assert.ok(decisions.every(decision => /^[0-9a-f]{16}$/.test(decision.legal_move_mask_hex)));
+  assert.equal(decisions[0].move_index, 19);
+  assert.equal(decisions[0].black_hex, "0000000810000000");
+  assert.equal(decisions[0].white_hex, "0000001008000000");
+  assert.equal(decisions[0].side, "BLACK");
+});
+
+test("aggregation child positions resolve forced pass to the next choice", () => {
+  const decisions = extractResearchDecisions(normal, [
+    { researchSubjectId: "11111111-1111-4111-8111-111111111111", disc: "BLACK", outcome: "WIN" },
+    { researchSubjectId: "22222222-2222-4222-8222-222222222222", disc: "WHITE", outcome: "LOSS" },
+  ]);
+  assert.equal(decisions.length,
+    Number(properties["normal.blackDecisionCount"]) + Number(properties["normal.whiteDecisionCount"]));
+  const passOffset = normal.canonicalMoves.indexOf("--");
+  const moveBeforePass = normal.canonicalMoves.slice(0, passOffset).match(/.{2}/g).filter(token => token !== "--").length - 1;
+  const beforePass = decisions[moveBeforePass];
+  assert.ok(beforePass.child_side);
+  assert.equal(beforePass.child_side, beforePass.side);
+  assert.notEqual(beforePass.child_legal_move_mask_hex, "0000000000000000");
 });

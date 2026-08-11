@@ -32,6 +32,16 @@ supabase link --project-ref <project-ref>
 supabase db push
 ```
 
+Current repository endpoint: `202608110020_research_aggregation_privacy.sql`.
+Apply migrations `001` through `020` in filename order. Migration 020 adds only the
+private aggregation/generation pipeline and privacy-safe RPC boundary; it does not
+enable collection. The active policy must remain `collection_enabled = false` until
+the separate operations/launch phase.
+
+After 019/020 are intentionally deployed, the trusted Worker can build one immutable
+aggregate generation through authenticated `POST /admin/research/aggregate`. This is
+an operator action in this stage; no production aggregation schedule is configured.
+
 DashboardのSQL Editorを使う場合も、`202608090001_init.sql` から`202608110019_research_capture_validator.sql`までを順番に適用します。途中失敗時の部分適用を避けるため、まとめて実行する場合は `begin;` / `commit;` で囲みます。
 
 適用後、`scripts/verify-hosted-supabase.sql` をSQL Editorで実行します。`realtime_tables` は `2`、ほかはすべて `true` であることを確認します。これにより次を同時に確認できます。

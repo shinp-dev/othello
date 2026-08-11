@@ -1,6 +1,6 @@
 -- Run with `supabase test db` against local Supabase/Postgres + pgTAP.
 begin;
-select plan(194);
+select plan(252);
 
 select ok(not has_function_privilege('anon', 'public.prune_user_game_records(uuid)', 'execute'), 'anon cannot execute prune_user_game_records');
 select ok(not has_function_privilege('authenticated', 'public.prune_user_game_records(uuid)', 'execute'), 'authenticated cannot execute prune_user_game_records');
@@ -62,6 +62,12 @@ select ok(to_regclass('research_private.research_subjects') is not null, 'resear
 select ok(to_regclass('research_private.participation_periods') is not null, 'research participation periods exist');
 select ok(to_regclass('research_private.games') is not null, 'private compact research games exist');
 select ok(to_regclass('research_private.game_contributors') is not null, 'private research contributors exist');
+select ok(to_regclass('research_private.positions') is not null, 'research position dictionary exists');
+select ok(to_regclass('research_private.aggregation_generations') is not null, 'research aggregate generations exist');
+select ok(to_regclass('research_private.subject_position_totals') is not null, 'private subject-position totals exist');
+select ok(to_regclass('research_private.move_aggregates') is not null, 'private published move aggregates exist');
+select ok(to_regclass('research_private.published_generation') is not null, 'atomic published generation pointer exists');
+select ok(to_regprocedure('public.get_research_position(text,text)') is not null, 'privacy-safe research position RPC exists');
 select ok(not exists (
   select 1 from pg_constraint
    where conrelid = 'research_private.research_subjects'::regclass
@@ -76,7 +82,12 @@ select ok(
   (select bool_and(not has_table_privilege('authenticated', table_name, 'select')) from (values
     ('research_private.consent_versions'), ('research_private.policy_versions'),
     ('research_private.research_subjects'), ('research_private.participation_periods'),
-    ('research_private.games'), ('research_private.game_contributors')
+    ('research_private.games'), ('research_private.game_contributors'),
+    ('research_private.positions'), ('research_private.aggregation_generations'),
+    ('research_private.aggregation_segments'), ('research_private.generation_processed_games'),
+    ('research_private.subject_position_totals'), ('research_private.subject_position_moves'),
+    ('research_private.position_aggregates'), ('research_private.move_aggregates'),
+    ('research_private.published_generation')
   ) private_tables(table_name)),
   'authenticated cannot directly read any private research table'
 );
@@ -88,7 +99,12 @@ select ok(
   ) from (values
     ('research_private.consent_versions'), ('research_private.policy_versions'),
     ('research_private.research_subjects'), ('research_private.participation_periods'),
-    ('research_private.games'), ('research_private.game_contributors')
+    ('research_private.games'), ('research_private.game_contributors'),
+    ('research_private.positions'), ('research_private.aggregation_generations'),
+    ('research_private.aggregation_segments'), ('research_private.generation_processed_games'),
+    ('research_private.subject_position_totals'), ('research_private.subject_position_moves'),
+    ('research_private.position_aggregates'), ('research_private.move_aggregates'),
+    ('research_private.published_generation')
   ) private_tables(table_name)),
   'authenticated cannot directly write any private research table'
 );
@@ -101,7 +117,12 @@ select ok(
   ) from (values
     ('research_private.consent_versions'), ('research_private.policy_versions'),
     ('research_private.research_subjects'), ('research_private.participation_periods'),
-    ('research_private.games'), ('research_private.game_contributors')
+    ('research_private.games'), ('research_private.game_contributors'),
+    ('research_private.positions'), ('research_private.aggregation_generations'),
+    ('research_private.aggregation_segments'), ('research_private.generation_processed_games'),
+    ('research_private.subject_position_totals'), ('research_private.subject_position_moves'),
+    ('research_private.position_aggregates'), ('research_private.move_aggregates'),
+    ('research_private.published_generation')
   ) private_tables(table_name)),
   'anon cannot directly read or write any private research table'
 );
@@ -112,7 +133,16 @@ select ok(
     'research_private.research_subjects'::regclass,
     'research_private.participation_periods'::regclass,
     'research_private.games'::regclass,
-    'research_private.game_contributors'::regclass
+    'research_private.game_contributors'::regclass,
+    'research_private.positions'::regclass,
+    'research_private.aggregation_generations'::regclass,
+    'research_private.aggregation_segments'::regclass,
+    'research_private.generation_processed_games'::regclass,
+    'research_private.subject_position_totals'::regclass,
+    'research_private.subject_position_moves'::regclass,
+    'research_private.position_aggregates'::regclass,
+    'research_private.move_aggregates'::regclass,
+    'research_private.published_generation'::regclass
   )),
   'RLS is enabled on every private research table'
 );
@@ -125,6 +155,13 @@ select ok(not has_function_privilege('authenticated', 'public.complete_research_
 select ok(not has_function_privilege('anon', 'public.claim_research_validation_batch(integer,integer)', 'execute'), 'anon cannot claim research validation jobs');
 select ok(has_function_privilege('service_role', 'public.claim_research_validation_batch(integer,integer)', 'execute'), 'service role can claim research validation jobs');
 select ok(has_function_privilege('service_role', 'public.complete_research_validation(bigint,uuid,integer,boolean,text,integer,integer)', 'execute'), 'service role can complete research validation jobs');
+select ok(has_function_privilege('authenticated', 'public.get_research_position(text,text)', 'execute'), 'authenticated can call the privacy-safe research position RPC');
+select ok(not has_function_privilege('anon', 'public.get_research_position(text,text)', 'execute'), 'anon cannot call the research position RPC');
+select ok(not has_function_privilege('authenticated', 'public.claim_research_aggregation_build(integer)', 'execute'), 'authenticated cannot claim aggregate builds');
+select ok(not has_function_privilege('authenticated', 'public.get_research_aggregation_sources(bigint,uuid,bigint,integer)', 'execute'), 'authenticated cannot read aggregate source pages');
+select ok(not has_function_privilege('authenticated', 'public.append_research_aggregation_game(bigint,uuid,bigint,jsonb)', 'execute'), 'authenticated cannot append aggregate decisions');
+select ok(not has_function_privilege('authenticated', 'public.publish_research_aggregation(bigint,uuid)', 'execute'), 'authenticated cannot publish aggregate generations');
+select ok(not has_function_privilege('authenticated', 'public.fail_research_aggregation(bigint,uuid,text)', 'execute'), 'authenticated cannot fail aggregate generations');
 select ok(not exists (
   select 1 from pg_constraint
    where conrelid = 'research_private.games'::regclass
@@ -360,6 +397,338 @@ select throws_ok(
 select is((select public.complete_research_validation(
   research_game_id, lease_token, 1, true, null, 0, 0
 ) from reclaimed_research_game), 'ACCEPTED', 'current lease holder can complete the reclaimed game');
+
+-- Research 2C: eligibility, subject-normalized aggregation, generation publication,
+-- and threshold-safe client output. The large subject fixture exists only in this
+-- rolled-back pgTAP transaction and does not enable collection in migration seed data.
+insert into auth.users (id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data)
+values ('00000000-0000-0000-0000-000000000010', 'authenticated', 'authenticated',
+  'research-reader@example.test', '', now(), '{}', '{"display_name":"research-reader"}');
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000010', false);
+select set_config('request.jwt.claim.role', 'authenticated', false);
+select public.set_research_participation(true, 3);
+update research_private.participation_periods
+   set started_at = now() - interval '100 days'
+ where participation_id = (select current_participation_id from public.get_research_participation_status());
+
+create function pg_temp.add_research_eligibility_game(
+  p_label text,
+  p_validation_status text,
+  p_decision_count integer,
+  p_confirmed_at timestamptz
+) returns bigint language plpgsql as $$
+declare new_game_id bigint;
+declare subject_id uuid;
+declare period_id uuid;
+begin
+  select s.research_subject_id, pp.participation_id into subject_id, period_id
+    from research_private.research_subjects s
+    join research_private.participation_periods pp on pp.research_subject_id = s.research_subject_id
+   where s.account_user_id = '00000000-0000-0000-0000-000000000010' and pp.ended_at is null;
+  insert into research_private.games(
+    source_match_key, canonical_moves, result, finish_reason, final_position_hash,
+    time_control, confirmed_at, ruleset_version, validation_status, validator_version,
+    lease_token, lease_expires_at, processed_at, rejection_code
+  ) values (
+    digest(p_label, 'sha256'), '', 'BLACK_WIN', 'RESIGNATION', '0000000000000000:1:0:0',
+    'RAPID_10M', p_confirmed_at, 1, p_validation_status,
+    case when p_validation_status in ('ACCEPTED', 'REJECTED') then 1 end,
+    case when p_validation_status in ('ACCEPTED', 'REJECTED') then gen_random_uuid() end,
+    null,
+    case when p_validation_status in ('ACCEPTED', 'REJECTED') then now() end,
+    case when p_validation_status = 'REJECTED' then 'TEST_REJECTED' end
+  ) returning research_game_id into new_game_id;
+  insert into research_private.game_contributors(
+    research_game_id, research_subject_id, participation_id, disc, rating_before,
+    rating_algorithm_version, outcome_from_subject_perspective, confirmed_at,
+    contribution_status, decision_count, accepted_at
+  ) values (
+    new_game_id, subject_id, period_id, 'BLACK', 1500, 'elo-v1', 'WIN', p_confirmed_at,
+    p_validation_status,
+    case when p_validation_status = 'ACCEPTED' then p_decision_count end,
+    case when p_validation_status = 'ACCEPTED' then now() end
+  );
+  return new_game_id;
+end;
+$$;
+
+select pg_temp.add_research_eligibility_game('eligible-' || i, 'ACCEPTED', 10, now() - interval '1 day')
+  from generate_series(1, 9) i;
+select is((select qualifying_game_count from public.get_research_participation_status()), 9,
+  'nine current-period accepted qualifying games are not yet eligible');
+select pg_temp.add_research_eligibility_game('short-accepted', 'ACCEPTED', 9, now() - interval '1 day');
+select is((select qualifying_game_count from public.get_research_participation_status()), 9,
+  'accepted decision_count 9 contributes no qualifying game');
+select pg_temp.add_research_eligibility_game('validator-rejected', 'REJECTED', null, now() - interval '1 day');
+select is((select qualifying_game_count from public.get_research_participation_status()), 9,
+  'validator rejected contribution contributes no qualifying game');
+select pg_temp.add_research_eligibility_game('validator-pending', 'PENDING', null, now() - interval '1 day');
+select is((select qualifying_game_count from public.get_research_participation_status()), 9,
+  'pending contribution contributes no qualifying game');
+select pg_temp.add_research_eligibility_game('window-inclusive', 'ACCEPTED', 10, now() - interval '90 days');
+select is((select qualifying_game_count from public.get_research_participation_status()), 10,
+  'the exact 90-day lower boundary is inclusive');
+select ok((select eligible from public.get_research_participation_status()),
+  'ten current-period accepted qualifying games make the caller eligible');
+select pg_temp.add_research_eligibility_game('window-too-old', 'ACCEPTED', 10,
+  now() - interval '90 days' - interval '1 microsecond');
+select is((select qualifying_game_count from public.get_research_participation_status()), 10,
+  'a contribution older than the 90-day boundary is excluded');
+create temporary table append_source on commit drop as
+select pg_temp.add_research_eligibility_game(
+  'aggregate-append-source', 'ACCEPTED', 1, now() - interval '1 day'
+) as research_game_id;
+
+select set_config('request.jwt.claim.role', 'service_role', false);
+create temporary table aggregation_claim on commit drop as
+select * from public.claim_research_aggregation_build(900);
+select is((select count(*)::int from aggregation_claim), 1, 'service worker claims one aggregate generation');
+select is((select status from research_private.aggregation_generations
+  where generation_id = (select generation_id from aggregation_claim)), 'BUILDING',
+  'claimed aggregate generation remains private while building');
+select is((select count(*)::int from research_private.published_generation), 0,
+  'a building generation does not create the public generation pointer');
+create temporary table aggregation_sources on commit drop as
+select * from public.get_research_aggregation_sources(
+  (select generation_id from aggregation_claim), (select lease_token from aggregation_claim), 0, 100
+);
+select ok(not exists (
+  select 1 from aggregation_sources s join research_private.games g using (research_game_id)
+   where g.validation_status <> 'ACCEPTED'
+), 'aggregate source page includes only trusted ACCEPTED games');
+select ok((select public.append_research_aggregation_game(
+  c.generation_id, c.lease_token, a.research_game_id,
+  jsonb_build_array(jsonb_build_object(
+    'research_subject_id', s.research_subject_id,
+    'black_hex', '0000000000000001', 'white_hex', '0000000000000002',
+    'side', 'BLACK', 'legal_move_mask_hex', '0000000000000004',
+    'move_index', 2, 'outcome', 'WIN'
+  )))
+  from aggregation_claim c cross join append_source a
+  cross join research_private.research_subjects s
+  where s.account_user_id = '00000000-0000-0000-0000-000000000010'),
+  'service append records one accepted game exactly once');
+select ok(not (select public.append_research_aggregation_game(
+  c.generation_id, c.lease_token, a.research_game_id,
+  jsonb_build_array(jsonb_build_object(
+    'research_subject_id', s.research_subject_id,
+    'black_hex', '0000000000000001', 'white_hex', '0000000000000002',
+    'side', 'BLACK', 'legal_move_mask_hex', '0000000000000004',
+    'move_index', 2, 'outcome', 'WIN'
+  )))
+  from aggregation_claim c cross join append_source a
+  cross join research_private.research_subjects s
+  where s.account_user_id = '00000000-0000-0000-0000-000000000010'),
+  'service append retry does not duplicate weight');
+
+create temporary table aggregate_subjects(n integer primary key, research_subject_id uuid not null unique) on commit drop;
+insert into aggregate_subjects select i, gen_random_uuid() from generate_series(1, 100) i;
+insert into research_private.research_subjects(research_subject_id, account_user_id, link_state, unlinked_at)
+select research_subject_id, null, 'UNLINKED', now() from aggregate_subjects;
+
+create temporary table aggregate_positions(label text primary key, position_id bigint not null) on commit drop;
+insert into aggregate_positions values
+  ('parent', research_private.upsert_position(1, 1, '0000000810000000', '0000001008000000', 'BLACK', '0000102004080000')),
+  ('child99', research_private.upsert_position(1, 1, '0000000818080000', '0000001000000000', 'WHITE', '0000000000000001')),
+  ('child100', research_private.upsert_position(1, 1, '000000001c000000', '0000001c00000000', 'WHITE', '0000000000000001'));
+
+insert into research_private.subject_position_totals(
+  generation_id, segment_key, position_id, research_subject_id, occurrence_count
+)
+select c.generation_id, 'ALL', p.position_id, s.research_subject_id,
+       case when s.n = 1 then 100 when s.n in (2, 21) then 2 else 1 end
+  from aggregation_claim c cross join aggregate_subjects s
+  cross join aggregate_positions p where p.label = 'parent';
+insert into research_private.subject_position_moves(
+  generation_id, segment_key, position_id, research_subject_id, move_index,
+  choice_count, win_count, draw_count, loss_count, child_position_id
+)
+select c.generation_id, 'ALL', parent.position_id, s.research_subject_id, 26,
+       case when s.n = 1 then 80 else 1 end,
+       case when s.n = 1 then 80 else 1 end, 0, 0, child99.position_id
+  from aggregation_claim c cross join aggregate_subjects s
+  cross join aggregate_positions parent cross join aggregate_positions child99
+ where parent.label = 'parent' and child99.label = 'child99' and (s.n = 1 or s.n between 40 and 100);
+insert into research_private.subject_position_moves(
+  generation_id, segment_key, position_id, research_subject_id, move_index,
+  choice_count, win_count, draw_count, loss_count, child_position_id
+)
+select c.generation_id, 'ALL', parent.position_id, s.research_subject_id, 19,
+       case when s.n = 1 then 20 else 1 end,
+       case when s.n between 3 and 20 then 1 else 0 end,
+       case when s.n = 2 then 1 else 0 end,
+       case when s.n = 1 then 20 else 0 end,
+       child100.position_id
+  from aggregation_claim c cross join aggregate_subjects s
+  cross join aggregate_positions parent cross join aggregate_positions child100
+ where parent.label = 'parent' and child100.label = 'child100' and s.n between 1 and 20;
+insert into research_private.subject_position_moves(
+  generation_id, segment_key, position_id, research_subject_id, move_index,
+  choice_count, win_count, draw_count, loss_count
+)
+select c.generation_id, 'ALL', parent.position_id, s.research_subject_id, 44, 1, 0, 0, 1
+  from aggregation_claim c cross join aggregate_subjects s cross join aggregate_positions parent
+ where parent.label = 'parent' and s.n between 21 and 39;
+insert into research_private.subject_position_moves(
+  generation_id, segment_key, position_id, research_subject_id, move_index,
+  choice_count, win_count, draw_count, loss_count
+)
+select c.generation_id, 'ALL', parent.position_id, s.research_subject_id, 37, 1,
+       case when s.n = 21 then 1 else 0 end,
+       case when s.n = 2 then 1 else 0 end, 0
+  from aggregation_claim c cross join aggregate_subjects s cross join aggregate_positions parent
+ where parent.label = 'parent' and s.n in (2, 21);
+
+insert into research_private.subject_position_totals(
+  generation_id, segment_key, position_id, research_subject_id, occurrence_count
+)
+select c.generation_id, 'ALL', p.position_id, s.research_subject_id, 1
+  from aggregation_claim c cross join aggregate_subjects s cross join aggregate_positions p
+ where (p.label = 'child99' and s.n <= 99) or p.label = 'child100';
+insert into research_private.subject_position_moves(
+  generation_id, segment_key, position_id, research_subject_id, move_index,
+  choice_count, win_count, draw_count, loss_count
+)
+select t.generation_id, t.segment_key, t.position_id, t.research_subject_id, 0, 1, 0, 1, 0
+  from research_private.subject_position_totals t join aggregate_positions p using (position_id)
+ where t.generation_id = (select generation_id from aggregation_claim) and p.label in ('child99', 'child100');
+
+insert into research_private.generation_processed_games(generation_id, research_game_id)
+select (select generation_id from aggregation_claim), g.research_game_id
+  from research_private.games g
+ where g.validation_status = 'ACCEPTED'
+   and g.research_game_id <= (select source_watermark from aggregation_claim)
+on conflict do nothing;
+select ok(not exists (
+  select 1 from research_private.generation_processed_games x
+  join research_private.games g using (research_game_id)
+  where g.validation_status in ('PENDING', 'REJECTED')
+), 'pending and rejected games have no aggregate processing marker');
+select is((select occurrence_count::int from research_private.subject_position_totals t
+  join aggregate_subjects s using (research_subject_id) join aggregate_positions p using (position_id)
+  where s.n = 1 and p.label = 'parent'), 100, 'one subject may have one hundred occurrences at a position');
+select is((select sum(m.choice_count::numeric / t.occurrence_count)
+  from research_private.subject_position_moves m join research_private.subject_position_totals t
+    using (generation_id, segment_key, position_id, research_subject_id)
+  join aggregate_subjects s using (research_subject_id) join aggregate_positions p using (position_id)
+  where s.n = 1 and p.label = 'parent'), 1::numeric, 'a high-volume subject still has total position weight one');
+select is((select m.choice_count::numeric / t.occurrence_count
+  from research_private.subject_position_moves m join research_private.subject_position_totals t
+    using (generation_id, segment_key, position_id, research_subject_id)
+  join aggregate_subjects s using (research_subject_id) join aggregate_positions p using (position_id)
+  where s.n = 1 and p.label = 'parent' and m.move_index = 26), 0.8::numeric,
+  'subject A contributes C4 weight 0.8 after normalization');
+select is((select m.choice_count::numeric / t.occurrence_count
+  from research_private.subject_position_moves m join research_private.subject_position_totals t
+    using (generation_id, segment_key, position_id, research_subject_id)
+  join aggregate_subjects s using (research_subject_id) join aggregate_positions p using (position_id)
+  where s.n = 1 and p.label = 'parent' and m.move_index = 19), 0.2::numeric,
+  'subject A contributes D3 weight 0.2 after normalization');
+select is((select sum(m.choice_count::numeric / t.occurrence_count)
+  from research_private.subject_position_moves m join research_private.subject_position_totals t
+    using (generation_id, segment_key, position_id, research_subject_id)
+  join aggregate_subjects s using (research_subject_id) join aggregate_positions p using (position_id)
+  where s.n = 2 and p.label = 'parent'), 1::numeric, 'single-game subject B also has total position weight one');
+select is((select count(*)::int from research_private.position_aggregates
+  where generation_id = (select generation_id from aggregation_claim)), 0,
+  'a building generation exposes no completed aggregate rows');
+
+select is((select public.publish_research_aggregation(generation_id, lease_token) from aggregation_claim),
+  'PUBLISHED', 'complete aggregate generation publishes atomically');
+select is((select generation_id from research_private.published_generation),
+  (select generation_id from aggregation_claim), 'published pointer switches to the completed generation');
+select is((select public.publish_research_aggregation(generation_id, lease_token) from aggregation_claim),
+  'PUBLISHED', 'aggregate publish retry is idempotent');
+select ok(not exists (
+  select 1 from research_private.subject_position_totals t
+   where t.generation_id = (select generation_id from aggregation_claim)
+     and (select sum(m.choice_count::numeric / t.occurrence_count)
+       from research_private.subject_position_moves m
+      where m.generation_id = t.generation_id and m.segment_key = t.segment_key
+        and m.position_id = t.position_id and m.research_subject_id = t.research_subject_id) <> 1
+), 'every subject has total weight one in every generation position');
+
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000010', false);
+select set_config('request.jwt.claim.role', 'authenticated', false);
+create temporary table parent_research_response on commit drop as
+select public.get_research_position(
+  'r8v1n1:0000000810000000:0000001008000000:B', 'ALL'
+) as body;
+select ok((select (body ->> 'available')::boolean from parent_research_response),
+  'position with one hundred unique subjects is publicly available to an eligible caller');
+select is((select (body ->> 'unique_contributors')::int from parent_research_response), 100,
+  'published position reports the threshold-passing unique subject count');
+create temporary table child99_research_response on commit drop as
+select public.get_research_position(
+  'r8v1n1:0000000818080000:0000001000000000:W', 'ALL'
+) as body;
+select ok(not (select (body ->> 'available')::boolean from child99_research_response),
+  'position with ninety-nine unique subjects is not public');
+select is((select body ->> 'reason' from child99_research_response), 'INSUFFICIENT_SAMPLE',
+  'sub-threshold position returns only an insufficient sample state');
+select ok(not (select body ? 'unique_contributors' from child99_research_response),
+  'sub-threshold position does not leak the exact ninety-nine count');
+select ok((select exists (select 1 from jsonb_array_elements(body -> 'moves') m
+  where m ->> 'coordinate' = 'd3') from parent_research_response),
+  'move with twenty unique subjects is individually published');
+select ok(not (select exists (select 1 from jsonb_array_elements(body -> 'moves') m
+  where m ->> 'coordinate' = 'e6') from parent_research_response),
+  'move with nineteen unique subjects is suppressed');
+select ok((select exists (select 1 from jsonb_array_elements(body -> 'moves') m
+  where m ->> 'coordinate' = 'c4') from parent_research_response),
+  'another threshold-passing move remains individually published');
+select is((select round(((body -> 'other' ->> 'choice_rate')::numeric), 3)
+  from parent_research_response), 0.195::numeric,
+  'OTHER combines every suppressed move weight');
+select is((select (body -> 'other' ->> 'unique_contributors')::int
+  from parent_research_response), 20,
+  'OTHER unique contributors use subject union instead of summing per-move counts');
+select ok(not (select (body -> 'other') ? 'coordinate' from parent_research_response),
+  'OTHER reveals no suppressed move coordinate');
+select ok((select (body -> 'other' ->> 'can_explore')::boolean = false
+  and body -> 'other' -> 'child_position_token' = 'null'::jsonb from parent_research_response),
+  'OTHER cannot be used for child drill-down');
+select ok((select exists (select 1 from jsonb_array_elements(body -> 'moves') m
+  where m ->> 'coordinate' = 'c4' and not (m ->> 'can_explore')::boolean)
+  from parent_research_response), 'child with ninety-nine subjects cannot be explored');
+select ok((select exists (select 1 from jsonb_array_elements(body -> 'moves') m
+  where m ->> 'coordinate' = 'd3' and (m ->> 'can_explore')::boolean
+    and m ->> 'child_position_token' is not null) from parent_research_response),
+  'child with one hundred subjects can be explored');
+select ok((select body::text !~* '(research_subject|account|user_id|match_id|game_record|canonical)'
+  from parent_research_response), 'public response contains no subject, account, match, record, or canonical-line identifier');
+
+select set_config('request.jwt.claim.role', 'service_role', false);
+create temporary table failed_aggregation_claim on commit drop as
+select * from public.claim_research_aggregation_build(900);
+select is((select public.fail_research_aggregation(generation_id, lease_token, 'WORKER_BUILD_FAILED')
+  from failed_aggregation_claim), 'FAILED', 'worker can terminalize a poisoned build without leaving a BUILDING lease');
+select is((select generation_id from research_private.published_generation),
+  (select generation_id from aggregation_claim), 'failed rebuild leaves the previous published generation active');
+
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000010', false);
+select set_config('request.jwt.claim.role', 'authenticated', false);
+select public.set_research_participation(false);
+select ok(not (select can_view_research_data from public.get_research_participation_status()),
+  'opt-out immediately revokes aggregate viewing');
+select ok((select count(*) > 0 from research_private.position_aggregates
+  where generation_id = (select generation_id from aggregation_claim)),
+  'opt-out leaves previously accepted aggregate weight intact');
+select public.set_research_participation(true, 3);
+select ok((select qualifying_game_count = 0 and not eligible
+  from public.get_research_participation_status()),
+  're-opt-in starts a new participation period with zero qualifying games');
+insert into research_private.consent_versions(consent_version, effective_at, document_sha256, summary)
+values (4, now(), repeat('d', 64), 'Research consent v4 test');
+update research_private.policy_versions set is_active = false where is_active;
+insert into research_private.policy_versions(
+  effective_at, research_consent_version, eligibility_min_games, eligibility_window_days,
+  position_min_users, move_min_users, min_decisions_per_qualifying_game,
+  ruleset_version, normalization_version, collection_enabled, is_active
+) values (now(), 4, 10, 90, 100, 20, 10, 1, 1, true, true);
+select ok((select not eligible and not can_view_research_data and reconsent_required
+  from public.get_research_participation_status()),
+  'consent mismatch disables eligibility and viewing until a new period is started');
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
 select set_config('request.jwt.claim.role', 'authenticated', false);

@@ -41,6 +41,23 @@ select jsonb_build_object(
     and not has_function_privilege('authenticated', 'public.complete_research_validation(bigint,uuid,integer,boolean,text,integer,integer)', 'EXECUTE')
     and has_function_privilege('service_role', 'public.claim_research_validation_batch(integer,integer)', 'EXECUTE')
     and has_function_privilege('service_role', 'public.complete_research_validation(bigint,uuid,integer,boolean,text,integer,integer)', 'EXECUTE'),
+  'research_aggregate_tables',
+    to_regclass('research_private.positions') is not null
+    and to_regclass('research_private.aggregation_generations') is not null
+    and to_regclass('research_private.subject_position_totals') is not null
+    and to_regclass('research_private.subject_position_moves') is not null
+    and to_regclass('research_private.position_aggregates') is not null
+    and to_regclass('research_private.move_aggregates') is not null
+    and to_regclass('research_private.published_generation') is not null,
+  'research_position_rpc', to_regprocedure('public.get_research_position(text,text)') is not null,
+  'research_aggregation_service_only',
+    not has_function_privilege('authenticated', 'public.claim_research_aggregation_build(integer)', 'EXECUTE')
+    and not has_function_privilege('authenticated', 'public.get_research_aggregation_sources(bigint,uuid,bigint,integer)', 'EXECUTE')
+    and not has_function_privilege('authenticated', 'public.append_research_aggregation_game(bigint,uuid,bigint,jsonb)', 'EXECUTE')
+    and not has_function_privilege('authenticated', 'public.publish_research_aggregation(bigint,uuid)', 'EXECUTE')
+    and not has_function_privilege('authenticated', 'public.fail_research_aggregation(bigint,uuid,text)', 'EXECUTE')
+    and has_function_privilege('service_role', 'public.claim_research_aggregation_build(integer)', 'EXECUTE')
+    and has_function_privilege('service_role', 'public.publish_research_aggregation(bigint,uuid)', 'EXECUTE'),
   'research_collection_disabled', exists (
     select 1 from research_private.policy_versions where is_active and not collection_enabled
   ),
@@ -48,7 +65,9 @@ select jsonb_build_object(
     not has_schema_privilege('authenticated', 'research_private', 'USAGE')
     and not has_schema_privilege('anon', 'research_private', 'USAGE')
     and not has_table_privilege('authenticated', 'research_private.games', 'SELECT')
-    and not has_table_privilege('authenticated', 'research_private.game_contributors', 'SELECT'),
+    and not has_table_privilege('authenticated', 'research_private.game_contributors', 'SELECT')
+    and not has_table_privilege('authenticated', 'research_private.subject_position_totals', 'SELECT')
+    and not has_table_privilege('authenticated', 'research_private.move_aggregates', 'SELECT'),
   'profiles_select', has_table_privilege('authenticated', 'public.profiles', 'SELECT'),
   'profile_name_update', has_column_privilege('authenticated', 'public.profiles', 'display_name', 'UPDATE'),
   'ratings_select', has_table_privilege('authenticated', 'public.ratings', 'SELECT'),

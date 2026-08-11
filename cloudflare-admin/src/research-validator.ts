@@ -12,6 +12,26 @@ export type ResearchValidationResult =
   | { accepted: true; blackDecisionCount: number; whiteDecisionCount: number }
   | { accepted: false; rejectionCode: string };
 
+export interface ResearchAggregationContributor {
+  researchSubjectId: string;
+  disc: "BLACK" | "WHITE";
+  outcome: "WIN" | "DRAW" | "LOSS";
+}
+
+export interface ResearchDecision {
+  research_subject_id: string;
+  black_hex: string;
+  white_hex: string;
+  side: "BLACK" | "WHITE";
+  legal_move_mask_hex: string;
+  move_index: number;
+  outcome: "WIN" | "DRAW" | "LOSS";
+  child_black_hex?: string;
+  child_white_hex?: string;
+  child_side?: "BLACK" | "WHITE";
+  child_legal_move_mask_hex?: string;
+}
+
 const EMPTY = 0;
 const BLACK = 1;
 const WHITE = 2;
@@ -71,6 +91,52 @@ export function validateResearchGame(input: ResearchValidationInput): ResearchVa
   return { accepted: true, blackDecisionCount, whiteDecisionCount };
 }
 
+export function extractResearchDecisions(
+  input: ResearchValidationInput,
+  contributors: ResearchAggregationContributor[],
+): ResearchDecision[] {
+  const validation = validateResearchGame(input);
+  if (!validation.accepted) throw new Error(`validated research source required: ${validation.rejectionCode}`);
+  const state = initialState();
+  const decisions: ResearchDecision[] = [];
+  for (let offset = 0; offset < input.canonicalMoves.length; offset += 2) {
+    const token = input.canonicalMoves.slice(offset, offset + 2);
+    const legal = legalMoves(state);
+    if (token === "--") {
+      state.currentPlayer = opponent(state.currentPlayer);
+      state.consecutivePasses += 1;
+      state.ply += 1;
+      continue;
+    }
+    const move = (token.charCodeAt(1) - 49) * 8 + token.charCodeAt(0) - 97;
+    const side = playerName(state.currentPlayer);
+    const position = positionSnapshot(state, legal);
+    applyMove(state, move);
+    const childState = cloneState(state);
+    while (!isTerminal(childState) && legalMoves(childState).length === 0) {
+      childState.currentPlayer = opponent(childState.currentPlayer);
+      childState.consecutivePasses += 1;
+      childState.ply += 1;
+    }
+    const child = isTerminal(childState) ? null : positionSnapshot(childState, legalMoves(childState));
+    for (const contributor of contributors.filter(value => value.disc === side)) {
+      decisions.push({
+        research_subject_id: contributor.researchSubjectId,
+        ...position,
+        move_index: move,
+        outcome: contributor.outcome,
+        ...(child === null ? {} : {
+          child_black_hex: child.black_hex,
+          child_white_hex: child.white_hex,
+          child_side: child.side,
+          child_legal_move_mask_hex: child.legal_move_mask_hex,
+        }),
+      });
+    }
+  }
+  return decisions;
+}
+
 function rejected(rejectionCode: string): ResearchValidationResult {
   return { accepted: false, rejectionCode };
 }
@@ -82,6 +148,33 @@ function initialState(): State {
   cells[4 * 8 + 3] = BLACK;
   cells[4 * 8 + 4] = WHITE;
   return { cells, currentPlayer: BLACK, consecutivePasses: 0, ply: 0 };
+}
+
+function cloneState(state: State): State {
+  return { ...state, cells: [...state.cells] };
+}
+
+function playerName(player: typeof BLACK | typeof WHITE): "BLACK" | "WHITE" {
+  return player === BLACK ? "BLACK" : "WHITE";
+}
+
+function positionSnapshot(state: State, legal: number[]): Pick<ResearchDecision,
+  "black_hex" | "white_hex" | "side" | "legal_move_mask_hex"> {
+  let black = 0n;
+  let white = 0n;
+  let legalMask = 0n;
+  state.cells.forEach((cell, index) => {
+    if (cell === BLACK) black |= 1n << BigInt(index);
+    if (cell === WHITE) white |= 1n << BigInt(index);
+  });
+  legal.forEach(index => { legalMask |= 1n << BigInt(index); });
+  const hex = (value: bigint) => value.toString(16).padStart(16, "0");
+  return {
+    black_hex: hex(black),
+    white_hex: hex(white),
+    side: playerName(state.currentPlayer),
+    legal_move_mask_hex: hex(legalMask),
+  };
 }
 
 function opponent(player: typeof BLACK | typeof WHITE): typeof BLACK | typeof WHITE {
