@@ -61,11 +61,20 @@ import com.example.othello.records.FinishReason
 import com.example.othello.records.MatchResult
 import com.example.othello.review.ReviewSession
 import com.example.othello.review.AnalysisRequestGuard
+import com.example.othello.research.ResearchMove
+import com.example.othello.research.ResearchMoveKind
+import com.example.othello.research.ResearchParticipationRepository
+import com.example.othello.research.ResearchParticipationStatus
+import com.example.othello.research.ResearchPositionRepository
+import com.example.othello.research.ResearchPositionResult
+import com.example.othello.research.ResearchUnavailableReason
+import com.example.othello.research.researchPositionToken
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -145,6 +154,8 @@ internal fun ReviewScreen(
     record: GameRecord,
     dataManager: EdaxDataManager,
     engine: ProductionAnalysisEngine,
+    researchParticipationRepository: ResearchParticipationRepository,
+    researchPositionRepository: ResearchPositionRepository,
     onBack: () -> Unit,
 ) {
     val review = remember(record.matchId) { ReviewSession(record) }
@@ -263,9 +274,120 @@ internal fun ReviewScreen(
                 Text("$coordinate  ${formatEvaluation(evaluation.score.value, evaluation.score.kind)}", style = MaterialTheme.typography.bodySmall)
             }
         }
+        ResearchReviewPanel(
+            state = state,
+            participationRepository = researchParticipationRepository,
+            positionRepository = researchPositionRepository,
+        )
         Text("実戦棋譜は不変です。保存済み変化: ${review.currentVariations.size}", style = MaterialTheme.typography.bodySmall)
     }
 }
+
+@Composable
+private fun ResearchReviewPanel(
+    state: GameState,
+    participationRepository: ResearchParticipationRepository,
+    positionRepository: ResearchPositionRepository,
+) {
+    val rootToken = remember(state.stateHash()) { state.researchPositionToken() }
+    var token by remember(rootToken) { mutableStateOf(rootToken) }
+    var history by remember(rootToken) { mutableStateOf<List<String>>(emptyList()) }
+    var status by remember(rootToken) { mutableStateOf<ResearchParticipationStatus?>(null) }
+    var result by remember(rootToken) { mutableStateOf<ResearchPositionResult?>(null) }
+    var loading by remember(rootToken) { mutableStateOf(false) }
+
+    LaunchedEffect(rootToken, token) {
+        loading = true
+        result = null
+        status = runCatching { participationRepository.status() }.getOrNull()
+        result = if (status?.canViewResearchData == true) {
+            positionRepository.getPosition(token)
+        } else {
+            ResearchPositionResult.Unavailable(ResearchUnavailableReason.NOT_ELIGIBLE)
+        }
+        loading = false
+    }
+
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("研究データ", style = MaterialTheme.typography.titleMedium)
+            val currentStatus = status
+            when {
+                currentStatus == null -> Text("研究データの利用状態を確認中…")
+                !currentStatus.canViewResearchData -> ResearchEligibilityMessage(currentStatus)
+                loading -> Text("研究データを読み込み中…")
+                result is ResearchPositionResult.Available -> {
+                    val available = (result as ResearchPositionResult.Available).position
+                    Text("参加プレイヤーの選択傾向（${available.uniqueContributors}人以上）")
+                    available.moves.forEach { move ->
+                        ResearchMoveRow(move) {
+                            val child = move.childPositionToken ?: return@ResearchMoveRow
+                            history = history + token
+                            token = child
+                        }
+                    }
+                    available.other?.let { move -> ResearchMoveRow(move, onExplore = null) }
+                    if (history.isNotEmpty()) {
+                        OutlinedButton(onClick = {
+                            token = history.last()
+                            history = history.dropLast(1)
+                        }) { Text("親の局面へ戻る") }
+                    }
+                }
+                result is ResearchPositionResult.Unavailable -> {
+                    val unavailable = (result as ResearchPositionResult.Unavailable).reason
+                    Text(
+                        when (unavailable) {
+                            ResearchUnavailableReason.INSUFFICIENT_SAMPLE -> "この局面には十分な研究データがまだありません"
+                            ResearchUnavailableReason.NO_PUBLISHED_GENERATION -> "研究データは現在準備中です"
+                            ResearchUnavailableReason.UNSUPPORTED_SEGMENT -> "この研究データは利用できません"
+                            else -> "研究データを利用できません"
+                        },
+                    )
+                }
+                result is ResearchPositionResult.Failed ->
+                    Text("研究データを取得できませんでした", color = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ResearchEligibilityMessage(status: ResearchParticipationStatus) {
+    when {
+        status.reconsentRequired -> Text("研究参加の再同意が必要です。設定から内容を確認してください")
+        !status.participationOn -> Text("研究参加がOFFのため、研究データを表示できません")
+        !status.collectionEnabled -> Text("研究データは現在準備中です")
+        status.qualifyingGameCount < status.requiredGameCount -> {
+            val remaining = (status.requiredGameCount - status.qualifyingGameCount).coerceAtLeast(0)
+            Text("研究データを見るには、直近${status.windowDays}日であと${remaining}局の提供が必要です")
+        }
+        else -> Text("研究データを表示できません")
+    }
+}
+
+@Composable
+private fun ResearchMoveRow(move: ResearchMove, onExplore: (() -> Unit)?) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (move.kind == ResearchMoveKind.OTHER) "その他" else move.coordinate?.uppercase(Locale.ROOT) ?: "手",
+                modifier = Modifier.weight(1f),
+            )
+            Text(formatResearchPercent(move.choiceRate))
+            onExplore?.let {
+                OutlinedButton(onClick = it, enabled = move.canExplore) { Text("次へ") }
+            }
+        }
+        Text(
+            "勝 ${formatResearchPercent(move.winRate)} / 引分 ${formatResearchPercent(move.drawRate)} / 負 ${formatResearchPercent(move.lossRate)}",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+private fun formatResearchPercent(value: Double): String =
+    String.format(Locale.ROOT, "%.1f%%", value.coerceIn(0.0, 1.0) * 100.0)
 
 @Composable
 internal fun CredentialScreen(repository: CredentialRepository, onBack: () -> Unit) {

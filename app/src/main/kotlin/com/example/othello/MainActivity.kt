@@ -202,6 +202,8 @@ private fun OthelloApp(
                 record = requireNotNull(selectedRecord),
                 dataManager = analysisDataManager,
                 engine = analysisEngine,
+                researchParticipationRepository = requireNotNull(component).researchParticipationRepository,
+                researchPositionRepository = requireNotNull(component).researchPositionRepository,
                 onBack = { destination = AppDestination.RECORDS },
             )
             destination == AppDestination.CREDENTIAL && session != null && component != null -> CredentialScreen(
