@@ -16,10 +16,10 @@ class Board private constructor(private val cells: IntArray) {
     }
 
     fun legalMoves(player: Disc): Set<Position> = positionsOf(Disc.EMPTY)
-        .filterTo(linkedSetOf()) { capturedIn(it, player).isNotEmpty() }
+        .filterTo(linkedSetOf()) { capturedForMove(it, player).isNotEmpty() }
 
     fun flipped(position: Position, player: Disc): Board {
-        val captured = capturedIn(position, player)
+        val captured = capturedForMove(position, player)
         require(get(position) == Disc.EMPTY && captured.isNotEmpty()) { "position is not a legal move" }
         val next = cells.copyOf()
         next[position.index()] = player.ordinal
@@ -37,7 +37,7 @@ class Board private constructor(private val cells: IntArray) {
         return hash.toULong().toString(16).padStart(16, '0')
     }
 
-    private fun capturedIn(position: Position, player: Disc): List<Position> = DIRECTIONS.flatMap { (dr, dc) ->
+    internal fun capturedForMove(position: Position, player: Disc): List<Position> = DIRECTIONS.flatMap { (dr, dc) ->
         val line = mutableListOf<Position>()
         var row = position.row + dr
         var column = position.column + dc

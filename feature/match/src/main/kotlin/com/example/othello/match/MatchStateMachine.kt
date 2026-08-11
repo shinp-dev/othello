@@ -2,7 +2,7 @@ package com.example.othello.match
 
 enum class MatchStatus {
     IDLE, WAITING, SIGNALING, P2P_CONNECTED, PLAYING, FINISHING, CONFIRMED,
-    SIGNALING_FAILED, DISCONNECTED, PENDING_RESULT, DISPUTED,
+    SIGNALING_FAILED, DISCONNECTED, PENDING_RESULT, DISPUTED, FAILED,
 }
 
 sealed interface MatchCommand {
@@ -10,12 +10,14 @@ sealed interface MatchCommand {
     data object MatchFound : MatchCommand
     data object OfferAccepted : MatchCommand
     data object DataChannelOpened : MatchCommand
+    data object StartConfirmed : MatchCommand
     data object GameFinished : MatchCommand
     data object ResultConfirmed : MatchCommand
     data object ResultPending : MatchCommand
     data object ResultDisputed : MatchCommand
     data object SignalingFailed : MatchCommand
     data object Disconnected : MatchCommand
+    data object Retry : MatchCommand
     data object Reset : MatchCommand
 }
 
@@ -42,7 +44,8 @@ object MatchStateMachine {
                 else -> null
             }
             MatchStatus.P2P_CONNECTED -> when (command) {
-                MatchCommand.DataChannelOpened -> MatchStatus.PLAYING
+                MatchCommand.DataChannelOpened -> MatchStatus.P2P_CONNECTED
+                MatchCommand.StartConfirmed -> MatchStatus.PLAYING
                 MatchCommand.Disconnected -> MatchStatus.DISCONNECTED
                 else -> null
             }
@@ -57,8 +60,19 @@ object MatchStateMachine {
                 MatchCommand.ResultDisputed -> MatchStatus.DISPUTED
                 else -> null
             }
-            MatchStatus.SIGNALING_FAILED, MatchStatus.DISCONNECTED, MatchStatus.PENDING_RESULT, MatchStatus.DISPUTED,
-            MatchStatus.CONFIRMED -> if (command === MatchCommand.Reset) MatchStatus.IDLE else null
+            MatchStatus.SIGNALING_FAILED, MatchStatus.DISCONNECTED -> when (command) {
+                MatchCommand.Retry -> MatchStatus.WAITING
+                MatchCommand.Reset -> MatchStatus.IDLE
+                else -> null
+            }
+            MatchStatus.PENDING_RESULT -> when (command) {
+                MatchCommand.ResultConfirmed -> MatchStatus.CONFIRMED
+                MatchCommand.ResultDisputed -> MatchStatus.DISPUTED
+                MatchCommand.Reset -> MatchStatus.IDLE
+                else -> null
+            }
+            MatchStatus.DISPUTED, MatchStatus.CONFIRMED -> if (command === MatchCommand.Reset) MatchStatus.IDLE else null
+            MatchStatus.FAILED -> if (command === MatchCommand.Reset) MatchStatus.IDLE else null
         }
         return if (next == null) MatchTransition.Rejected(state, "${command::class.simpleName} is not allowed from ${state.status}")
         else MatchTransition.Accepted(MatchState(next))

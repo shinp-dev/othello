@@ -11,7 +11,8 @@ class MatchStateMachineTest {
             MatchCommand.JoinQueue to MatchStatus.WAITING,
             MatchCommand.MatchFound to MatchStatus.SIGNALING,
             MatchCommand.OfferAccepted to MatchStatus.P2P_CONNECTED,
-            MatchCommand.DataChannelOpened to MatchStatus.PLAYING,
+            MatchCommand.DataChannelOpened to MatchStatus.P2P_CONNECTED,
+            MatchCommand.StartConfirmed to MatchStatus.PLAYING,
             MatchCommand.GameFinished to MatchStatus.FINISHING,
             MatchCommand.ResultConfirmed to MatchStatus.CONFIRMED,
         ).forEach { (command, expected) ->
@@ -25,5 +26,13 @@ class MatchStateMachineTest {
         val result = MatchStateMachine.reduce(state, MatchCommand.DataChannelOpened)
         assertIs<MatchTransition.Rejected>(result)
         assertEquals(state, result.state)
+    }
+
+    @Test fun pendingResultResolvesAndTransportFailuresCanRetry() {
+        val pending = MatchState(MatchStatus.PENDING_RESULT)
+        assertEquals(MatchStatus.CONFIRMED, (MatchStateMachine.reduce(pending, MatchCommand.ResultConfirmed) as MatchTransition.Accepted).state.status)
+        assertEquals(MatchStatus.DISPUTED, (MatchStateMachine.reduce(pending, MatchCommand.ResultDisputed) as MatchTransition.Accepted).state.status)
+        val disconnected = MatchState(MatchStatus.DISCONNECTED)
+        assertEquals(MatchStatus.WAITING, (MatchStateMachine.reduce(disconnected, MatchCommand.Retry) as MatchTransition.Accepted).state.status)
     }
 }

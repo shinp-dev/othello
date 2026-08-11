@@ -1,17 +1,17 @@
-# Othello Online MVP Architecture
+# ちゃんりば Architecture
 
 ## Scope
 
-This repository is an Android-first Othello MVP. The first executable slice is a local two-player board with a production-shaped domain boundary. Online matchmaking, P2P transport, result confirmation, and credential review are represented by ports and database contracts so they can be implemented without moving game rules into infrastructure or UI.
+This repository implements the Android-first Reversi product ちゃんりば. Local play, Supabase-backed matchmaking/finalization, WebRTC DataChannel play, immutable records, credential submission, account-deletion processing, and post-game Edax review are implemented behind explicit domain boundaries.
 
-The current MVP assumption is that a user can start a local game without Supabase credentials. Network features remain opt-in and are not faked as authoritative local state.
+A user can start a local game without Supabase credentials. Network features require Auth and are never faked as authoritative local state.
 
 ## Modules
 
 | Module | Responsibility | Must not know |
 | --- | --- | --- |
 | `:app` | Compose navigation, dependency wiring, Android entry point | Game rule implementation, DB writes |
-| `:core:game` | Immutable Othello value objects, legal moves, transitions, result | Android, network, users, rating, analysis |
+| `:core:game` | Immutable Reversi value objects, legal moves, transitions, result | Android, network, users, rating, analysis |
 | `:core:network` | Transport and signaling ports, P2P command validation | Compose, rating policy |
 | `:core:auth` | Auth/session port | Game rules |
 | `:core:designsystem` | Theme and reusable UI primitives | Domain decisions |
@@ -22,7 +22,9 @@ The current MVP assumption is that a user can start a local game without Supabas
 | `:feature:profile` | Profile presentation/query boundary | Rating calculations |
 | `:feature:credential` | Federation credential submission/review boundary | Rating |
 | `:analysis:api` | `AnalysisEngine`, settings and result contracts | Match implementation |
-| `:analysis:edax` | Android-local Edax adapter; JNI can replace the MVP stub | Match, Supabase |
+| `:analysis:edax` | Android-local Edax 4.6 JNI adapter and user-data storage | Match, Supabase |
+| `:transport:webrtc` | Android WebRTC SDK wiring and ICE configuration boundary | Game Core rules |
+| `:data:supabase` | Android Supabase SDK wiring, Composition Root, and signaling data sources | Game Core rules |
 
 ## Dependency direction
 
@@ -31,10 +33,12 @@ app -> feature/* -> core/*
 app -> analysis:edax -> analysis:api -> core:game
 feature:review -> analysis:api
 feature:match -X-> analysis:edax
+transport:webrtc -> core:network
+data:supabase -> feature ports / core contracts
 feature:match -X-> feature:profile / feature:credential
 ```
 
-`core:game` has no Android dependency. `feature:match` only consumes `GameState` and transport ports. A build-time boundary check fails if match source references `analysis`.
+`core:game` has no Android dependency. `feature:match` only consumes `GameState` and transport ports. A build-time boundary check fails if match source references `analysis`. Supabase SDK types are private to `:data:supabase`; `SupabaseModule` exposes only application-owned ports. WebRTC SDK types are private to `:transport:webrtc`; callers receive `MatchTransport`, payloads, and primitive diagnostics.
 
 ## Ownership
 
@@ -46,6 +50,7 @@ feature:match -X-> feature:profile / feature:credential
 | `game_records` | Records | RecordRepository |
 | `ratings`, `rating_history` | Rating policy/application | Server RPC only for official updates |
 | `federation_credentials`, `verification_submissions` | Credential / admin BFF | RLS + Cloudflare Worker |
+| `account_deletion_requests` | Profile / trusted admin BFF | owner request RPC + service-role processing RPCs |
 
 The Android client never contains a service-role key. It cannot mark a rating, match, or credential as verified.
 
@@ -53,7 +58,11 @@ The Android client never contains a service-role key. It cannot mark a rating, m
 
 `Board` is a compact immutable `IntArray` value object exposed only through safe operations. `GameState.apply(Move)` is a pure transition: it rejects a non-legal move, flips all captured lines, advances the turn, handles one pass, and ends after consecutive passes or a full board. `PositionHash` is deterministic and is used by the P2P contract.
 
-## Match state machine
+## Client Session State vs Server Persisted Match State
+
+The Android state machine (`IDLE`, `WAITING`, `SIGNALING`, `P2P_CONNECTED`, `PLAYING`, `FINISHING`, `CONFIRMED`, `PENDING_RESULT`, `DISPUTED`) describes one device's session. Supabase cannot observe the P2P channel continuously, so it does not mirror these states. The additive migration adds `matches.server_status` with only `CREATED`, `PENDING_RESULT`, `CONFIRMED`, `DISPUTED`, and `ABANDONED`; the legacy `matches.status` column is retained for rollback compatibility and is not authoritative for new clients.
+
+## Client match state machine
 
 ```text
 IDLE -> WAITING -> SIGNALING -> P2P_CONNECTED -> PLAYING -> FINISHING -> CONFIRMED
@@ -67,34 +76,51 @@ The state machine is a pure reducer. UI observes state; it does not decide trans
 
 1. A later queue participant gets a match and creates a non-trickle WebRTC offer.
 2. The offer is delivered to the waiting participant through private Supabase Realtime signaling only.
-3. The answer is returned, DataChannel opens, and the signaling subscription is removed.
-4. Each move is sent only on DataChannel. Every command contains `matchId`, `ply`, `move`, `commandId`, and `previousStateHash`.
-5. Receiver validates command idempotency, player turn, ply, legality and hash. Any mismatch becomes a protocol error/disputed path.
+3. The answer is returned and DataChannel opens. Each participant writes one start ACK; the client enters `PLAYING` only after the server reports both ACKs, then removes the signaling subscription.
+4. Each move is sent only on DataChannel. Every move command contains `matchId`, `ply`, `move`, `commandId`, and `previousStateHash`. Resignation/timeout/disconnect use a separate terminal DataChannel control message so both peers submit the same result; it cannot carry a move.
+5. Receiver validates the server-assigned remote disc, command fingerprint, idempotency, ply, legality and hash. A reused command id with a different payload is a protocol error.
+6. If the next player has no legal move, both sides apply a forced pass locally and append the same `--` canonical token; no pass button is shown in normal UI.
 
 ## Finalization and rating
 
 Both players submit immutable move history, result, final hash and finish reason. A server-side RPC compares submissions. Only matching submissions become `CONFIRMED`; then one idempotent transaction creates the record and applies the versioned `RatingPolicy`. Mismatches become `DISPUTED` and do not change rating. A single submission is `PENDING_RESULT`.
 
+New GameRecords persist the verified final-position hash and fixed `5m` product time control. Existing records created before migration 017 may have a null final hash; records remain immutable.
+
 `RatingPolicy` and `StableRatingPolicy` are replaceable interfaces. Peak is monotonic. Stable band uses recent completed ratings and returns `CALCULATING` until enough observations exist.
 
 ## Review / Edax
 
-`ReviewSession` owns cursor and variations and never mutates `GameRecord`. `AnalysisEngine` lives behind `analysis:api`; the review feature can ask it to evaluate every legal move. The MVP adapter returns a deterministic local evaluation so the UI contract is testable; JNI/Edax can replace the adapter later. Evaluation values are never persisted.
+`ReviewSession` owns cursor and variations and never mutates `GameRecord`. `AnalysisEngine` lives behind `analysis:api`; the review feature asks it to evaluate every legal move. `EvaluationScore` carries the side-to-move perspective and `EXACT`/`HEURISTIC`/`BOOK` kind. `analysis:edax` owns JNI, Edax-specific conversion, cancellation, a 32-position identity-aware memory cache, and SAF-to-private-storage data management. Evaluation values and Review variations are never persisted into `GameRecord`.
+
+Edax evaluation data and opening books are user imports, never app assets. The cache key includes canonical board, side to move, Edax level, eval SHA-256 and optional book SHA-256. A data replacement therefore cannot reuse stale scores. One active book slot is represented as a named slot boundary so later multi-book switching does not change `analysis:api`.
 
 ## Federation verification
 
 Users may self-declare a credential. A verification submission uploads evidence to Supabase Storage and is reviewed only through Cloudflare Worker -> Supabase. Public profiles show only `段級位確認済み`; evidence and legal names are private and removable after approval.
 
+## Account deletion
+
+Android can only create an owner-scoped deletion request. The trusted Worker deletes every object under the user's verification prefix through the Storage API, calls a service-role-only DB preparation RPC, removes the Auth identity through the Auth Admin API, and then marks the request complete. DB preparation removes private ratings, credentials, submissions and record references, while retaining an anonymized profile tombstone so the opponent's immutable shared record and match foreign keys remain valid. A pending deletion request is excluded from matchmaking.
+
 ## Security and forbidden dependencies
 
 - No moves or clocks are written to Supabase during a game.
-- Realtime is signaling-only and is unsubscribed after P2P connection.
+- Realtime Postgres Changes is signaling-only, protected by `match_signaling` RLS, and is unsubscribed after both start ACKs.
 - No service-role key is shipped to Android or browser.
 - Android cannot update rating, peak, official result, or verification status directly.
 - Match cannot reference Edax; review alone can reference `AnalysisEngine`.
+- Live matchmaking, clocks, move transport, result submission and rating never construct or call `AnalysisEngine`.
 - Game records are immutable after finalization.
 - SQL enables RLS and exposes narrow RPCs instead of client-owned status updates.
+- Matchmaking snapshots official `ratings.current_rating`, uses TTL queue rows and `FOR UPDATE SKIP LOCKED`; client rating input is not accepted.
+- `active_match_participants.user_id` is the database invariant for one active match per user. CREATED matches have a five-minute lease; `abandon_match` and stale cleanup release reservations without changing rating.
+- `submit_match_result` stores idempotently and auto-finalizes when both submissions exist; `finalize_match_v2` remains participant-scoped reconciliation. Payload enums, hashes, clock size, and canonical token format are checked in SQL.
+- Credential evidence must be a `verification/<auth.uid()>/...` Storage-owned object. Review is idempotent/conflict-safe; the Worker receives cleanup paths from the DB and can retry deletion before the path is nulled.
+- Terminal matches, records, and submissions have retention/cleanup RPCs. Internal pruning and cleanup functions have no execute permission for `anon`, `authenticated`, or `PUBLIC`; SECURITY DEFINER functions use an empty search path.
+- DataChannel move commands carry real moves only. Terminal control messages are a separate wire type. `TurnResolver` deterministically adds `--` locally on both peers; command IDs reserve their first payload even when that payload is rejected.
 
 ## Change log
 
-- 2026-08-09: Initial architecture recorded before implementation. Empty repository assumption documented. Local two-player mode is the safe executable MVP while Supabase/WebRTC/Edax ports remain replaceable.
+- 2026-08-09: Initial module boundaries and pure Game Core were established.
+- 2026-08-10: Online beta, bounded records, WebRTC/start ACK/clock/finalization, credential administration, account deletion, and Edax post-game analysis were completed without crossing the Match/Analysis boundary.

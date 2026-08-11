@@ -5,11 +5,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with: { distribution: temurin, java-version: '17' }
       - uses: android-actions/setup-android@v3
-      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: cloudflare-admin/package-lock.json
+      - run: npm ci --prefix cloudflare-admin
+      - run: npm run typecheck --prefix cloudflare-admin
       - run: ./gradlew test
-      - run: ./gradlew assembleDebug
+      - run: ./gradlew lint
+      - run: ./gradlew assembleDebug assembleRelease bundleRelease
       - run: pwsh ./scripts/check-boundaries.ps1
+      - run: pwsh ./scripts/check-sql-security.ps1
+      - run: pwsh ./scripts/check-release-contents.ps1
+      - run: pwsh ./scripts/check-release-contents.ps1 -ArtifactPath app/build/outputs/bundle/release/app-release.aab
+      - id: supabase_cli
+        uses: supabase/setup-cli@v1
+        with: { version: 2.101.0 }
+      - run: supabase start
+      - run: supabase test db
+      - if: always() && steps.supabase_cli.outcome == 'success'
+        run: supabase stop

@@ -30,6 +30,33 @@ class GameCoreTest {
         }
     }
 
+    @Test fun eightDirectionFlipUsesOneCaptureImplementation() {
+        val state = GameState(Board.fromRows(listOf(
+            "........", ".B.B.B..", "..WWW...", ".BW.WB..", "..WWW...", ".B.B.B..", "........", "........",
+        )))
+        val outcome = state.play(Position(3, 3)) as MoveOutcome.Played
+        assertEquals(
+            setOf(
+                Position(2, 2), Position(2, 3), Position(2, 4),
+                Position(3, 2), Position(3, 4),
+                Position(4, 2), Position(4, 3), Position(4, 4),
+            ),
+            outcome.flipped.toSet(),
+        )
+        assertEquals(8, outcome.flipped.size)
+    }
+
+    @Test fun canonicalMovesRoundTripIncludingPass() {
+        val moves = listOf(Position(2, 3), null, Position(7, 7), Position(0, 0))
+        assertEquals("d3--h8a1", CanonicalMoves.encode(moves))
+        assertEquals(moves, CanonicalMoves.decode("d3--h8a1"))
+    }
+
+    @Test fun emptyCanonicalMovesRoundTripForZeroPlyFinish() {
+        assertEquals("", CanonicalMoves.encode(emptyList()))
+        assertEquals(emptyList(), CanonicalMoves.decode(""))
+    }
+
     @Test fun passOnlyWhenThereAreNoLegalMoves() {
         val state = GameState(Board.fromRows(listOf("BBBBBBB.", "BBBBBBBB", "BBBBBBBB", "BBBBBBBB", "BBBBBBBB", "BBBBBBBB", "BBBBBBBB", "BBBBBBBB")), Disc.WHITE)
         assertTrue(state.legalMoves.isEmpty())
@@ -44,6 +71,48 @@ class GameCoreTest {
         assertTrue(afterSecond.status is GameStatus.Finished)
         assertEquals(63, (afterSecond.status as GameStatus.Finished).result.black)
         assertEquals(64, afterSecond.board.count(Disc.BLACK) + afterSecond.board.count(Disc.WHITE) + afterSecond.board.count(Disc.EMPTY))
+    }
+
+    @Test fun forcedPassIsDerivedAtBothPeersWithIdenticalCanonicalState() {
+        val initial = GameState(Board.fromRows(listOf(
+            "BBBBBBB.", "BBBBBBBB", "BBBBBBBB", "BBBBBBBB", "BBBBBBBB", "BBBBBBBB", "BBBBBBBB", "BBBBBBBB",
+        )), Disc.WHITE)
+        val local = TurnResolver.resolveForcedPasses(initial)
+        val remote = TurnResolver.resolveForcedPasses(initial)
+
+        assertEquals(2, local.forcedPasses)
+        assertEquals(local.state, remote.state)
+        assertEquals(local.state.ply, remote.state.ply)
+        assertEquals(local.state.stateHash(), remote.state.stateHash())
+        assertEquals(CanonicalMoves.encode(List(local.forcedPasses) { null }), CanonicalMoves.encode(List(remote.forcedPasses) { null }))
+        assertTrue(local.state.status is GameStatus.Finished)
+    }
+
+    @Test fun aSingleForcedPassReturnsTurnToTheSamePlayer() {
+        var state = GameState()
+        var found = false
+        var seed = 0
+        while (!found && seed < 100) {
+            state = GameState()
+            val random = Random(seed++)
+            while (state.status is GameStatus.InProgress) {
+                val move = state.legalMoves.firstOrNull() ?: break
+                val played = (state.play(move) as MoveOutcome.Played).state
+                val resolution = TurnResolver.resolveForcedPasses(played)
+                if (resolution.forcedPasses == 1) {
+                    assertEquals(played.currentPlayer.opponent(), resolution.state.currentPlayer)
+                    assertEquals(played.ply + 1, resolution.state.ply)
+                    found = true
+                    break
+                }
+                state = resolution.state
+                if (state.status is GameStatus.InProgress && state.legalMoves.isNotEmpty()) {
+                    val next = state.legalMoves.elementAt(random.nextInt(state.legalMoves.size))
+                    state = (state.play(next) as MoveOutcome.Played).state
+                }
+            }
+        }
+        assertTrue(found, "expected a deterministic legal game to contain a single forced pass")
     }
 
     @Test fun randomLegalGamesNeverCreateIllegalTransition() {

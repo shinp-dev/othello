@@ -1,0 +1,213 @@
+diff --git a/src/book.c b/src/book.c
+index 84b1260..83bacb2 100644
+--- a/src/book.c
++++ b/src/book.c
+@@ -1505,7 +1505,7 @@ void book_new(Book *book, int level, int n_empties)
+  * @param book Opening book.
+  * @param file File name.
+  */
+-void book_load(Book *book, const char *file)
++bool book_load(Book *book, const char *file)
+ {
+ 	FILE *f = fopen(file, "rb");
+ 	if (f) {
+@@ -1518,37 +1518,41 @@ void book_load(Book *book, const char *file)
+ 		info("Loading book from %s...", file);
+ 		r = fread(&header_edax, sizeof (unsigned int), 1, f);
+ 		r += fread(&header_book, sizeof (unsigned int), 1, f);
+-		if (r != 2 || header_edax != EDAX || header_book != BOOK) {
+-			error("%s is not an edax opening book", file);
+-			book_new(book, options.level, 61 - get_book_depth(options.level));
+-			return;
++		if (r != 2 || header_edax != EDAX || header_book != BOOK) {
++			error("%s is not an edax opening book", file);
++			fclose(f);
++			book_new(book, options.level, 61 - get_book_depth(options.level));
++			return false;
+ 		}
+ 
+ 		r = fread(&header_version, 1, 1, f);
+ 		r += fread(&header_release, 1, 1, f);
+-		if (r != 2 || header_version != VERSION) {
+-			error("%s is not a compatible version", file);
+-			book_new(book, options.level, 61 - get_book_depth(options.level));
+-			return;
++		if (r != 2 || header_version != VERSION) {
++			error("%s is not a compatible version", file);
++			fclose(f);
++			book_new(book, options.level, 61 - get_book_depth(options.level));
++			return false;
+ 		}
+ 
+ 		r = fread(&book->date, sizeof book->date, 1, f);
+ 		r += fread(&book->options, sizeof book->options, 1, f);
+ 		r += fread(&book->n_nodes, sizeof book->n_nodes, 1, f);
+-		if (r != 3) {
+-			error("Cannot read book settings from %s", file);
+-			book_new(book, options.level, 61 - get_book_depth(options.level));
+-			return;
++		if (r != 3) {
++			error("Cannot read book settings from %s", file);
++			fclose(f);
++			book_new(book, options.level, 61 - get_book_depth(options.level));
++			return false;
+ 		}
+ 
+ 		book->n = 65536;
+ 		while ((book->n << 4) < book->n_nodes) book->n <<= 1;
+ 
+ 		book->array = (PositionArray*) malloc(book->n * sizeof (PositionArray));
+-		if (book->array == NULL) {
+-			error("cannot allocate space to store the positions");
+-			book_new(book, options.level, 61 - get_book_depth(options.level));
+-			return;
++		if (book->array == NULL) {
++			error("cannot allocate space to store the positions");
++			fclose(f);
++			book_new(book, options.level, 61 - get_book_depth(options.level));
++			return false;
+ 		}
+ 		for (i = 0; i < book->n; ++i) position_array_init(book->array + i);
+ 
+@@ -1557,19 +1561,23 @@ void book_load(Book *book, const char *file)
+ 			book_add(book, &p);
+ 		}
+ 
+-		if (!feof(f)) {
+-			error("error while reading %s", file);
+-		}
++		if (!feof(f)) {
++			error("error while reading %s", file);
++			fclose(f);
++			return false;
++		}
+ 
+ 		random_seed(&book->random, real_clock());
+ 		book->need_saving = false;
+ 
+-		info("done\n");
+-		fclose(f);
+-	} else {
+-		book_new(book, options.level, 60 - get_book_depth(options.level));
+-	}
+-}
++		info("done\n");
++		fclose(f);
++		return true;
++	} else {
++		book_new(book, options.level, 60 - get_book_depth(options.level));
++		return false;
++	}
++}
+ 
+ /**
+  * @brief Import an opening book.
+diff --git a/src/book.h b/src/book.h
+index 319c239..d0b6d90 100644
+--- a/src/book.h
++++ b/src/book.h
+@@ -64,7 +64,7 @@ void book_init(Book*);
+ void book_free(Book*);
+ 
+ void book_new(Book*, int, int);
+-void book_load(Book*, const char*);
++bool book_load(Book*, const char*);
+ void book_save(Book*, const char*);
+ void book_import(Book*, const char*);
+ void book_export(Book*, const char*);
+diff --git a/src/eval.c b/src/eval.c
+index 6f21b0e..9a95e98 100644
+--- a/src/eval.c
++++ b/src/eval.c
+@@ -610,11 +610,10 @@ void eval_open(const char* file)
+ 
+ 	// data reading
+ 	w = (int16_t*) malloc(n_w * sizeof (int16_t)); // a temporary to read packed weights
+-	f = fopen(file, "rb");
+-	if (f == NULL) {
+-		fprintf(stderr, "Cannot open %s", file);
+-		exit(EXIT_FAILURE);
+-	}
++	f = fopen(file, "rb");
++	if (f == NULL) {
++		fatal_error("Cannot open %s", file);
++	}
+ 
+ 	// File header
+ 	r = fread(&edax_header, sizeof (int), 1, f);
+diff --git a/src/util.c b/src/util.c
+index d72d8e4..89b6eb9 100644
+--- a/src/util.c
++++ b/src/util.c
+@@ -70,12 +70,21 @@
+  * @param size
+  * @return the adjusted size
+  */
+-size_t adjust_size(const size_t alignment, const size_t size)
+-{
+-	return ((size / alignment) + 1) * alignment;
+-}
+-
+-#if defined(__unix__) || defined(__APPLE__)
++size_t adjust_size(const size_t alignment, const size_t size)
++{
++	return ((size / alignment) + 1) * alignment;
++}
++
++#if defined EDAX_ANDROID_EMBEDDED
++void* edax_android_aligned_alloc(size_t memory_alignment, size_t size)
++{
++	void *pointer = NULL;
++	if (posix_memalign(&pointer, memory_alignment, size) != 0) return NULL;
++	return pointer;
++}
++#endif
++
++#if defined(__unix__) || defined(__APPLE__)
+ 
+ #if defined __APPLE__ && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 101300
+ /**
+diff --git a/src/util.h b/src/util.h
+index c82f809..c2361a2 100644
+--- a/src/util.h
++++ b/src/util.h
+@@ -27,8 +27,13 @@ struct Line;
+ /*
+  * Memory
+  */
+-size_t adjust_size(const size_t, const size_t);
+-#if defined __APPLE__ && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 101300
++size_t adjust_size(const size_t, const size_t);
++#if defined EDAX_ANDROID_EMBEDDED
++
++void* edax_android_aligned_alloc(size_t, size_t);
++#define aligned_alloc(alignment, size) edax_android_aligned_alloc((alignment), (size))
++
++#elif defined __APPLE__ && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 101300
+ 
+ void* aligned_alloc(size_t, size_t);
+ 
+@@ -241,14 +246,19 @@ typedef struct Log {
+  * @brief Display an error message as "FATAL_ERROR : file name : function name : line number : ..."
+  * and abort the program.
+  */
+-#define fatal_error(...) \
+-	do { \
++#ifdef EDAX_ANDROID_EMBEDDED
++void edax_android_fatal(const char *file, const char *function, int line, const char *format, ...);
++#define fatal_error(...) edax_android_fatal(__FILE__, __func__, __LINE__, __VA_ARGS__)
++#else
++#define fatal_error(...) \
++	do { \
+ 		fprintf(stderr, "\nFATAL ERROR: %s : %s : %d : ", __FILE__, __func__, __LINE__); \
+ 		if (errno) fprintf(stderr, "\terror #%d : %s", errno, strerror(errno)); \
+ 		fputc('\n', stderr); \
+ 		fprintf(stderr, __VA_ARGS__); \
+-		abort(); \
+-	} while (0)
++		abort(); \
++	} while (0)
++#endif
+ 
+ /**
+  * @brief Display an error message as "ERROR : filename : funcname : line number : ..."
