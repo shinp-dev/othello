@@ -1,3 +1,5 @@
+import { RESEARCH_VALIDATOR_VERSION, validateResearchGame } from "./research-validator.js";
+
 interface Env { SUPABASE_URL: string; SUPABASE_SERVICE_ROLE_KEY: string; ADMIN_TOKEN: string; SUPABASE_VERIFICATION_BUCKET: string }
 
 interface ExecutionContextLike { waitUntil(promise: Promise<unknown>): void }
@@ -15,6 +17,9 @@ export default {
     }
     const deletion = url.pathname.match(/^\/admin\/account-deletion\/([^/]+)\/process$/);
     if (deletion && request.method === "POST") return processAccountDeletion(env, deletion[1]);
+    if (url.pathname === "/admin/research/validate" && request.method === "POST") {
+      return json({ processed: await processResearchValidationBatch(env) });
+    }
     const action = url.pathname.match(/^\/admin\/verification\/([^/]+)\/(approve|reject)$/);
     if (action && request.method === "POST") {
       const decision = action[2] === "approve" ? "VERIFIED" : "REJECTED";
@@ -40,9 +45,19 @@ export default {
     return json({ error: "not found" }, 404);
   },
   scheduled(_controller: unknown, env: Env, context: ExecutionContextLike) {
-    context.waitUntil(processPendingAccountDeletions(env));
+    context.waitUntil(runScheduledMaintenance(env));
   },
 };
+
+async function runScheduledMaintenance(env: Env): Promise<void> {
+  const results = await Promise.allSettled([
+    processPendingAccountDeletions(env),
+    processResearchValidationBatch(env),
+  ]);
+  results.forEach((result, index) => {
+    if (result.status === "rejected") console.error(`scheduled maintenance task ${index} failed`);
+  });
+}
 
 function supabase(env: Env, path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${env.SUPABASE_URL}${path}`, {
@@ -71,6 +86,71 @@ async function processPendingAccountDeletions(env: Env): Promise<void> {
     const result = await processAccountDeletion(env, row.user_id);
     if (!result.ok) console.error(`account deletion failed for ${row.user_id}: ${result.status}`);
   }
+}
+
+interface ClaimedResearchGame {
+  research_game_id: number;
+  lease_token: string;
+  canonical_moves: string;
+  result: "BLACK_WIN" | "WHITE_WIN" | "DRAW";
+  finish_reason: "NORMAL" | "RESIGNATION" | "TIMEOUT" | "DISCONNECT";
+  final_position_hash: string;
+  ruleset_version: number;
+}
+
+async function processResearchValidationBatch(env: Env): Promise<number> {
+  const claimed = await supabase(env, "/rest/v1/rpc/claim_research_validation_batch", {
+    method: "POST",
+    body: JSON.stringify({ p_limit: 10, p_lease_seconds: 300 }),
+  });
+  if (!claimed.ok) throw new Error(`research validation claim failed: ${claimed.status}`);
+  const rows = await claimed.json() as ClaimedResearchGame[];
+  let processed = 0;
+  for (const row of rows) {
+    try {
+      const validation = validateResearchGame({
+        canonicalMoves: row.canonical_moves,
+        result: row.result,
+        finishReason: row.finish_reason,
+        finalPositionHash: row.final_position_hash,
+        rulesetVersion: row.ruleset_version,
+      });
+      const completion = await supabase(env, "/rest/v1/rpc/complete_research_validation", {
+        method: "POST",
+        body: JSON.stringify({
+          p_research_game_id: row.research_game_id,
+          p_lease_token: row.lease_token,
+          p_validator_version: RESEARCH_VALIDATOR_VERSION,
+          p_accepted: validation.accepted,
+          p_rejection_code: validation.accepted ? null : validation.rejectionCode,
+          p_black_decision_count: validation.accepted ? validation.blackDecisionCount : null,
+          p_white_decision_count: validation.accepted ? validation.whiteDecisionCount : null,
+        }),
+      });
+      if (!completion.ok) {
+        console.error(`research validation completion failed for game ${row.research_game_id}: ${completion.status}`);
+        continue;
+      }
+      processed += 1;
+    } catch {
+      // One malformed/poison game must not prevent the rest of the claimed batch.
+      const rejected = await supabase(env, "/rest/v1/rpc/complete_research_validation", {
+        method: "POST",
+        body: JSON.stringify({
+          p_research_game_id: row.research_game_id,
+          p_lease_token: row.lease_token,
+          p_validator_version: RESEARCH_VALIDATOR_VERSION,
+          p_accepted: false,
+          p_rejection_code: "VALIDATOR_INTERNAL_ERROR",
+          p_black_decision_count: null,
+          p_white_decision_count: null,
+        }),
+      });
+      if (rejected.ok) processed += 1;
+      else console.error(`research validation rejection failed for game ${row.research_game_id}: ${rejected.status}`);
+    }
+  }
+  return processed;
 }
 
 async function processAccountDeletion(env: Env, userId: string): Promise<Response> {

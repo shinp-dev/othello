@@ -17,6 +17,7 @@ jobs:
           cache-dependency-path: cloudflare-admin/package-lock.json
       - run: npm ci --prefix cloudflare-admin
       - run: npm run typecheck --prefix cloudflare-admin
+      - run: npm test --prefix cloudflare-admin
       - run: ./gradlew test
       - run: ./gradlew lint
       - run: ./gradlew assembleDebug assembleRelease bundleRelease
