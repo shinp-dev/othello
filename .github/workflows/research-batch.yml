@@ -33,6 +33,7 @@ jobs:
       - name: Process bounded research backlog
         env:
           RESEARCH_BATCH_DATABASE_URL: ${{ secrets.RESEARCH_BATCH_DATABASE_URL }}
+          NODE_EXTRA_CA_CERTS: ${{ github.workspace }}/supabase/certs/prod-ca-2021.crt
           RESEARCH_VALIDATION_MAX_GAMES: '200'
           RESEARCH_AGGREGATION_MAX_GAMES: '500'
         run: npm run research:batch --prefix cloudflare-admin
