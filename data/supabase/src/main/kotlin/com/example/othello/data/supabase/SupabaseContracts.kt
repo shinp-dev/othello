@@ -24,6 +24,12 @@ import com.example.othello.records.GameRecordRepository
 import com.example.othello.records.MatchResult
 import com.example.othello.research.ResearchParticipationRepository
 import com.example.othello.research.ResearchParticipationStatus
+import com.example.othello.research.ResearchMove
+import com.example.othello.research.ResearchMoveKind
+import com.example.othello.research.ResearchPosition
+import com.example.othello.research.ResearchPositionRepository
+import com.example.othello.research.ResearchPositionResult
+import com.example.othello.research.ResearchUnavailableReason
 import com.example.othello.game.CanonicalMoves
 import com.example.othello.game.Disc
 import io.github.jan.supabase.auth.Auth
@@ -573,6 +579,85 @@ internal class SupabaseResearchParticipationRepository(
         .toDomain()
 }
 
+@Serializable
+private data class ResearchPositionParams(
+    @SerialName("p_position_token") val positionToken: String,
+    @SerialName("p_segment_key") val segmentKey: String,
+)
+
+@Serializable
+private data class ResearchMoveRow(
+    val kind: String,
+    val coordinate: String? = null,
+    @SerialName("choice_rate") val choiceRate: Double = 0.0,
+    @SerialName("win_rate") val winRate: Double = 0.0,
+    @SerialName("draw_rate") val drawRate: Double = 0.0,
+    @SerialName("loss_rate") val lossRate: Double = 0.0,
+    @SerialName("unique_contributors") val uniqueContributors: Int? = null,
+    @SerialName("can_explore") val canExplore: Boolean = false,
+    @SerialName("child_position_token") val childPositionToken: String? = null,
+) {
+    fun toDomain() = ResearchMove(
+        kind = if (kind == "OTHER") ResearchMoveKind.OTHER else ResearchMoveKind.MOVE,
+        coordinate = coordinate,
+        choiceRate = choiceRate,
+        winRate = winRate,
+        drawRate = drawRate,
+        lossRate = lossRate,
+        uniqueContributors = uniqueContributors,
+        canExplore = canExplore,
+        childPositionToken = childPositionToken,
+    )
+}
+
+@Serializable
+private data class ResearchPositionResponseRow(
+    val available: Boolean,
+    val reason: String? = null,
+    @SerialName("position_token") val positionToken: String? = null,
+    @SerialName("generation_id") val generationId: Long? = null,
+    @SerialName("segment_key") val segmentKey: String? = null,
+    @SerialName("published_at") val publishedAt: String? = null,
+    @SerialName("unique_contributors") val uniqueContributors: Int? = null,
+    val moves: List<ResearchMoveRow> = emptyList(),
+    val other: ResearchMoveRow? = null,
+) {
+    fun toDomain(): ResearchPositionResult = if (!available) {
+        ResearchPositionResult.Unavailable(
+            when (reason) {
+                "NOT_ELIGIBLE" -> ResearchUnavailableReason.NOT_ELIGIBLE
+                "INSUFFICIENT_SAMPLE" -> ResearchUnavailableReason.INSUFFICIENT_SAMPLE
+                "NO_PUBLISHED_GENERATION" -> ResearchUnavailableReason.NO_PUBLISHED_GENERATION
+                "UNSUPPORTED_SEGMENT" -> ResearchUnavailableReason.UNSUPPORTED_SEGMENT
+                else -> ResearchUnavailableReason.UNKNOWN
+            },
+        )
+    } else {
+        ResearchPositionResult.Available(
+            ResearchPosition(
+                positionToken = requireNotNull(positionToken),
+                generationId = requireNotNull(generationId),
+                segmentKey = requireNotNull(segmentKey),
+                publishedAt = publishedAt,
+                uniqueContributors = requireNotNull(uniqueContributors),
+                moves = moves.map(ResearchMoveRow::toDomain),
+                other = other?.toDomain(),
+            ),
+        )
+    }
+}
+
+internal class SupabaseResearchPositionRepository(
+    private val client: SupabaseClient,
+) : ResearchPositionRepository {
+    override suspend fun getPosition(positionToken: String, segmentKey: String): ResearchPositionResult = runCatching {
+        client.postgrest
+            .rpc("get_research_position", ResearchPositionParams(positionToken, segmentKey))
+            .decodeAs<ResearchPositionResponseRow>()
+            .toDomain()
+    }.getOrElse { ResearchPositionResult.Failed("研究データを取得できませんでした") }
+}
+
 /** Composition root for Supabase infrastructure. SDK types never cross this boundary. */
 class SupabaseComponent private constructor(
     val authGateway: AuthGateway,
@@ -582,6 +667,7 @@ class SupabaseComponent private constructor(
     val accountDeletionRepository: AccountDeletionRepository,
     val gameRecordRepository: GameRecordRepository,
     val researchParticipationRepository: ResearchParticipationRepository,
+    val researchPositionRepository: ResearchPositionRepository,
     val signalingDataSource: SupabaseSignalingDataSource,
     private val client: SupabaseClient,
     private val scope: CoroutineScope,
@@ -602,6 +688,7 @@ class SupabaseComponent private constructor(
             accountDeletionRepository = SupabaseAccountDeletionRepository(client),
             gameRecordRepository = SupabaseGameRecordRepository(client),
             researchParticipationRepository = SupabaseResearchParticipationRepository(client),
+            researchPositionRepository = SupabaseResearchPositionRepository(client),
             signalingDataSource = SupabaseRealtimeSignalingDataSource(client, scope),
             client = client,
             scope = scope,
