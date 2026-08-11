@@ -77,6 +77,8 @@ research claim/complete/append/checkpoint/publish/fail wrappers. The URL must
 use the Supabase shared transaction pooler because GitHub-hosted runners are
 IPv4-only. Restrict the GitHub environment to the `main` branch. Rotate the
 role password by updating Postgres and the environment secret together.
+The hosted contract verifies the role's privileges both before and after LOGIN
+is enabled; inspect `rolcanlogin` separately when checking deployment state.
 
 Each run validates at most 200 games and appends at most 500 games to one
 immutable generation. Validation leases expire after five minutes. An

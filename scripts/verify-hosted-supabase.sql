@@ -61,7 +61,7 @@ select jsonb_build_object(
   'research_batch_role_limited', exists (
     select 1 from pg_roles
      where rolname = 'research_batch'
-       and not rolcanlogin and not rolsuper and not rolcreatedb and not rolcreaterole
+       and not rolsuper and not rolcreatedb and not rolcreaterole
   )
     and has_schema_privilege('research_batch', 'research_private', 'USAGE')
     and not has_table_privilege('research_batch', 'research_private.games', 'SELECT')
