@@ -75,8 +75,12 @@ database owner password, JWT signing secret, or Cloudflare credentials.
 The role has no direct table or sequence access and can execute only bounded
 research claim/complete/append/checkpoint/publish/fail wrappers. The URL must
 use the Supabase shared transaction pooler because GitHub-hosted runners are
-IPv4-only. Restrict the GitHub environment to the `main` branch. Rotate the
-role password by updating Postgres and the environment secret together.
+IPv4-only, and must request `sslmode=verify-full`. The workflow extends Node's
+trust store with Supabase's public `prod-ca-2021.crt`, downloaded from the
+project Dashboard SSL configuration; never disable certificate or hostname
+verification to work around connection failures. Restrict the GitHub
+environment to the `main` branch. Rotate the role password by updating
+Postgres and the environment secret together.
 The hosted contract verifies the role's privileges both before and after LOGIN
 is enabled; inspect `rolcanlogin` separately when checking deployment state.
 
