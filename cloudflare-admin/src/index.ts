@@ -13,7 +13,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    if (request.headers.get("authorization") !== `Bearer ${env.ADMIN_TOKEN}`) return json({ error: "unauthorized" }, 401);
+    if (!env.ADMIN_TOKEN || request.headers.get("authorization") !== `Bearer ${env.ADMIN_TOKEN}`) return json({ error: "unauthorized" }, 401);
     const url = new URL(request.url);
     if (request.method !== "GET" && request.method !== "POST") return json({ error: "method not allowed" }, 405);
     if (url.pathname === "/admin/verification/pending" && request.method === "GET") return supabase(env, "/rest/v1/verification_submissions?status=eq.PENDING&select=*");
@@ -61,6 +61,7 @@ async function runScheduledMaintenance(env: Env): Promise<void> {
   const results = await Promise.allSettled([
     processPendingAccountDeletions(env),
     processResearchValidationBatch(env),
+    processResearchAggregation(env),
   ]);
   results.forEach((result, index) => {
     if (result.status === "rejected") console.error(`scheduled maintenance task ${index} failed`);
