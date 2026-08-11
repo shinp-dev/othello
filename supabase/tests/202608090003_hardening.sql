@@ -1,6 +1,6 @@
 -- Run with `supabase test db` against local Supabase/Postgres + pgTAP.
 begin;
-select plan(266);
+select plan(276);
 
 select ok(not has_function_privilege('anon', 'public.prune_user_game_records(uuid)', 'execute'), 'anon cannot execute prune_user_game_records');
 select ok(not has_function_privilege('authenticated', 'public.prune_user_game_records(uuid)', 'execute'), 'authenticated cannot execute prune_user_game_records');
@@ -162,6 +162,47 @@ select ok(not has_function_privilege('authenticated', 'public.get_research_aggre
 select ok(not has_function_privilege('authenticated', 'public.append_research_aggregation_game(bigint,uuid,bigint,jsonb)', 'execute'), 'authenticated cannot append aggregate decisions');
 select ok(not has_function_privilege('authenticated', 'public.publish_research_aggregation(bigint,uuid)', 'execute'), 'authenticated cannot publish aggregate generations');
 select ok(not has_function_privilege('authenticated', 'public.fail_research_aggregation(bigint,uuid,text)', 'execute'), 'authenticated cannot fail aggregate generations');
+select ok(exists (
+  select 1 from pg_roles where rolname = 'research_batch' and not rolcanlogin
+    and not rolsuper and not rolcreatedb and not rolcreaterole
+), 'research batch executor is a least-privilege NOLOGIN role by default');
+select ok(has_schema_privilege('research_batch', 'research_private', 'usage')
+  and not has_table_privilege('research_batch', 'research_private.games', 'select')
+  and not has_table_privilege('research_batch', 'auth.users', 'select'),
+  'research batch executor can reach wrappers but cannot read research or Auth tables');
+select ok(has_function_privilege('research_batch', 'research_private.batch_claim_validation(integer,integer)', 'execute')
+  and has_function_privilege('research_batch', 'research_private.batch_claim_aggregation(integer)', 'execute')
+  and has_function_privilege('research_batch', 'research_private.batch_checkpoint_aggregation(bigint,uuid)', 'execute'),
+  'research batch executor can invoke only the bounded batch surface');
+select ok(not has_function_privilege('research_batch', 'public.claim_research_validation_batch(integer,integer)', 'execute')
+  and not has_function_privilege('research_batch', 'public.prepare_account_deletion(uuid)', 'execute')
+  and not has_function_privilege('research_batch', 'public.unlink_research_subject(uuid)', 'execute'),
+  'research batch executor cannot invoke service-role or account deletion operations directly');
+select is((
+  select count(*)::integer
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname in ('public', 'research_private')
+     and has_function_privilege('research_batch', p.oid, 'execute')
+     and p.oid <> all(array[
+       'research_private.batch_claim_validation(integer,integer)'::regprocedure,
+       'research_private.batch_complete_validation(bigint,uuid,integer,boolean,text,integer,integer)'::regprocedure,
+       'research_private.batch_claim_aggregation(integer)'::regprocedure,
+       'research_private.batch_get_aggregation_sources(bigint,uuid,integer)'::regprocedure,
+       'research_private.batch_append_aggregation_game(bigint,uuid,bigint,jsonb)'::regprocedure,
+       'research_private.batch_checkpoint_aggregation(bigint,uuid)'::regprocedure,
+       'research_private.batch_publish_aggregation(bigint,uuid)'::regprocedure,
+       'research_private.batch_fail_aggregation(bigint,uuid,text)'::regprocedure
+     ])
+), 0, 'research batch executor has no ambient application-function access');
+select ok(not has_function_privilege('authenticated', 'research_private.batch_claim_validation(integer,integer)', 'execute'),
+  'authenticated users cannot invoke the Actions batch surface');
+set role research_batch;
+create temporary table disabled_batch_claim on commit drop as
+select count(*)::int as claimed_count from research_private.batch_claim_validation(1, 300);
+reset role;
+select is((select claimed_count from disabled_batch_claim), 0,
+  'collection disabled makes the Actions validation claim a no-op');
 select ok(not exists (
   select 1 from pg_constraint
    where conrelid = 'research_private.games'::regclass
@@ -522,6 +563,17 @@ select ok(not (select public.append_research_aggregation_game(
   cross join research_private.research_subjects s
   where s.account_user_id = '00000000-0000-0000-0000-000000000010'),
   'service append retry does not duplicate weight');
+grant select on aggregation_claim, append_source to research_batch;
+set role research_batch;
+create temporary table resumed_source_page on commit drop as
+select * from research_private.batch_get_aggregation_sources(
+  (select generation_id from aggregation_claim), (select lease_token from aggregation_claim), 100
+);
+reset role;
+select ok(not exists (
+  select 1 from resumed_source_page source
+   where source.research_game_id = (select research_game_id from append_source)
+), 'resumable source pages omit games already processed by the generation');
 
 create temporary table aggregate_subjects(n integer primary key, research_subject_id uuid not null unique) on commit drop;
 insert into aggregate_subjects select i, gen_random_uuid() from generate_series(1, 100) i;
@@ -703,8 +755,21 @@ select ok((select body::text !~* '(research_subject|account|user_id|match_id|gam
 select set_config('request.jwt.claim.role', 'service_role', false);
 create temporary table failed_aggregation_claim on commit drop as
 select * from public.claim_research_aggregation_build(900);
+grant select on failed_aggregation_claim to research_batch;
+set role research_batch;
+create temporary table checkpoint_result on commit drop as
+select research_private.batch_checkpoint_aggregation(generation_id, lease_token) as status
+  from failed_aggregation_claim;
+reset role;
+select is((select status from checkpoint_result), 'CHECKPOINTED',
+  'bounded Actions run checkpoints without failing its generation');
+create temporary table resumed_aggregation_claim on commit drop as
+select * from public.claim_research_aggregation_build(900);
+select ok((select old.lease_token <> resumed.lease_token
+  from failed_aggregation_claim old cross join resumed_aggregation_claim resumed),
+  'the next Actions run rotates the expired checkpoint lease');
 select is((select public.fail_research_aggregation(generation_id, lease_token, 'WORKER_BUILD_FAILED')
-  from failed_aggregation_claim), 'FAILED', 'worker can terminalize a poisoned build without leaving a BUILDING lease');
+  from resumed_aggregation_claim), 'FAILED', 'worker can terminalize a poisoned build without leaving a BUILDING lease');
 select is((select generation_id from research_private.published_generation),
   (select generation_id from aggregation_claim), 'failed rebuild leaves the previous published generation active');
 

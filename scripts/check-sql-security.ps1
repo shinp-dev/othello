@@ -96,6 +96,12 @@ $requiredPatterns = @(
     'grant execute on function public\.get_research_position\(text, text\) to authenticated',
     'grant execute on function public\.publish_research_aggregation\(bigint, uuid\) to service_role',
     'count\(distinct sm\.research_subject_id\)',
+    'create role research_batch',
+    'alter role research_batch nologin noinherit',
+    'create or replace function research_private\.batch_claim_validation',
+    'create or replace function research_private\.batch_claim_aggregation',
+    'create or replace function research_private\.batch_checkpoint_aggregation',
+    'grant execute on function research_private\.batch_claim_validation\(integer, integer\)[\s\S]*to research_batch',
     "coalesce\(nullif\(btrim\(new\.raw_user_meta_data ->> 'display_name'\), ''\), 'プレイヤー'\)"
 )
 $missing = $requiredPatterns | Where-Object { $sql -notmatch $_ }
@@ -130,5 +136,26 @@ $researchAggregation = Get-Content 'supabase/migrations/202608110020_research_ag
 if ($researchAggregation -match 'update\s+research_private\.policy_versions\s+set\s+collection_enabled\s*=\s*true' -or
     $researchAggregation -match 'create\s+trigger') {
     Write-Error 'research aggregation migration must not enable collection or add live-match triggers'; exit 1
+}
+$researchActions = Get-Content 'supabase/migrations/202608110022_research_actions_batch.sql' -Raw
+if ($researchActions -match 'password\s+''' -or
+    $researchActions -match 'alter\s+role\s+research_batch\s+login' -or
+    $researchActions -match 'collection_enabled\s*=\s*true') {
+    Write-Error 'research Actions migration must not contain credentials, enable login, or activate collection'; exit 1
+}
+$researchPlatformAcl = Get-Content 'supabase/migrations/202608110023_research_batch_platform_acl.sql' -Raw
+if ($researchPlatformAcl -notmatch "to_regprocedure\('public\.rls_auto_enable\(\)'\)" -or
+    $researchPlatformAcl -notmatch 'revoke execute on function public\.rls_auto_enable\(\) from public') {
+    Write-Error 'Hosted platform event-trigger helper must not remain ambiently executable'; exit 1
+}
+$researchWorkflow = Get-Content '.github/workflows/research-batch.yml' -Raw
+if ($researchWorkflow -match 'SERVICE_ROLE' -or $researchWorkflow -match 'service_role') {
+    Write-Error 'research Actions workflow must use the limited database credential, never service_role'; exit 1
+}
+$workerSource = Get-Content 'cloudflare-admin/src/index.ts' -Raw
+if ($workerSource -match 'processResearchValidationBatch' -or
+    $workerSource -match 'processResearchAggregation' -or
+    $workerSource -match '/admin/research/') {
+    Write-Error 'Cloudflare Worker must not execute Research validation or aggregation'; exit 1
 }
 Write-Output 'SQL security contract check passed'

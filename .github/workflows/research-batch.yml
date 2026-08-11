@@ -1,0 +1,38 @@
+name: Research batch
+
+on:
+  schedule:
+    # Avoid the top of the hour, where GitHub documents higher schedule delay.
+    - cron: '17,47 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: research-production-batch
+  cancel-in-progress: false
+
+jobs:
+  run:
+    if: github.repository == 'shinp-dev/othello' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: research-production
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: cloudflare-admin/package-lock.json
+      - run: npm ci --prefix cloudflare-admin
+      - run: npm run build:test --prefix cloudflare-admin
+      - name: Process bounded research backlog
+        env:
+          RESEARCH_BATCH_DATABASE_URL: ${{ secrets.RESEARCH_BATCH_DATABASE_URL }}
+          RESEARCH_VALIDATION_MAX_GAMES: '200'
+          RESEARCH_AGGREGATION_MAX_GAMES: '500'
+        run: npm run research:batch --prefix cloudflare-admin

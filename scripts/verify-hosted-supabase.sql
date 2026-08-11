@@ -58,6 +58,36 @@ select jsonb_build_object(
     and not has_function_privilege('authenticated', 'public.fail_research_aggregation(bigint,uuid,text)', 'EXECUTE')
     and has_function_privilege('service_role', 'public.claim_research_aggregation_build(integer)', 'EXECUTE')
     and has_function_privilege('service_role', 'public.publish_research_aggregation(bigint,uuid)', 'EXECUTE'),
+  'research_batch_role_limited', exists (
+    select 1 from pg_roles
+     where rolname = 'research_batch'
+       and not rolsuper and not rolcreatedb and not rolcreaterole
+  )
+    and has_schema_privilege('research_batch', 'research_private', 'USAGE')
+    and not has_table_privilege('research_batch', 'research_private.games', 'SELECT')
+    and not has_table_privilege('research_batch', 'research_private.game_contributors', 'SELECT')
+    and not has_table_privilege('research_batch', 'auth.users', 'SELECT')
+    and has_function_privilege('research_batch', 'research_private.batch_claim_validation(integer,integer)', 'EXECUTE')
+    and has_function_privilege('research_batch', 'research_private.batch_claim_aggregation(integer)', 'EXECUTE')
+    and not has_function_privilege('research_batch', 'public.prepare_account_deletion(uuid)', 'EXECUTE')
+    and not has_function_privilege('research_batch', 'public.unlink_research_subject(uuid)', 'EXECUTE')
+    and not exists (
+      select 1
+        from pg_proc p
+        join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname in ('public', 'research_private')
+         and has_function_privilege('research_batch', p.oid, 'EXECUTE')
+         and p.oid <> all(array[
+           'research_private.batch_claim_validation(integer,integer)'::regprocedure,
+           'research_private.batch_complete_validation(bigint,uuid,integer,boolean,text,integer,integer)'::regprocedure,
+           'research_private.batch_claim_aggregation(integer)'::regprocedure,
+           'research_private.batch_get_aggregation_sources(bigint,uuid,integer)'::regprocedure,
+           'research_private.batch_append_aggregation_game(bigint,uuid,bigint,jsonb)'::regprocedure,
+           'research_private.batch_checkpoint_aggregation(bigint,uuid)'::regprocedure,
+           'research_private.batch_publish_aggregation(bigint,uuid)'::regprocedure,
+           'research_private.batch_fail_aggregation(bigint,uuid,text)'::regprocedure
+         ])
+    ),
   'research_collection_disabled', exists (
     select 1 from research_private.policy_versions where is_active and not collection_enabled
   ),
