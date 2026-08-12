@@ -31,6 +31,7 @@ $requiredPatterns = @(
     'matches_retention_idx',
     'insert into storage.buckets',
     'verification objects owner insert',
+    'grant select on table public\.verification_submissions to service_role',
     'file_size_limit',
     'allowed_mime_types',
     'reconcile_expired_active_match_for_user',

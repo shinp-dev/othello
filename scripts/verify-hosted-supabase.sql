@@ -11,6 +11,8 @@ select jsonb_build_object(
       and file_size_limit = 5242880
       and allowed_mime_types = array['image/jpeg', 'image/png', 'image/webp']::text[]
   ),
+  'verification_admin_select',
+    has_table_privilege('service_role', 'public.verification_submissions', 'SELECT'),
   'realtime_tables', (
     select count(*)
     from pg_publication_tables
