@@ -1,6 +1,6 @@
 -- Run with `supabase test db` against local Supabase/Postgres + pgTAP.
 begin;
-select plan(276);
+select plan(277);
 
 select ok(not has_function_privilege('anon', 'public.prune_user_game_records(uuid)', 'execute'), 'anon cannot execute prune_user_game_records');
 select ok(not has_function_privilege('authenticated', 'public.prune_user_game_records(uuid)', 'execute'), 'authenticated cannot execute prune_user_game_records');
@@ -28,6 +28,13 @@ select ok((select file_size_limit from storage.buckets where id = 'verification'
 select ok((select allowed_mime_types from storage.buckets where id = 'verification') = array['image/jpeg', 'image/png', 'image/webp']::text[], 'verification bucket allows only image MIME types');
 select ok(exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'verification objects owner insert' and 'authenticated' = any(roles)), 'verification upload policy is authenticated-only');
 select ok(exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'verification objects owner read' and 'authenticated' = any(roles)), 'verification read policy is owner-scoped, not public');
+select ok(
+  has_table_privilege('service_role', 'public.verification_submissions', 'SELECT')
+  and not has_table_privilege('service_role', 'public.verification_submissions', 'INSERT')
+  and not has_table_privilege('service_role', 'public.verification_submissions', 'UPDATE')
+  and not has_table_privilege('service_role', 'public.verification_submissions', 'DELETE'),
+  'trusted verification admin has read-only access to pending submissions'
+);
 select ok(has_table_privilege('authenticated', 'public.profiles', 'select'), 'authenticated can read RLS-scoped profiles');
 select ok(has_column_privilege('authenticated', 'public.profiles', 'display_name', 'update'), 'authenticated can update only the profile display name column');
 select ok(not has_table_privilege('authenticated', 'public.profiles', 'update'), 'authenticated has no table-wide profile update privilege');
