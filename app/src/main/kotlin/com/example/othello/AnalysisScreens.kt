@@ -2,12 +2,16 @@ package com.example.othello
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -27,6 +31,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.othello.analysis.edax.EdaxDataManager
 import com.example.othello.analysis.edax.ImportedAnalysisFile
+import com.example.othello.designsystem.ChanrivaColors
+import com.example.othello.designsystem.ChanrivaSpacing
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -93,8 +99,8 @@ internal fun AnalysisSettingsScreen(
     }
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
+        verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
     ) {
         SettingsHeader("解析", onBack)
         Text("解析エンジン: Edax 4.6")
@@ -146,7 +152,7 @@ internal fun AnalysisSettingsScreen(
         Text("ファイルはStorage Access Frameworkから選び、アプリprivate storageへコピーします。広範なストレージ権限は使用しません。")
         Text("eval.datと第三者Bookはアプリに同梱されていません。正当に取得・所有しているEdax互換ファイルだけを選択してください。", style = MaterialTheme.typography.bodySmall)
         if (busy) Text("検証・コピー中…")
-        message?.let { Text(it, color = if (it.contains("ません")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) }
+        message?.let { Text(it, color = if (it.contains("ません")) MaterialTheme.colorScheme.error else ChanrivaColors.accent) }
     }
 }
 
@@ -175,7 +181,7 @@ internal fun OpenSourceLicensesScreen(onBack: () -> Unit) {
         Text("このAndroidアプリの対応ソース: https://github.com/shinp-dev/othello")
         Text("固定upstream commit: 14f048c05ddfa385b6bf954a9c2905bbe677e9d3")
         Text("GPLv3全文はrepositoryのLICENSEと、対応ソース内のthird_party/edax/upstream/LICENSEにあります。")
-        Text("本アプリはEdax projectまたは作者による公式・公認配布物ではありません。", color = MaterialTheme.colorScheme.primary)
+        Text("本アプリはEdax projectまたは作者による公式・公認配布物ではありません。", color = ChanrivaColors.accent)
         Text("AndroidX / Kotlin / Ktor / Supabase SDK / WebRTCなど、その他の依存関係の表示はrepositoryのNOTICE.mdを参照してください。", style = MaterialTheme.typography.bodySmall)
     }
 }
@@ -196,7 +202,11 @@ private fun AnalysisFileStatus(label: String, file: ImportedAnalysisFile?, requi
 internal fun SettingsHeader(title: String, onBack: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         OutlinedButton(onClick = onBack) { Text("戻る") }
-        Text(title, style = MaterialTheme.typography.titleLarge)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(width = 2.dp, height = 22.dp).background(ChanrivaColors.accent))
+            Spacer(Modifier.size(ChanrivaSpacing.control))
+            Text(title, style = MaterialTheme.typography.titleLarge)
+        }
     }
 }
 
