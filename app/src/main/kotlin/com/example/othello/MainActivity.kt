@@ -53,14 +53,18 @@ import com.example.othello.designsystem.OthelloTheme
 import com.example.othello.game.Disc
 import com.example.othello.game.Position
 import com.example.othello.match.LocalMatchController
+import com.example.othello.match.LocalMatchMode
 import com.example.othello.match.LocalMatchViewState
 import com.example.othello.match.OnlineMatchController
 import com.example.othello.match.OnlineMatchViewState
 import com.example.othello.matchmaking.MatchmakingStatus
 import com.example.othello.records.GameRecord
+import com.example.othello.records.LocalGameRecordStore
+import com.example.othello.review.ReviewInput
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.CancellationException
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -83,6 +87,7 @@ private enum class AppDestination {
     ACCOUNT_DELETION,
     SETTINGS,
     ANALYSIS_SETTINGS,
+    LOCAL_AI_SETUP,
     RESEARCH_SETTINGS,
     ABOUT,
     OSS_LICENSES,
@@ -98,9 +103,12 @@ private fun OthelloApp(
     val context = LocalContext.current
     val analysisDataManager = remember { EdaxDataManager(context) }
     val analysisEngine = remember { ProductionAnalysisEngine() }
+    val localRecordStore = remember { JsonFileLocalGameRecordStore(context) }
     var localMatch by remember { mutableStateOf(false) }
+    var localMatchMode by remember { mutableStateOf(LocalMatchMode.HUMAN) }
+    var localHumanDisc by remember { mutableStateOf(Disc.BLACK) }
     var destination by remember { mutableStateOf(AppDestination.HOME) }
-    var selectedRecord by remember { mutableStateOf<GameRecord?>(null) }
+    var selectedReviewInput by remember { mutableStateOf<ReviewInput?>(null) }
     val scope = rememberCoroutineScope()
     val componentResult = sessionOwner.componentResult
     val component = sessionOwner.component
@@ -127,7 +135,7 @@ private fun OthelloApp(
     LaunchedEffect(session) {
         if (session == null) {
             destination = AppDestination.HOME
-            selectedRecord = null
+            selectedReviewInput = null
         }
     }
     LaunchedEffect(matchmakingState?.status, matchmakingState?.assignment) {
@@ -168,9 +176,10 @@ private fun OthelloApp(
     }
     BackHandler(enabled = localMatch || p2pCoordinator != null || destination != AppDestination.HOME) {
         when {
-            localMatch -> localMatch = false
+            localMatch -> { localMatch = false; destination = AppDestination.HOME }
             p2pCoordinator != null -> requestOnlineLeave()
             destination == AppDestination.REVIEW -> destination = AppDestination.RECORDS
+            destination == AppDestination.LOCAL_AI_SETUP -> destination = AppDestination.HOME
             destination == AppDestination.ANALYSIS_SETTINGS ||
                 destination == AppDestination.RESEARCH_SETTINGS ||
                 destination == AppDestination.ABOUT -> destination = AppDestination.SETTINGS
@@ -180,7 +189,14 @@ private fun OthelloApp(
     }
     Surface(Modifier.fillMaxSize()) {
         when {
-            localMatch -> MatchScreen(onBack = { localMatch = false })
+            localMatch -> LocalMatchScreen(
+                mode = localMatchMode,
+                humanDisc = localHumanDisc,
+                dataManager = analysisDataManager,
+                engine = analysisEngine,
+                localStore = localRecordStore,
+                onBack = { localMatch = false; destination = AppDestination.HOME },
+            )
             p2pCoordinator != null -> OnlineMatchScreen(
                 coordinator = requireNotNull(p2pCoordinator),
                 scope = scope,
@@ -192,18 +208,20 @@ private fun OthelloApp(
                 component.profileRepository,
                 onBack = { destination = AppDestination.HOME },
             )
-            destination == AppDestination.RECORDS && session != null && component != null -> RecordsScreen(
-                requireNotNull(session).userId,
-                component.gameRecordRepository,
+            destination == AppDestination.RECORDS -> RecordsScreenV2(
+                userId = session?.userId,
+                repository = component?.gameRecordRepository,
+                localStore = localRecordStore,
                 onBack = { destination = AppDestination.HOME },
-                onReview = { selectedRecord = it; destination = AppDestination.REVIEW },
+                onReview = { selectedReviewInput = it; destination = AppDestination.REVIEW },
             )
-            destination == AppDestination.REVIEW && selectedRecord != null -> ReviewScreen(
-                record = requireNotNull(selectedRecord),
+            destination == AppDestination.REVIEW && selectedReviewInput != null -> ReviewScreenV2(
+                input = requireNotNull(selectedReviewInput),
                 dataManager = analysisDataManager,
                 engine = analysisEngine,
-                researchParticipationRepository = requireNotNull(component).researchParticipationRepository,
-                researchPositionRepository = requireNotNull(component).researchPositionRepository,
+                localStore = localRecordStore,
+                researchParticipationRepository = component?.researchParticipationRepository,
+                researchPositionRepository = component?.researchPositionRepository,
                 onBack = { destination = AppDestination.RECORDS },
             )
             destination == AppDestination.CREDENTIAL && session != null && component != null -> CredentialScreen(
@@ -225,6 +243,13 @@ private fun OthelloApp(
                 manager = analysisDataManager,
                 onDataChanged = analysisEngine::clearCache,
                 onBack = { destination = AppDestination.SETTINGS },
+            )
+            destination == AppDestination.LOCAL_AI_SETUP -> LocalAiSetupScreen(
+                dataManager = analysisDataManager,
+                selectedDisc = localHumanDisc,
+                onDiscSelected = { localHumanDisc = it },
+                onBack = { destination = AppDestination.HOME },
+                onStart = { localMatchMode = LocalMatchMode.AI; localMatch = true; destination = AppDestination.HOME },
             )
             destination == AppDestination.RESEARCH_SETTINGS && session != null && component != null -> ResearchSettingsScreen(
                 repository = component.researchParticipationRepository,
@@ -295,7 +320,8 @@ private fun OthelloApp(
                 },
                 onOnlineStart = { if (session != null) matchmaking?.let { scope.launch { it.enqueue() } } },
                 onCancel = { matchmaking?.let { scope.launch { it.cancel() } } },
-                onLocalStart = { localMatch = true },
+                onLocalHumanStart = { localMatchMode = LocalMatchMode.HUMAN; localHumanDisc = Disc.BLACK; localMatch = true },
+                onLocalAiStart = { destination = AppDestination.LOCAL_AI_SETUP },
                 onProfile = { destination = AppDestination.PROFILE },
                 onRecords = { destination = AppDestination.RECORDS },
                 onCredential = { destination = AppDestination.CREDENTIAL },
@@ -469,7 +495,8 @@ private fun HomeScreen(
     onSignOut: () -> Unit,
     onOnlineStart: () -> Unit,
     onCancel: () -> Unit,
-    onLocalStart: () -> Unit,
+    onLocalHumanStart: () -> Unit,
+    onLocalAiStart: () -> Unit,
     onProfile: () -> Unit,
     onRecords: () -> Unit,
     onCredential: () -> Unit,
@@ -525,13 +552,15 @@ private fun HomeScreen(
             enabled = session != null && state?.status !in setOf(MatchmakingStatus.WAITING, MatchmakingStatus.SIGNALING),
             modifier = Modifier.fillMaxWidth(),
         ) { Text("対局する") }
-        OutlinedButton(onClick = onLocalStart, modifier = Modifier.fillMaxWidth()) { Text("ローカル対局") }
+        OutlinedButton(onClick = onLocalHumanStart, modifier = Modifier.fillMaxWidth()) { Text("ふたりで対局") }
+        OutlinedButton(onClick = onLocalAiStart, modifier = Modifier.fillMaxWidth()) { Text("AIと対局") }
         if (session != null) {
             OutlinedButton(onClick = onProfile, modifier = Modifier.fillMaxWidth()) { Text("プロフィール") }
             OutlinedButton(onClick = onRecords, modifier = Modifier.fillMaxWidth()) { Text("棋譜・レビュー") }
             OutlinedButton(onClick = onCredential, modifier = Modifier.fillMaxWidth()) { Text("連盟段級位") }
             OutlinedButton(onClick = onAccountDeletion, modifier = Modifier.fillMaxWidth()) { Text("アカウントを削除") }
         }
+        OutlinedButton(onClick = onRecords, modifier = Modifier.fillMaxWidth()) { Text("棋譜・レビュー") }
         OutlinedButton(onClick = onSettings, modifier = Modifier.fillMaxWidth()) { Text("設定") }
         when (state?.status) {
             MatchmakingStatus.WAITING -> {
@@ -567,6 +596,140 @@ private fun MatchScreen(onBack: () -> Unit) {
         OthelloBoard(viewState, controller)
         Text(viewState.message, style = MaterialTheme.typography.titleMedium, modifier = Modifier.align(Alignment.CenterHorizontally))
         Button(onClick = controller::reset, modifier = Modifier.fillMaxWidth()) { Text("新しい対局") }
+    }
+}
+
+@Composable
+private fun LocalMatchScreen(
+    mode: LocalMatchMode,
+    humanDisc: Disc,
+    dataManager: EdaxDataManager,
+    engine: ProductionAnalysisEngine,
+    localStore: LocalGameRecordStore,
+    onBack: () -> Unit,
+) {
+    val controller = remember(mode, humanDisc) { LocalMatchController(mode = mode, humanDisc = humanDisc) }
+    val aiTurnController = remember(controller, engine) { LocalAiTurnController(controller, engine) }
+    var viewState by remember { mutableStateOf(controller.viewState) }
+    var saveError by remember { mutableStateOf<String?>(null) }
+    var confirmResign by remember { mutableStateOf(false) }
+    DisposableEffect(controller) {
+        val closeable = controller.observe { viewState = it }
+        onDispose { closeable.close() }
+    }
+    LaunchedEffect(controller, viewState.game.ply, viewState.game.currentPlayer, viewState.completedRecord) {
+        if (mode == LocalMatchMode.AI && viewState.aiDisc == viewState.game.currentPlayer &&
+            !viewState.aiThinking && viewState.completedRecord == null && viewState.game.status is com.example.othello.game.GameStatus.InProgress
+        ) {
+            runCatching { aiTurnController.play(dataManager.analysisSettings()) }
+                .onFailure { if (it !is CancellationException) saveError = it.message ?: "AI analysis failed" }
+        }
+    }
+    LaunchedEffect(viewState.completedRecord?.localId) {
+        val record = viewState.completedRecord ?: return@LaunchedEffect
+        runCatching { localStore.save(record) }
+            .onFailure { saveError = it.message ?: "ローカル棋譜を保存できませんでした" }
+    }
+    DisposableEffect(engine) {
+        onDispose { engine.cancel() }
+    }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = onBack) { Text("戻る") }
+            Spacer(Modifier.weight(1f))
+            Text(if (mode == LocalMatchMode.AI) "AIと対局" else "ふたりで対局", style = MaterialTheme.typography.titleLarge)
+        }
+        ScoreHeader(viewState.game, if (mode == LocalMatchMode.AI) "AI対局" else "ローカル")
+        LocalOthelloBoard(viewState, controller)
+        Text(viewState.message, style = MaterialTheme.typography.titleMedium, modifier = Modifier.align(Alignment.CenterHorizontally))
+        if (viewState.aiThinking) Text("AI思考中…", modifier = Modifier.align(Alignment.CenterHorizontally))
+        viewState.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        saveError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = { confirmResign = true },
+                enabled = viewState.finishReason == null && !viewState.aiThinking,
+                modifier = Modifier.weight(1f),
+            ) { Text("投了") }
+            Button(onClick = controller::reset, modifier = Modifier.weight(1f)) { Text("新しい対局") }
+        }
+    }
+    if (confirmResign) {
+        AlertDialog(
+            onDismissRequest = { confirmResign = false },
+            title = { Text("投了しますか？") },
+            text = { Text("この対局を投了としてローカル棋譜に保存します。") },
+            confirmButton = {
+                Button(onClick = { confirmResign = false; controller.resign(if (mode == LocalMatchMode.AI) humanDisc else viewState.game.currentPlayer) }) { Text("投了する") }
+            },
+            dismissButton = { OutlinedButton(onClick = { confirmResign = false }) { Text("続ける") } },
+        )
+    }
+}
+
+@Composable
+private fun LocalAiSetupScreen(
+    dataManager: EdaxDataManager,
+    selectedDisc: Disc,
+    onDiscSelected: (Disc) -> Unit,
+    onBack: () -> Unit,
+    onStart: () -> Unit,
+) {
+    val status = remember { dataManager.status() }
+    val ready = status.enabled && status.nativeAvailable && status.evaluationData != null
+    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = onBack) { Text("戻る") }
+            Spacer(Modifier.weight(1f))
+            Text("AIと対局", style = MaterialTheme.typography.titleLarge)
+        }
+        Text("ユーザーの色")
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { onDiscSelected(Disc.BLACK) }, modifier = Modifier.weight(1f)) { Text(if (selectedDisc == Disc.BLACK) "✓ 黒" else "黒") }
+            OutlinedButton(onClick = { onDiscSelected(Disc.WHITE) }, modifier = Modifier.weight(1f)) { Text(if (selectedDisc == Disc.WHITE) "✓ 白" else "白") }
+        }
+        Text("既存の解析設定を使用: Edax level ${status.level}")
+        if (!ready) {
+            Text(
+                when {
+                    !status.enabled -> "設定でEdax解析がOFFです"
+                    !status.nativeAvailable -> "Edaxを利用できません"
+                    status.evaluationData == null -> "評価データを設定してください"
+                    else -> "AI対局を開始できません"
+                },
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        Button(onClick = onStart, enabled = ready, modifier = Modifier.fillMaxWidth()) { Text("対局開始") }
+    }
+}
+
+@Composable
+private fun LocalOthelloBoard(viewState: LocalMatchViewState, controller: LocalMatchController) {
+    val canPlay = !viewState.aiThinking && viewState.finishReason == null &&
+        viewState.game.status is com.example.othello.game.GameStatus.InProgress &&
+        (viewState.mode == LocalMatchMode.HUMAN || viewState.game.currentPlayer == viewState.humanDisc)
+    Column(Modifier.fillMaxWidth().aspectRatio(1f).background(Color(0xFF0D6B47)).padding(3.dp)) {
+        repeat(8) { row ->
+            Row(Modifier.fillMaxWidth().weight(1f)) {
+                repeat(8) { column ->
+                    val position = Position(row, column)
+                    val disc = viewState.game.board[position]
+                    val legal = canPlay && position in viewState.game.legalMoves
+                    Box(
+                        Modifier.weight(1f).border(0.5.dp, Color(0xFF72AA8D))
+                            .clickable(enabled = legal) { controller.play(position) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (disc != Disc.EMPTY) Box(Modifier.size(34.dp).background(if (disc == Disc.BLACK) Color(0xFF111514) else Color(0xFFF5F4ED), CircleShape))
+                        else if (legal) Box(Modifier.size(10.dp).background(Color(0xFFB7E0C9), CircleShape))
+                    }
+                }
+            }
+        }
     }
 }
 

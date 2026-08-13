@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -61,6 +62,10 @@ import com.example.othello.records.FinishReason
 import com.example.othello.records.MatchResult
 import com.example.othello.review.ReviewSession
 import com.example.othello.review.AnalysisRequestGuard
+import com.example.othello.review.ReviewInput
+import com.example.othello.records.LocalGameRecord
+import com.example.othello.records.LocalGameRecordStore
+import com.example.othello.records.LocalRecordType
 import com.example.othello.research.ResearchMove
 import com.example.othello.research.ResearchMoveKind
 import com.example.othello.research.ResearchParticipationRepository
@@ -587,3 +592,196 @@ private fun formatDate(epochMillis: Long): String = DateTimeFormatter.ofPattern(
 
 private const val MAX_EVIDENCE_BYTES = 5 * 1024 * 1024
 private val ALLOWED_EVIDENCE_MIME_TYPES = setOf("image/jpeg", "image/png", "image/webp")
+
+private enum class RecordTabV2 { LOCAL, SERVER }
+
+@Composable
+internal fun RecordsScreenV2(
+    userId: String?,
+    repository: GameRecordRepository?,
+    localStore: LocalGameRecordStore,
+    onBack: () -> Unit,
+    onReview: (ReviewInput) -> Unit,
+) {
+    var tab by remember { mutableStateOf(RecordTabV2.LOCAL) }
+    var localRecords by remember { mutableStateOf<List<LocalGameRecord>?>(null) }
+    var serverRecords by remember { mutableStateOf<List<GameRecord>?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var deleteTarget by remember { mutableStateOf<LocalGameRecord?>(null) }
+    val scope = rememberCoroutineScope()
+
+    fun reloadLocal() {
+        scope.launch {
+            runCatching { localStore.list(50) }
+                .onSuccess { localRecords = it; error = null }
+                .onFailure { error = it.message ?: "ローカル棋譜を読み込めませんでした" }
+        }
+    }
+    LaunchedEffect(userId, repository) {
+        reloadLocal()
+        if (userId != null && repository != null) {
+            runCatching { repository.recent(userId, 50) }
+                .onSuccess { serverRecords = it }
+                .onFailure { error = it.message ?: "オンライン棋譜を読み込めませんでした" }
+        }
+    }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        ScreenHeader("棋譜", onBack)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { tab = RecordTabV2.LOCAL }, modifier = Modifier.weight(1f)) { Text(if (tab == RecordTabV2.LOCAL) "✓ ローカル" else "ローカル") }
+            OutlinedButton(onClick = { tab = RecordTabV2.SERVER }, enabled = userId != null && repository != null, modifier = Modifier.weight(1f)) { Text(if (tab == RecordTabV2.SERVER) "✓ オンライン" else "オンライン") }
+        }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        when (tab) {
+            RecordTabV2.LOCAL -> when {
+                localRecords == null -> Text("読み込み中…")
+                localRecords.orEmpty().isEmpty() -> Text("ローカル棋譜はありません")
+                else -> localRecords.orEmpty().forEach { record ->
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("${record.type.displayLabel()} / ${record.result?.userLabel() ?: "研究棋譜"}")
+                            Text("${formatDate(record.createdAtEpochMillis)} / ${record.moves.size}手")
+                            Text(record.canonicalMoves, style = MaterialTheme.typography.bodySmall)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = { onReview(ReviewInput(record.localId, record.moves, "ローカル棋譜")) }) { Text("棋譜を開く") }
+                                OutlinedButton(onClick = { deleteTarget = record }) { Text("削除") }
+                            }
+                        }
+                    }
+                }
+            }
+            RecordTabV2.SERVER -> when {
+                userId == null || repository == null -> Text("ログインするとオンライン棋譜を表示できます")
+                serverRecords == null -> Text("読み込み中…")
+                serverRecords.orEmpty().isEmpty() -> Text("オンライン棋譜はありません")
+                else -> serverRecords.orEmpty().forEach { record ->
+                    val localIsBlack = record.players.first() == userId
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("${record.result.labelFor(localIsBlack)} / ${if (localIsBlack) "黒" else "白"}")
+                            Text("${record.finishReason.userLabel()} / ${formatDate(record.finishedAtEpochMillis)}")
+                            Text("${record.moves.size}手 / ${CanonicalMoves.encode(record.moves)}", style = MaterialTheme.typography.bodySmall)
+                            OutlinedButton(onClick = { onReview(ReviewInput(record.matchId, record.moves, "オンライン棋譜")) }) { Text("棋譜を開く") }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    deleteTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("ローカル棋譜を削除しますか？") },
+            text = { Text("この操作は取り消せません。") },
+            confirmButton = {
+                Button(onClick = {
+                    deleteTarget = null
+                    scope.launch {
+                        runCatching { localStore.delete(target.localId) }
+                            .onSuccess { reloadLocal() }
+                            .onFailure { error = it.message ?: "ローカル棋譜を削除できませんでした" }
+                    }
+                }) { Text("削除する") }
+            },
+            dismissButton = { OutlinedButton(onClick = { deleteTarget = null }) { Text("キャンセル") } },
+        )
+    }
+}
+
+@Composable
+internal fun ReviewScreenV2(
+    input: ReviewInput,
+    dataManager: EdaxDataManager,
+    engine: ProductionAnalysisEngine,
+    localStore: LocalGameRecordStore,
+    researchParticipationRepository: ResearchParticipationRepository?,
+    researchPositionRepository: ResearchPositionRepository?,
+    onBack: () -> Unit,
+) {
+    val review = remember(input.id) { ReviewSession(input) }
+    val guard = remember(input.id) { AnalysisRequestGuard() }
+    val scope = rememberCoroutineScope()
+    var revision by remember { mutableIntStateOf(0) }
+    var analysisRun by remember { mutableIntStateOf(0) }
+    var requested by remember { mutableStateOf(false) }
+    var running by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<AnalysisResult?>(null) }
+    var message by remember { mutableStateOf("解析は開始されていません") }
+    var saveMessage by remember { mutableStateOf<String?>(null) }
+    val state = remember(revision) { review.current }
+    val status = remember(revision, analysisRun) { dataManager.status() }
+    val settings = remember(revision, analysisRun) { dataManager.analysisSettings() }
+    val positionKey = state.stateHash()
+
+    LaunchedEffect(positionKey, requested, analysisRun, status.enabled, status.level, status.evaluationData?.sha256, status.openingBook?.sha256) {
+        engine.cancel()
+        val token = guard.begin(positionKey)
+        running = false
+        result = null
+        if (!requested) return@LaunchedEffect
+        if (!status.enabled || !status.nativeAvailable || status.evaluationData == null) {
+            message = when {
+                !status.enabled -> "設定でEdax解析がOFFです"
+                !status.nativeAvailable -> "Edaxを利用できません"
+                else -> "評価データを設定してください"
+            }
+            return@LaunchedEffect
+        }
+        running = true
+        message = "解析中…"
+        try {
+            val analyzed = review.analyze(engine, settings)
+            if (guard.isCurrent(token, review.current.stateHash())) {
+                result = analyzed
+                message = analyzed.message ?: "合法手 ${analyzed.evaluations.size} 件を解析しました"
+            }
+        } catch (_: CancellationException) {
+        } finally {
+            if (guard.isCurrent(token, review.current.stateHash())) running = false
+        }
+    }
+    DisposableEffect(engine) { onDispose { guard.invalidate(); engine.cancel() } }
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        ScreenHeader("棋譜レビュー", onBack)
+        Text(input.title)
+        Text("手数 ${review.cursor}/${review.mainLineLastPly}${if (review.isInVariation) " / 変化" else ""}")
+        ReviewBoard(state, review.isInVariation, result?.evaluations.orEmpty().associateBy { it.move }) { position ->
+            if (review.playVariation(position)) revision++
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            OutlinedButton(onClick = { review.seek(0); revision++ }, enabled = !review.isInVariation) { Text("最初") }
+            OutlinedButton(onClick = { review.previous(); revision++ }, enabled = !review.isInVariation) { Text("前") }
+            OutlinedButton(onClick = { review.next(); revision++ }, enabled = !review.isInVariation) { Text("次") }
+            OutlinedButton(onClick = { review.seek(review.mainLineLastPly); revision++ }, enabled = !review.isInVariation) { Text("最後") }
+        }
+        Slider(value = review.cursor.toFloat(), onValueChange = { review.seek(it.toInt()); revision++ }, valueRange = 0f..review.mainLineLastPly.coerceAtLeast(1).toFloat(), steps = (review.mainLineLastPly - 1).coerceAtLeast(0), enabled = !review.isInVariation)
+        if (!review.isInVariation) {
+            Button(onClick = { review.beginVariation(); revision++ }, modifier = Modifier.fillMaxWidth()) { Text("この局面から変化を開始") }
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { review.cancelVariation(); revision++ }, modifier = Modifier.weight(1f)) { Text("変化を破棄") }
+                Button(onClick = {
+                    val completeLine = review.saveVariationAndReturn()
+                    revision++
+                    if (completeLine != null) scope.launch {
+                        runCatching {
+                            localStore.save(LocalGameRecord(java.util.UUID.randomUUID().toString(), completeLine, System.currentTimeMillis(), LocalRecordType.RESEARCH_LINE))
+                        }.onSuccess { saveMessage = "研究棋譜をローカルに保存しました" }.onFailure { saveMessage = it.message ?: "研究棋譜を保存できませんでした" }
+                    }
+                }, modifier = Modifier.weight(1f)) { Text("変化をローカル棋譜に保存") }
+            }
+        }
+        Button(onClick = { requested = !running; analysisRun++; }, enabled = status.nativeAvailable, modifier = Modifier.fillMaxWidth()) { Text(if (running) "解析をキャンセル" else "全合法手を解析") }
+        Text(message)
+        saveMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+        result?.evaluations.orEmpty().forEach { evaluation -> Text("${evaluation.move.column + 1},${evaluation.move.row + 1} ${formatEvaluation(evaluation.score.value, evaluation.score.kind)}", style = MaterialTheme.typography.bodySmall) }
+        if (researchParticipationRepository != null && researchPositionRepository != null) ResearchReviewPanel(state, researchParticipationRepository, researchPositionRepository)
+    }
+}
+
+private fun LocalRecordType.displayLabel(): String = when (this) {
+    LocalRecordType.LOCAL_HUMAN -> "対人"
+    LocalRecordType.LOCAL_AI -> "AI"
+    LocalRecordType.RESEARCH_LINE -> "研究"
+}

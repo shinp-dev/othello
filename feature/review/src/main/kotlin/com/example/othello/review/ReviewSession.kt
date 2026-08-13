@@ -12,8 +12,16 @@ import com.example.othello.records.GameRecord
 
 data class Variation(val parentPly: Int, val moves: List<Position?>)
 
-class ReviewSession(private val record: GameRecord) {
-    private val states = buildStates(record.moves)
+data class ReviewInput(
+    val id: String,
+    val moves: List<Position?>,
+    val title: String = "",
+)
+
+class ReviewSession(private val input: ReviewInput) {
+    constructor(record: GameRecord) : this(ReviewInput(record.matchId, record.moves))
+
+    private val states = buildStates(input.moves)
     private val variations = mutableListOf<Variation>()
     private var variationParentPly: Int? = null
     private val activeVariationMoves = mutableListOf<Position?>()
@@ -54,10 +62,14 @@ class ReviewSession(private val record: GameRecord) {
         activeVariationState = null
     }
 
-    fun saveVariationAndReturn() {
-        val parent = variationParentPly ?: return
-        if (activeVariationMoves.isNotEmpty()) variations += Variation(parent, activeVariationMoves.toList())
+    /** Returns a complete initial-position line suitable for LocalGameRecord persistence. */
+    fun saveVariationAndReturn(): List<Position?>? {
+        val parent = variationParentPly ?: return null
+        val variation = activeVariationMoves.toList()
+        if (variation.isNotEmpty()) variations += Variation(parent, variation)
+        val completeLine = input.moves.take(parent) + variation
         cancelVariation()
+        return completeLine.takeIf { variation.isNotEmpty() }
     }
 
     suspend fun analyze(engine: AnalysisEngine, settings: AnalysisSettings = AnalysisSettings()): AnalysisResult =
