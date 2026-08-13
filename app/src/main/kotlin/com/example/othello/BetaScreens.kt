@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -510,10 +511,11 @@ private fun ReviewBoard(
     onMove: (Position) -> Unit,
 ) {
     val bestScore = evaluations.maxOfOrNull { it.value.score.value }
-    Column(Modifier.fillMaxWidth().aspectRatio(1f).background(ChanrivaColors.board).padding(3.dp)) {
-        repeat(8) { row ->
-            Row(Modifier.fillMaxWidth().weight(1f)) {
-                repeat(8) { column ->
+    Box(Modifier.fillMaxWidth().aspectRatio(1f).background(ChanrivaColors.board).padding(3.dp)) {
+        Column(Modifier.fillMaxSize()) {
+            repeat(8) { row ->
+                Row(Modifier.fillMaxWidth().weight(1f, fill = true)) {
+                    repeat(8) { column ->
                     val position = Position(row, column)
                     val disc = state.board[position]
                     val legal = variationEnabled && position in state.legalMoves
@@ -521,7 +523,8 @@ private fun ReviewBoard(
                     val isBestMove = evaluation != null && evaluation.score.value == bestScore
                     Box(
                         Modifier
-                            .weight(1f)
+                            .fillMaxHeight()
+                            .weight(1f, fill = true)
                             .border(if (isBestMove) 1.dp else 0.5.dp, if (isBestMove) ChanrivaColors.evaluation else ChanrivaColors.boardGrid)
                             .semantics {
                                 contentDescription = buildString {
@@ -547,6 +550,7 @@ private fun ReviewBoard(
                             val score = evaluation.score
                             Text(formatEvaluation(score.value), color = if (isBestMove) ChanrivaColors.evaluation else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                         } else if (legal) Box(Modifier.size(10.dp).background(ChanrivaColors.legalMove, CircleShape))
+                    }
                     }
                 }
             }

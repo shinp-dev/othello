@@ -15,9 +15,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
@@ -191,7 +193,7 @@ private fun OthelloApp(
             else -> destination = AppDestination.HOME
         }
     }
-    Surface(Modifier.fillMaxSize()) {
+    Surface(Modifier.fillMaxSize().statusBarsPadding()) {
         when {
             localMatch -> LocalMatchScreen(
                 mode = localMatchMode,
@@ -465,16 +467,18 @@ private fun OnlineOthelloBoard(
 ) {
     val canPlay = viewState.matchState.status == com.example.othello.match.MatchStatus.PLAYING &&
         viewState.game.currentPlayer == viewState.localDisc
-    Column(Modifier.fillMaxWidth().aspectRatio(1f).background(ChanrivaColors.board).padding(3.dp)) {
-        repeat(8) { row ->
-            Row(Modifier.fillMaxWidth().weight(1f)) {
-                repeat(8) { column ->
+    Box(Modifier.fillMaxWidth().aspectRatio(1f).background(ChanrivaColors.board).padding(3.dp)) {
+        Column(Modifier.fillMaxSize()) {
+            repeat(8) { row ->
+                Row(Modifier.fillMaxWidth().weight(1f, fill = true)) {
+                    repeat(8) { column ->
                     val position = Position(row, column)
                     val disc = viewState.game.board[position]
                     val legal = canPlay && position in viewState.game.legalMoves
                     Box(
                         modifier = Modifier
-                            .weight(1f)
+                            .fillMaxHeight()
+                            .weight(1f, fill = true)
                             .border(0.5.dp, ChanrivaColors.boardGrid)
                             .semantics { contentDescription = position.accessibilityLabel(disc, legal) }
                             .clickable(enabled = legal) { scope.launch { controller.play(position) } },
@@ -487,6 +491,7 @@ private fun OnlineOthelloBoard(
                                 .border(1.dp, ChanrivaColors.discOutline, CircleShape),
                         )
                         else if (legal) Box(Modifier.size(10.dp).background(ChanrivaColors.legalMove, CircleShape))
+                    }
                     }
                 }
             }
@@ -759,15 +764,19 @@ private fun LocalOthelloBoard(viewState: LocalMatchViewState, controller: LocalM
     val canPlay = !viewState.aiThinking && viewState.finishReason == null &&
         viewState.game.status is com.example.othello.game.GameStatus.InProgress &&
         (viewState.mode == LocalMatchMode.HUMAN || viewState.game.currentPlayer == viewState.humanDisc)
-    Column(Modifier.fillMaxWidth().aspectRatio(1f).background(ChanrivaColors.board).padding(3.dp)) {
-        repeat(8) { row ->
-            Row(Modifier.fillMaxWidth().weight(1f)) {
-                repeat(8) { column ->
+    Box(Modifier.fillMaxWidth().aspectRatio(1f).background(ChanrivaColors.board).padding(3.dp)) {
+        Column(Modifier.fillMaxSize()) {
+            repeat(8) { row ->
+                Row(Modifier.fillMaxWidth().weight(1f, fill = true)) {
+                    repeat(8) { column ->
                     val position = Position(row, column)
                     val disc = viewState.game.board[position]
                     val legal = canPlay && position in viewState.game.legalMoves
                     Box(
-                        Modifier.weight(1f).border(0.5.dp, ChanrivaColors.boardGrid)
+                        Modifier
+                            .fillMaxHeight()
+                            .weight(1f, fill = true)
+                            .border(0.5.dp, ChanrivaColors.boardGrid)
                             .clickable(enabled = legal) { controller.play(position) },
                         contentAlignment = Alignment.Center,
                     ) {
@@ -778,6 +787,7 @@ private fun LocalOthelloBoard(viewState: LocalMatchViewState, controller: LocalM
                                 .border(1.dp, ChanrivaColors.discOutline, CircleShape),
                         )
                         else if (legal) Box(Modifier.size(10.dp).background(ChanrivaColors.legalMove, CircleShape))
+                    }
                     }
                 }
             }
@@ -802,16 +812,18 @@ private fun ScoreHeader(game: com.example.othello.game.GameState, status: String
 
 @Composable
 private fun OthelloBoard(viewState: LocalMatchViewState, controller: LocalMatchController) {
-    Column(Modifier.fillMaxWidth().aspectRatio(1f).background(ChanrivaColors.board).padding(3.dp)) {
-        repeat(8) { row ->
-            Row(Modifier.fillMaxWidth().weight(1f)) {
-                repeat(8) { column ->
+    Box(Modifier.fillMaxWidth().aspectRatio(1f).background(ChanrivaColors.board).padding(3.dp)) {
+        Column(Modifier.fillMaxSize()) {
+            repeat(8) { row ->
+                Row(Modifier.fillMaxWidth().weight(1f, fill = true)) {
+                    repeat(8) { column ->
                     val position = Position(row, column)
                     val disc = viewState.game.board[position]
                     val legal = position in viewState.game.legalMoves
                     Box(
                         modifier = Modifier
-                            .weight(1f)
+                            .fillMaxHeight()
+                            .weight(1f, fill = true)
                             .border(0.5.dp, ChanrivaColors.boardGrid)
                             .semantics { contentDescription = position.accessibilityLabel(disc, legal) }
                             .clickable(enabled = legal) { controller.play(position) },
@@ -824,6 +836,7 @@ private fun OthelloBoard(viewState: LocalMatchViewState, controller: LocalMatchC
                                 .border(1.dp, ChanrivaColors.discOutline, CircleShape),
                         )
                         else if (legal) Box(Modifier.size(10.dp).background(ChanrivaColors.legalMove, CircleShape))
+                    }
                     }
                 }
             }
