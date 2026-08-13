@@ -594,11 +594,15 @@ private fun HomeScreen(
         }
         if (session != null) {
             OutlinedButton(onClick = onProfile, modifier = Modifier.fillMaxWidth()) { Text("プロフィール") }
-            OutlinedButton(onClick = onRecords, modifier = Modifier.fillMaxWidth()) { Text("棋譜・レビュー") }
             OutlinedButton(onClick = onCredential, modifier = Modifier.fillMaxWidth()) { Text("連盟段級位") }
             OutlinedButton(onClick = onAccountDeletion, modifier = Modifier.fillMaxWidth()) { Text("アカウントを削除") }
         }
         OutlinedButton(onClick = onRecords, modifier = Modifier.fillMaxWidth()) { Text("棋譜・レビュー") }
+        Text(
+            "研究データは、同じ局面について十分な対局データが集まっている場合のみ表示されます。参加条件を満たしていても、データ数が少ない局面では表示されないことがあります。",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+        )
         OutlinedButton(onClick = onSettings, modifier = Modifier.fillMaxWidth()) { Text("設定") }
         when (state?.status) {
             MatchmakingStatus.WAITING -> {
