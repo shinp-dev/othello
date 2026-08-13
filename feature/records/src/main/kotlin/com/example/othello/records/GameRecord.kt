@@ -132,10 +132,38 @@ object LocalGameRecordJson {
         .filter { it.isNotBlank() }
         .map(::decode)
         .toList()
+
+    fun decodeListRecovering(encoded: String): LocalGameRecordDecodeResult {
+        val records = mutableListOf<LocalGameRecord>()
+        val corruptLines = mutableListOf<String>()
+        encoded.lineSequence()
+            .filter { it.isNotBlank() }
+            .forEach { line ->
+                runCatching { decode(line) }
+                    .onSuccess(records::add)
+                    .onFailure { corruptLines += line }
+            }
+        return LocalGameRecordDecodeResult(records, corruptLines)
+    }
 }
+
+data class LocalGameRecordDecodeResult(
+    val records: List<LocalGameRecord>,
+    val corruptLines: List<String>,
+) {
+    val hasCorruption: Boolean get() = corruptLines.isNotEmpty()
+}
+
+data class LocalGameRecordReadResult(
+    val records: List<LocalGameRecord>,
+    val corruptLineCount: Int = 0,
+    val recoveryCompleted: Boolean = false,
+)
 
 interface LocalGameRecordStore {
     suspend fun list(limit: Int = 50): List<LocalGameRecord>
+    suspend fun listResult(limit: Int = 50): LocalGameRecordReadResult =
+        LocalGameRecordReadResult(list(limit))
     suspend fun save(record: LocalGameRecord)
     suspend fun delete(localId: String)
 }

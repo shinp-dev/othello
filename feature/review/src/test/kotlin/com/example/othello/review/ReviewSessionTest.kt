@@ -25,6 +25,9 @@ class ReviewSessionTest {
     @Test
     fun mainLineNavigationAndVariationNeverMutateRecord() {
         val session = ReviewSession(record)
+        assertEquals(record.result, session.reviewInput.result)
+        assertEquals(record.finishReason, session.reviewInput.finishReason)
+        assertEquals(record.finishedAtEpochMillis, session.reviewInput.finishedAtEpochMillis)
         session.seek(1)
         val mainLine = session.current
         session.beginVariation()

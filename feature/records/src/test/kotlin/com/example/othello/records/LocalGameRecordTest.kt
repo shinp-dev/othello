@@ -24,6 +24,18 @@ class LocalGameRecordTest {
     }
 
     @Test
+    fun lineDecoderRecoversHealthyRecordsAndReportsCorruption() {
+        val record = LocalGameRecord("healthy", listOf(Position(2, 3)), 1, LocalRecordType.LOCAL_HUMAN)
+        val decoded = LocalGameRecordJson.decodeListRecovering(
+            LocalGameRecordJson.encode(record) + "\n{broken-json}\n",
+        )
+
+        assertEquals(listOf(record), decoded.records)
+        assertEquals(1, decoded.corruptLines.size)
+        assertTrue(decoded.hasCorruption)
+    }
+
+    @Test
     fun inMemoryPersistenceSupportsSaveReadAndSingleDelete() = kotlinx.coroutines.runBlocking {
         val store = FakeLocalStore()
         val first = LocalGameRecord("first", emptyList(), 1, LocalRecordType.LOCAL_HUMAN)
