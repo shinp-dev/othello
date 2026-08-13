@@ -25,8 +25,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.othello.research.ResearchConsent
+import com.example.othello.research.RESEARCH_PUBLICATION_PRIVACY_COPY
 import com.example.othello.research.ResearchParticipationRepository
 import com.example.othello.research.ResearchParticipationStatus
+import com.example.othello.research.collectionStatusCopy
 import kotlinx.coroutines.launch
 
 @Composable
@@ -115,10 +117,11 @@ internal fun ResearchSettingsScreen(
             }
         }
 
-        Text(
-            "研究棋譜の収集は準備中です。このバージョンでは研究データを収集しません。",
-            style = MaterialTheme.typography.bodySmall,
-        )
+        current?.collectionStatusCopy()?.let { collectionCopy ->
+            Text(collectionCopy.status, style = MaterialTheme.typography.titleSmall)
+            Text(collectionCopy.explanation, style = MaterialTheme.typography.bodySmall)
+        }
+        Text(RESEARCH_PUBLICATION_PRIVACY_COPY, style = MaterialTheme.typography.bodySmall)
     }
 }
 
