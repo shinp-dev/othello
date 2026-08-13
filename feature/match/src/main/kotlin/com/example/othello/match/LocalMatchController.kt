@@ -68,7 +68,7 @@ class LocalMatchController(
 
     fun passAiTurn(): Boolean {
         if (mode != LocalMatchMode.AI || state.aiThinking || state.game.status is GameStatus.Finished || state.game.currentPlayer != state.aiDisc || state.game.legalMoves.isNotEmpty()) return false
-        resolveForcedPasses(state.game, state.moves + null)
+        resolveForcedPasses(state.game, state.moves)
         return true
     }
 

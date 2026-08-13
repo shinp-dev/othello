@@ -8,7 +8,9 @@ import com.example.othello.game.GameState
 import com.example.othello.game.MoveOutcome
 import com.example.othello.game.Position
 import com.example.othello.game.TurnResolver
+import com.example.othello.records.FinishReason
 import com.example.othello.records.GameRecord
+import com.example.othello.records.MatchResult
 
 data class Variation(val parentPly: Int, val moves: List<Position?>)
 
@@ -16,10 +18,22 @@ data class ReviewInput(
     val id: String,
     val moves: List<Position?>,
     val title: String = "",
+    val result: MatchResult? = null,
+    val finishReason: FinishReason? = null,
+    val finishedAtEpochMillis: Long? = null,
 )
 
 class ReviewSession(private val input: ReviewInput) {
-    constructor(record: GameRecord) : this(ReviewInput(record.matchId, record.moves))
+    constructor(record: GameRecord) : this(
+        ReviewInput(
+            id = record.matchId,
+            moves = record.moves,
+            title = "オンライン棋譜",
+            result = record.result,
+            finishReason = record.finishReason,
+            finishedAtEpochMillis = record.finishedAtEpochMillis,
+        ),
+    )
 
     private val states = buildStates(input.moves)
     private val variations = mutableListOf<Variation>()
@@ -30,6 +44,7 @@ class ReviewSession(private val input: ReviewInput) {
         private set
 
     val current: GameState get() = activeVariationState ?: states[cursor]
+    val reviewInput: ReviewInput get() = input
     val currentVariations: List<Variation> get() = variations.toList()
     val isInVariation: Boolean get() = activeVariationState != null
     val mainLineLastPly: Int get() = states.lastIndex

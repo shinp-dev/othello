@@ -64,6 +64,7 @@ import com.example.othello.review.ReviewSession
 import com.example.othello.review.AnalysisRequestGuard
 import com.example.othello.review.ReviewInput
 import com.example.othello.records.LocalGameRecord
+import com.example.othello.records.LocalGameRecordReadResult
 import com.example.othello.records.LocalGameRecordStore
 import com.example.othello.records.LocalRecordType
 import com.example.othello.research.ResearchMove
@@ -607,13 +608,24 @@ internal fun RecordsScreenV2(
     var localRecords by remember { mutableStateOf<List<LocalGameRecord>?>(null) }
     var serverRecords by remember { mutableStateOf<List<GameRecord>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var localReadWarning by remember { mutableStateOf<String?>(null) }
     var deleteTarget by remember { mutableStateOf<LocalGameRecord?>(null) }
     val scope = rememberCoroutineScope()
 
     fun reloadLocal() {
         scope.launch {
-            runCatching { localStore.list(50) }
-                .onSuccess { localRecords = it; error = null }
+            runCatching { localStore.listResult(50) }
+                .onSuccess { result: LocalGameRecordReadResult ->
+                    localRecords = result.records
+                    localReadWarning = result.corruptLineCount.takeIf { it > 0 }?.let {
+                        if (result.recoveryCompleted) {
+                            "一部のローカル棋譜を読み込めませんでした（${it}件を隔離しました）"
+                        } else {
+                            "一部のローカル棋譜を読み込めませんでした（${it}件の復旧待ち）"
+                        }
+                    }
+                    error = null
+                }
                 .onFailure { error = it.message ?: "ローカル棋譜を読み込めませんでした" }
         }
     }
@@ -632,6 +644,7 @@ internal fun RecordsScreenV2(
             OutlinedButton(onClick = { tab = RecordTabV2.SERVER }, enabled = userId != null && repository != null, modifier = Modifier.weight(1f)) { Text(if (tab == RecordTabV2.SERVER) "✓ オンライン" else "オンライン") }
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        localReadWarning?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         when (tab) {
             RecordTabV2.LOCAL -> when {
                 localRecords == null -> Text("読み込み中…")
@@ -643,7 +656,20 @@ internal fun RecordsScreenV2(
                             Text("${formatDate(record.createdAtEpochMillis)} / ${record.moves.size}手")
                             Text(record.canonicalMoves, style = MaterialTheme.typography.bodySmall)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(onClick = { onReview(ReviewInput(record.localId, record.moves, "ローカル棋譜")) }) { Text("棋譜を開く") }
+                                OutlinedButton(
+                                    onClick = {
+                                        onReview(
+                                            ReviewInput(
+                                                id = record.localId,
+                                                moves = record.moves,
+                                                title = "ローカル棋譜",
+                                                result = record.result,
+                                                finishReason = record.finishReason,
+                                                finishedAtEpochMillis = record.createdAtEpochMillis,
+                                            ),
+                                        )
+                                    },
+                                ) { Text("棋譜を開く") }
                                 OutlinedButton(onClick = { deleteTarget = record }) { Text("削除") }
                             }
                         }
@@ -661,7 +687,20 @@ internal fun RecordsScreenV2(
                             Text("${record.result.labelFor(localIsBlack)} / ${if (localIsBlack) "黒" else "白"}")
                             Text("${record.finishReason.userLabel()} / ${formatDate(record.finishedAtEpochMillis)}")
                             Text("${record.moves.size}手 / ${CanonicalMoves.encode(record.moves)}", style = MaterialTheme.typography.bodySmall)
-                            OutlinedButton(onClick = { onReview(ReviewInput(record.matchId, record.moves, "オンライン棋譜")) }) { Text("棋譜を開く") }
+                            OutlinedButton(
+                                onClick = {
+                                    onReview(
+                                        ReviewInput(
+                                            id = record.matchId,
+                                            moves = record.moves,
+                                            title = "オンライン棋譜",
+                                            result = record.result,
+                                            finishReason = record.finishReason,
+                                            finishedAtEpochMillis = record.finishedAtEpochMillis,
+                                        ),
+                                    )
+                                },
+                            ) { Text("棋譜を開く") }
                         }
                     }
                 }
@@ -745,6 +784,15 @@ internal fun ReviewScreenV2(
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         ScreenHeader("棋譜レビュー", onBack)
         Text(input.title)
+        input.result?.let { resultValue ->
+            Text(
+                listOfNotNull(
+                    resultValue.userLabel(),
+                    input.finishReason?.userLabel(),
+                    input.finishedAtEpochMillis?.let(::formatDate),
+                ).joinToString(" / "),
+            )
+        }
         Text("手数 ${review.cursor}/${review.mainLineLastPly}${if (review.isInVariation) " / 変化" else ""}")
         ReviewBoard(state, review.isInVariation, result?.evaluations.orEmpty().associateBy { it.move }) { position ->
             if (review.playVariation(position)) revision++

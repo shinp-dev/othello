@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,7 +60,6 @@ import com.example.othello.match.OnlineMatchController
 import com.example.othello.match.OnlineMatchViewState
 import com.example.othello.matchmaking.MatchmakingStatus
 import com.example.othello.records.GameRecord
-import com.example.othello.records.LocalGameRecordStore
 import com.example.othello.review.ReviewInput
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -103,7 +103,9 @@ private fun OthelloApp(
     val context = LocalContext.current
     val analysisDataManager = remember { EdaxDataManager(context) }
     val analysisEngine = remember { ProductionAnalysisEngine() }
-    val localRecordStore = remember { JsonFileLocalGameRecordStore(context) }
+    val localPersistenceViewModel: LocalGameRecordPersistenceViewModel = viewModel()
+    val localRecordStore = localPersistenceViewModel.store
+    val localRecordPersistence = localPersistenceViewModel.coordinator
     var localMatch by remember { mutableStateOf(false) }
     var localMatchMode by remember { mutableStateOf(LocalMatchMode.HUMAN) }
     var localHumanDisc by remember { mutableStateOf(Disc.BLACK) }
@@ -194,7 +196,7 @@ private fun OthelloApp(
                 humanDisc = localHumanDisc,
                 dataManager = analysisDataManager,
                 engine = analysisEngine,
-                localStore = localRecordStore,
+                persistence = localRecordPersistence,
                 onBack = { localMatch = false; destination = AppDestination.HOME },
             )
             p2pCoordinator != null -> OnlineMatchScreen(
@@ -605,7 +607,7 @@ private fun LocalMatchScreen(
     humanDisc: Disc,
     dataManager: EdaxDataManager,
     engine: ProductionAnalysisEngine,
-    localStore: LocalGameRecordStore,
+    persistence: LocalGameRecordPersistenceCoordinator,
     onBack: () -> Unit,
 ) {
     val controller = remember(mode, humanDisc) { LocalMatchController(mode = mode, humanDisc = humanDisc) }
@@ -613,8 +615,12 @@ private fun LocalMatchScreen(
     var viewState by remember { mutableStateOf(controller.viewState) }
     var saveError by remember { mutableStateOf<String?>(null) }
     var confirmResign by remember { mutableStateOf(false) }
-    DisposableEffect(controller) {
-        val closeable = controller.observe { viewState = it }
+    val saveStates by persistence.saveStates.collectAsState()
+    DisposableEffect(controller, persistence) {
+        val closeable = controller.observe { next ->
+            viewState = next
+            next.completedRecord?.let(persistence::enqueue)
+        }
         onDispose { closeable.close() }
     }
     LaunchedEffect(controller, viewState.game.ply, viewState.game.currentPlayer, viewState.completedRecord) {
@@ -624,11 +630,6 @@ private fun LocalMatchScreen(
             runCatching { aiTurnController.play(dataManager.analysisSettings()) }
                 .onFailure { if (it !is CancellationException) saveError = it.message ?: "AI analysis failed" }
         }
-    }
-    LaunchedEffect(viewState.completedRecord?.localId) {
-        val record = viewState.completedRecord ?: return@LaunchedEffect
-        runCatching { localStore.save(record) }
-            .onFailure { saveError = it.message ?: "ローカル棋譜を保存できませんでした" }
     }
     DisposableEffect(engine) {
         onDispose { engine.cancel() }
@@ -648,6 +649,21 @@ private fun LocalMatchScreen(
         if (viewState.aiThinking) Text("AI思考中…", modifier = Modifier.align(Alignment.CenterHorizontally))
         viewState.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         saveError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        viewState.completedRecord?.let { record ->
+            when (saveStates[record.localId]?.status) {
+                LocalRecordSaveStatus.SAVED -> Text("ローカル棋譜を保存しました")
+                LocalRecordSaveStatus.FAILED -> {
+                    Text(
+                        saveStates[record.localId]?.errorMessage ?: "ローカル棋譜を保存できませんでした",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    OutlinedButton(onClick = { persistence.retry(record.localId) }) { Text("保存を再試行") }
+                }
+                LocalRecordSaveStatus.PENDING,
+                LocalRecordSaveStatus.SAVING,
+                null -> Text("ローカル棋譜を保存中…")
+            }
+        }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
                 onClick = { confirmResign = true },

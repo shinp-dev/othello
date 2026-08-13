@@ -1,7 +1,10 @@
 package com.example.othello.match
 
 import com.example.othello.game.Disc
+import com.example.othello.game.GameState
+import com.example.othello.game.MoveOutcome
 import com.example.othello.game.Position
+import com.example.othello.game.TurnResolver
 import com.example.othello.records.FinishReason
 import com.example.othello.records.LocalRecordType
 import kotlin.test.Test
@@ -39,5 +42,29 @@ class LocalMatchControllerTest {
         assertFalse(controller.play(Position(2, 3)))
         assertTrue(controller.playAiMove(Position(2, 3)))
         assertEquals(Disc.WHITE, controller.viewState.game.currentPlayer)
+    }
+
+    @Test
+    fun aiForcedPassIsRecordedExactlyOnce() {
+        var game = GameState()
+        var found = false
+        repeat(120) {
+            if (found || game.status !is com.example.othello.game.GameStatus.InProgress) return@repeat
+            val move = game.legalMoves.firstOrNull() ?: return@repeat
+            val played = game.play(move) as? MoveOutcome.Played ?: return@repeat
+            val resolution = TurnResolver.resolveForcedPasses(played.state)
+            if (resolution.forcedPasses == 1) {
+                val controller = LocalMatchController(
+                    mode = LocalMatchMode.AI,
+                    humanDisc = played.state.currentPlayer.opponent(),
+                    initialGame = played.state,
+                )
+                assertTrue(controller.passAiTurn())
+                assertEquals(listOf<Position?>(null), controller.viewState.moves)
+                found = true
+            }
+            game = resolution.state
+        }
+        assertTrue(found, "expected a deterministic single forced-pass position")
     }
 }
