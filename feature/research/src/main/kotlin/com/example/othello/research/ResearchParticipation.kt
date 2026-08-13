@@ -38,6 +38,27 @@ data class ResearchParticipationStatus(
     val collectionAllowed: Boolean,
 )
 
+data class ResearchCollectionStatusCopy(
+    val status: String,
+    val explanation: String,
+)
+
+fun ResearchParticipationStatus.collectionStatusCopy(): ResearchCollectionStatusCopy =
+    if (collectionEnabled) {
+        ResearchCollectionStatusCopy(
+            status = "研究棋譜の収集状態: 有効",
+            explanation = "研究参加がONの期間に成立した対象対局を、同意内容に基づいて研究データとして利用します。",
+        )
+    } else {
+        ResearchCollectionStatusCopy(
+            status = "研究棋譜の収集状態: 停止中",
+            explanation = "研究参加がONでも、運営側で収集が有効な期間に成立した対象対局だけを研究データとして利用します。",
+        )
+    }
+
+const val RESEARCH_PUBLICATION_PRIVACY_COPY: String =
+    "一般に公開するのは、所定の参加者数を満たした集合統計だけです。raw研究データや個別プレイヤーの情報は公開しません。"
+
 interface ResearchParticipationRepository {
     suspend fun status(): ResearchParticipationStatus
 
