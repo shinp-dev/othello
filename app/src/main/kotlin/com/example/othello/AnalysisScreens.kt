@@ -2,12 +2,16 @@ package com.example.othello
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -27,6 +31,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.othello.analysis.edax.EdaxDataManager
 import com.example.othello.analysis.edax.ImportedAnalysisFile
+import com.example.othello.designsystem.ChanrivaColors
+import com.example.othello.designsystem.ChanrivaSpacing
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -93,8 +99,8 @@ internal fun AnalysisSettingsScreen(
     }
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
+        verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
     ) {
         SettingsHeader("解析", onBack)
         Text("解析エンジン: Edax 4.6")
@@ -196,7 +202,11 @@ private fun AnalysisFileStatus(label: String, file: ImportedAnalysisFile?, requi
 internal fun SettingsHeader(title: String, onBack: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         OutlinedButton(onClick = onBack) { Text("戻る") }
-        Text(title, style = MaterialTheme.typography.titleLarge)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(width = 2.dp, height = 22.dp).background(ChanrivaColors.accent))
+            Spacer(Modifier.size(ChanrivaSpacing.control))
+            Text(title, style = MaterialTheme.typography.titleLarge)
+        }
     }
 }
 

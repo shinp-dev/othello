@@ -38,12 +38,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.example.othello.analysis.api.AnalysisResult
+import com.example.othello.designsystem.ChanrivaColors
+import com.example.othello.designsystem.ChanrivaSpacing
 import com.example.othello.analysis.api.EvaluationKind
 import com.example.othello.analysis.edax.EdaxDataManager
 import com.example.othello.analysis.edax.ProductionAnalysisEngine
@@ -95,7 +96,7 @@ internal fun ProfileScreen(userId: String, repository: ProfileRepository, onBack
             .onSuccess { profile = it; displayName = it.displayName }
             .onFailure { error = it.message ?: "プロフィールを取得できませんでした" }
     }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page), verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section)) {
         ScreenHeader("プロフィール", onBack)
         profile?.let { current ->
             OutlinedTextField(displayName, { displayName = it.take(40) }, label = { Text("表示名") }, singleLine = true)
@@ -134,7 +135,7 @@ internal fun RecordsScreen(
             .onSuccess { records = it }
             .onFailure { error = it.message ?: "棋譜を取得できませんでした" }
     }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page), verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section)) {
         ScreenHeader("棋譜", onBack)
         when {
             error != null -> Text(requireNotNull(error), color = MaterialTheme.colorScheme.error)
@@ -224,7 +225,7 @@ internal fun ReviewScreen(
     }
 
     val visibleEvaluations = if (showEvaluations) analysisResult?.evaluations.orEmpty() else emptyList()
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page), verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact)) {
         ScreenHeader("棋譜レビュー", onBack)
         Text("${record.result.userLabel()} / ${record.finishReason.userLabel()} / ${formatDate(record.finishedAtEpochMillis)}")
         Text("手数 ${review.cursor}/${review.mainLineLastPly}${if (review.isInVariation) " / 変化手順" else ""}")
@@ -494,7 +495,11 @@ private fun ScreenHeader(title: String, onBack: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         OutlinedButton(onClick = onBack) { Text("戻る") }
         Spacer(Modifier.weight(1f))
-        Text(title, style = MaterialTheme.typography.titleLarge)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(width = 2.dp, height = 22.dp).background(ChanrivaColors.accent))
+            Spacer(Modifier.size(ChanrivaSpacing.control))
+            Text(title, style = MaterialTheme.typography.titleLarge)
+        }
     }
 }
 
@@ -505,7 +510,8 @@ private fun ReviewBoard(
     evaluations: Map<Position, com.example.othello.analysis.api.MoveEvaluation>,
     onMove: (Position) -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().aspectRatio(1f).background(Color(0xFF0D6B47)).padding(3.dp)) {
+    val bestMove = evaluations.maxByOrNull { it.value.score.value }?.key
+    Column(Modifier.fillMaxWidth().aspectRatio(1f).background(ChanrivaColors.board).padding(3.dp)) {
         repeat(8) { row ->
             Row(Modifier.fillMaxWidth().weight(1f)) {
                 repeat(8) { column ->
@@ -516,7 +522,7 @@ private fun ReviewBoard(
                     Box(
                         Modifier
                             .weight(1f)
-                            .border(0.5.dp, Color(0xFF72AA8D))
+                            .border(if (position == bestMove) 1.dp else 0.5.dp, if (position == bestMove) ChanrivaColors.evaluation else ChanrivaColors.boardGrid)
                             .semantics {
                                 contentDescription = buildString {
                                     append("${('A'.code + column).toChar()}${row + 1}、")
@@ -531,11 +537,11 @@ private fun ReviewBoard(
                             .clickable(enabled = legal) { onMove(position) },
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (disc != Disc.EMPTY) Box(Modifier.size(34.dp).background(if (disc == Disc.BLACK) Color(0xFF111514) else Color(0xFFF5F4ED), CircleShape))
+                        if (disc != Disc.EMPTY) Box(Modifier.size(34.dp).background(if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc, CircleShape))
                         else if (evaluation != null) {
                             val score = evaluation.score
-                            Text(formatEvaluation(score.value, score.kind), color = Color(0xFFFFE082), style = MaterialTheme.typography.labelSmall)
-                        } else if (legal) Box(Modifier.size(10.dp).background(Color(0xFFB7E0C9), CircleShape))
+                            Text(formatEvaluation(score.value, score.kind), color = if (position == bestMove) ChanrivaColors.evaluation else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                        } else if (legal) Box(Modifier.size(10.dp).background(ChanrivaColors.legalMove, CircleShape))
                     }
                 }
             }
@@ -781,7 +787,7 @@ internal fun ReviewScreenV2(
     }
     DisposableEffect(engine) { onDispose { guard.invalidate(); engine.cancel() } }
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page), verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact)) {
         ScreenHeader("棋譜レビュー", onBack)
         Text(input.title)
         input.result?.let { resultValue ->

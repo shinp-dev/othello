@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.example.othello.designsystem.ChanrivaSpacing
 import com.example.othello.research.ResearchConsent
 import com.example.othello.research.RESEARCH_PUBLICATION_PRIVACY_COPY
 import com.example.othello.research.ResearchParticipationRepository
@@ -68,8 +69,8 @@ internal fun ResearchSettingsScreen(
     }
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
+        verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
     ) {
         SettingsHeader("研究参加", onBack)
         Text("人間が実際に選んだ手を、個人単位では公開せず、集合・統計データとして研究に役立てます。")

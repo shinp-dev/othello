@@ -39,7 +39,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -51,6 +50,8 @@ import com.example.othello.auth.SignUpResult
 import com.example.othello.analysis.edax.EdaxDataManager
 import com.example.othello.analysis.edax.ProductionAnalysisEngine
 import com.example.othello.designsystem.OthelloTheme
+import com.example.othello.designsystem.ChanrivaColors
+import com.example.othello.designsystem.ChanrivaSpacing
 import com.example.othello.game.Disc
 import com.example.othello.game.Position
 import com.example.othello.match.LocalMatchController
@@ -373,8 +374,8 @@ private fun OnlineMatchScreen(
     var confirmResign by remember { mutableStateOf(false) }
     val diagnostics = if (showDiagnostics) coordinator.diagnostics() else null
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
+        verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             OutlinedButton(onClick = onBack) { Text("戻る") }
@@ -464,7 +465,7 @@ private fun OnlineOthelloBoard(
 ) {
     val canPlay = viewState.matchState.status == com.example.othello.match.MatchStatus.PLAYING &&
         viewState.game.currentPlayer == viewState.localDisc
-    Column(Modifier.fillMaxWidth().aspectRatio(1f).background(Color(0xFF0D6B47)).padding(3.dp)) {
+    Column(Modifier.fillMaxWidth().aspectRatio(1f).background(ChanrivaColors.board).padding(3.dp)) {
         repeat(8) { row ->
             Row(Modifier.fillMaxWidth().weight(1f)) {
                 repeat(8) { column ->
@@ -474,13 +475,13 @@ private fun OnlineOthelloBoard(
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .border(0.5.dp, Color(0xFF72AA8D))
+                            .border(0.5.dp, ChanrivaColors.boardGrid)
                             .semantics { contentDescription = position.accessibilityLabel(disc, legal) }
                             .clickable(enabled = legal) { scope.launch { controller.play(position) } },
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (disc != Disc.EMPTY) Box(Modifier.size(34.dp).background(if (disc == Disc.BLACK) Color(0xFF111514) else Color(0xFFF5F4ED), CircleShape))
-                        else if (legal) Box(Modifier.size(10.dp).background(Color(0xFFB7E0C9), CircleShape))
+                        if (disc != Disc.EMPTY) Box(Modifier.size(34.dp).background(if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc, CircleShape))
+                        else if (legal) Box(Modifier.size(10.dp).background(ChanrivaColors.legalMove, CircleShape))
                     }
                 }
             }
@@ -514,9 +515,9 @@ private fun HomeScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
+        verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
+        horizontalAlignment = Alignment.Start,
     ) {
         Text("ちゃんりば", style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary)
         Text("ちゃんと残る、ちゃんと振り返れるリバーシ", style = MaterialTheme.typography.titleMedium)
@@ -611,7 +612,7 @@ private fun MatchScreen(onBack: () -> Unit) {
         onDispose { closeable.close() }
     }
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -660,7 +661,7 @@ private fun LocalMatchScreen(
         onDispose { engine.cancel() }
     }
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -721,7 +722,7 @@ private fun LocalAiSetupScreen(
 ) {
     val status = remember { dataManager.status() }
     val ready = status.enabled && status.nativeAvailable && status.evaluationData != null
-    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(Modifier.fillMaxSize().padding(ChanrivaSpacing.page), verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             OutlinedButton(onClick = onBack) { Text("戻る") }
             Spacer(Modifier.weight(1f))
@@ -753,7 +754,7 @@ private fun LocalOthelloBoard(viewState: LocalMatchViewState, controller: LocalM
     val canPlay = !viewState.aiThinking && viewState.finishReason == null &&
         viewState.game.status is com.example.othello.game.GameStatus.InProgress &&
         (viewState.mode == LocalMatchMode.HUMAN || viewState.game.currentPlayer == viewState.humanDisc)
-    Column(Modifier.fillMaxWidth().aspectRatio(1f).background(Color(0xFF0D6B47)).padding(3.dp)) {
+    Column(Modifier.fillMaxWidth().aspectRatio(1f).background(ChanrivaColors.board).padding(3.dp)) {
         repeat(8) { row ->
             Row(Modifier.fillMaxWidth().weight(1f)) {
                 repeat(8) { column ->
@@ -761,12 +762,12 @@ private fun LocalOthelloBoard(viewState: LocalMatchViewState, controller: LocalM
                     val disc = viewState.game.board[position]
                     val legal = canPlay && position in viewState.game.legalMoves
                     Box(
-                        Modifier.weight(1f).border(0.5.dp, Color(0xFF72AA8D))
+                        Modifier.weight(1f).border(0.5.dp, ChanrivaColors.boardGrid)
                             .clickable(enabled = legal) { controller.play(position) },
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (disc != Disc.EMPTY) Box(Modifier.size(34.dp).background(if (disc == Disc.BLACK) Color(0xFF111514) else Color(0xFFF5F4ED), CircleShape))
-                        else if (legal) Box(Modifier.size(10.dp).background(Color(0xFFB7E0C9), CircleShape))
+                        if (disc != Disc.EMPTY) Box(Modifier.size(34.dp).background(if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc, CircleShape))
+                        else if (legal) Box(Modifier.size(10.dp).background(ChanrivaColors.legalMove, CircleShape))
                     }
                 }
             }
@@ -780,7 +781,7 @@ private fun ScoreHeader(viewState: LocalMatchViewState) = ScoreHeader(viewState.
 @Composable
 private fun ScoreHeader(game: com.example.othello.game.GameState, status: String) {
     Card(Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+        Row(Modifier.fillMaxWidth().padding(ChanrivaSpacing.card), horizontalArrangement = Arrangement.SpaceEvenly) {
             Text("黒 ${game.board.count(Disc.BLACK)}")
             Text("白 ${game.board.count(Disc.WHITE)}")
             Text("手数 ${game.ply}")
@@ -791,7 +792,7 @@ private fun ScoreHeader(game: com.example.othello.game.GameState, status: String
 
 @Composable
 private fun OthelloBoard(viewState: LocalMatchViewState, controller: LocalMatchController) {
-    Column(Modifier.fillMaxWidth().aspectRatio(1f).background(Color(0xFF0D6B47)).padding(3.dp)) {
+    Column(Modifier.fillMaxWidth().aspectRatio(1f).background(ChanrivaColors.board).padding(3.dp)) {
         repeat(8) { row ->
             Row(Modifier.fillMaxWidth().weight(1f)) {
                 repeat(8) { column ->
@@ -801,13 +802,13 @@ private fun OthelloBoard(viewState: LocalMatchViewState, controller: LocalMatchC
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .border(0.5.dp, Color(0xFF72AA8D))
+                            .border(0.5.dp, ChanrivaColors.boardGrid)
                             .semantics { contentDescription = position.accessibilityLabel(disc, legal) }
                             .clickable(enabled = legal) { controller.play(position) },
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (disc != Disc.EMPTY) Box(Modifier.size(34.dp).background(if (disc == Disc.BLACK) Color(0xFF111514) else Color(0xFFF5F4ED), CircleShape))
-                        else if (legal) Box(Modifier.size(10.dp).background(Color(0xFFB7E0C9), CircleShape))
+                        if (disc != Disc.EMPTY) Box(Modifier.size(34.dp).background(if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc, CircleShape))
+                        else if (legal) Box(Modifier.size(10.dp).background(ChanrivaColors.legalMove, CircleShape))
                     }
                 }
             }
