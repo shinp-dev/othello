@@ -480,7 +480,12 @@ private fun OnlineOthelloBoard(
                             .clickable(enabled = legal) { scope.launch { controller.play(position) } },
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (disc != Disc.EMPTY) Box(Modifier.size(34.dp).background(if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc, CircleShape))
+                        if (disc != Disc.EMPTY) Box(
+                            Modifier
+                                .size(34.dp)
+                                .background(if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc, CircleShape)
+                                .border(1.dp, ChanrivaColors.discOutline, CircleShape),
+                        )
                         else if (legal) Box(Modifier.size(10.dp).background(ChanrivaColors.legalMove, CircleShape))
                     }
                 }
@@ -519,7 +524,7 @@ private fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
         horizontalAlignment = Alignment.Start,
     ) {
-        Text("ちゃんりば", style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary)
+        Text("ちゃんりば", style = MaterialTheme.typography.displaySmall, color = ChanrivaColors.accent)
         Text("ちゃんと残る、ちゃんと振り返れるリバーシ", style = MaterialTheme.typography.titleMedium)
         if (session == null) {
             OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("メールアドレス") }, singleLine = true)
@@ -549,7 +554,7 @@ private fun HomeScreen(
             if (authNotice != null) {
                 Text(
                     authNotice,
-                    color = if (authNoticeIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    color = if (authNoticeIsError) MaterialTheme.colorScheme.error else ChanrivaColors.accent,
                 )
             }
         } else {
@@ -766,7 +771,12 @@ private fun LocalOthelloBoard(viewState: LocalMatchViewState, controller: LocalM
                             .clickable(enabled = legal) { controller.play(position) },
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (disc != Disc.EMPTY) Box(Modifier.size(34.dp).background(if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc, CircleShape))
+                        if (disc != Disc.EMPTY) Box(
+                            Modifier
+                                .size(34.dp)
+                                .background(if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc, CircleShape)
+                                .border(1.dp, ChanrivaColors.discOutline, CircleShape),
+                        )
                         else if (legal) Box(Modifier.size(10.dp).background(ChanrivaColors.legalMove, CircleShape))
                     }
                 }
@@ -807,7 +817,12 @@ private fun OthelloBoard(viewState: LocalMatchViewState, controller: LocalMatchC
                             .clickable(enabled = legal) { controller.play(position) },
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (disc != Disc.EMPTY) Box(Modifier.size(34.dp).background(if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc, CircleShape))
+                        if (disc != Disc.EMPTY) Box(
+                            Modifier
+                                .size(34.dp)
+                                .background(if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc, CircleShape)
+                                .border(1.dp, ChanrivaColors.discOutline, CircleShape),
+                        )
                         else if (legal) Box(Modifier.size(10.dp).background(ChanrivaColors.legalMove, CircleShape))
                     }
                 }

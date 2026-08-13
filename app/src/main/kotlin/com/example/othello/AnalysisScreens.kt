@@ -152,7 +152,7 @@ internal fun AnalysisSettingsScreen(
         Text("ファイルはStorage Access Frameworkから選び、アプリprivate storageへコピーします。広範なストレージ権限は使用しません。")
         Text("eval.datと第三者Bookはアプリに同梱されていません。正当に取得・所有しているEdax互換ファイルだけを選択してください。", style = MaterialTheme.typography.bodySmall)
         if (busy) Text("検証・コピー中…")
-        message?.let { Text(it, color = if (it.contains("ません")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) }
+        message?.let { Text(it, color = if (it.contains("ません")) MaterialTheme.colorScheme.error else ChanrivaColors.accent) }
     }
 }
 
@@ -181,7 +181,7 @@ internal fun OpenSourceLicensesScreen(onBack: () -> Unit) {
         Text("このAndroidアプリの対応ソース: https://github.com/shinp-dev/othello")
         Text("固定upstream commit: 14f048c05ddfa385b6bf954a9c2905bbe677e9d3")
         Text("GPLv3全文はrepositoryのLICENSEと、対応ソース内のthird_party/edax/upstream/LICENSEにあります。")
-        Text("本アプリはEdax projectまたは作者による公式・公認配布物ではありません。", color = MaterialTheme.colorScheme.primary)
+        Text("本アプリはEdax projectまたは作者による公式・公認配布物ではありません。", color = ChanrivaColors.accent)
         Text("AndroidX / Kotlin / Ktor / Supabase SDK / WebRTCなど、その他の依存関係の表示はrepositoryのNOTICE.mdを参照してください。", style = MaterialTheme.typography.bodySmall)
     }
 }

@@ -21,6 +21,7 @@ object ChanrivaColors {
     val textSecondary = Color(0xFFABB4BF)
     val textDisabled = Color(0xFF68727E)
     val accent = Color(0xFFE5484D)
+    val primaryAction = Color(0xFFD83A40)
     val accentPressed = Color(0xFFB9363D)
     val accentSoft = Color(0xFF61262E)
     val danger = Color(0xFFFF7B82)
@@ -30,6 +31,7 @@ object ChanrivaColors {
     val boardGrid = Color(0xFF445262)
     val blackDisc = Color(0xFF101419)
     val whiteDisc = Color(0xFFF2F0EA)
+    val discOutline = Color(0xFF707C89)
     val legalMove = Color(0xFF9CA8B5)
     val evaluation = accent
 }
@@ -55,7 +57,7 @@ private val ChanrivaTypography = Typography().let { base ->
 }
 
 private val ChanrivaColorScheme = darkColorScheme(
-    primary = ChanrivaColors.accent,
+    primary = ChanrivaColors.primaryAction,
     onPrimary = Color.White,
     primaryContainer = ChanrivaColors.accentSoft,
     onPrimaryContainer = ChanrivaColors.textPrimary,

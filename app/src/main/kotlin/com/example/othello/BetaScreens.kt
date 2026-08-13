@@ -45,7 +45,6 @@ import androidx.compose.ui.unit.dp
 import com.example.othello.analysis.api.AnalysisResult
 import com.example.othello.designsystem.ChanrivaColors
 import com.example.othello.designsystem.ChanrivaSpacing
-import com.example.othello.analysis.api.EvaluationKind
 import com.example.othello.analysis.edax.EdaxDataManager
 import com.example.othello.analysis.edax.ProductionAnalysisEngine
 import com.example.othello.credential.CredentialRepository
@@ -278,7 +277,7 @@ internal fun ReviewScreen(
             Text("値は現在手番から見た予測終局石差です。exactは完全読み、bookはインポートしたBook値、その他は深さ依存の推定値です。", style = MaterialTheme.typography.bodySmall)
             visibleEvaluations.forEach { evaluation ->
                 val coordinate = "${('A'.code + evaluation.move.column).toChar()}${evaluation.move.row + 1}"
-                Text("$coordinate  ${formatEvaluation(evaluation.score.value, evaluation.score.kind)}", style = MaterialTheme.typography.bodySmall)
+                Text("$coordinate  ${formatEvaluation(evaluation.score.value)}", style = MaterialTheme.typography.bodySmall)
             }
         }
         ResearchReviewPanel(
@@ -461,7 +460,7 @@ internal fun CredentialScreen(repository: CredentialRepository, onBack: () -> Un
             enabled = credential != null && evidenceUri != null && credential?.status?.name != "PENDING" && !busy,
             modifier = Modifier.fillMaxWidth(),
         ) { Text(if (busy) "処理中…" else "画像をアップロードして審査申請") }
-        message?.let { Text(it, color = if (it.contains("失敗") || it.contains("できません")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) }
+        message?.let { Text(it, color = if (it.contains("失敗") || it.contains("できません")) MaterialTheme.colorScheme.error else ChanrivaColors.accent) }
     }
 }
 
@@ -476,7 +475,7 @@ internal fun AccountDeletionScreen(repository: AccountDeletionRepository, onBack
         Text("削除リクエスト後、信頼されたサーバー処理が認証情報・非公開プロフィール・証明画像を削除します。対戦相手の棋譜は匿名化して保持される場合があります。")
         Text("進行中の対局がある場合は受け付けません。処理完了までログインできる場合があります。", style = MaterialTheme.typography.bodySmall)
         when {
-            requested -> Text("削除リクエストを受け付けました", color = MaterialTheme.colorScheme.primary)
+            requested -> Text("削除リクエストを受け付けました", color = ChanrivaColors.accent)
             !confirmed -> OutlinedButton(onClick = { confirmed = true }) { Text("削除手続きへ進む") }
             else -> Button(onClick = {
                 scope.launch {
@@ -510,7 +509,7 @@ private fun ReviewBoard(
     evaluations: Map<Position, com.example.othello.analysis.api.MoveEvaluation>,
     onMove: (Position) -> Unit,
 ) {
-    val bestMove = evaluations.maxByOrNull { it.value.score.value }?.key
+    val bestScore = evaluations.maxOfOrNull { it.value.score.value }
     Column(Modifier.fillMaxWidth().aspectRatio(1f).background(ChanrivaColors.board).padding(3.dp)) {
         repeat(8) { row ->
             Row(Modifier.fillMaxWidth().weight(1f)) {
@@ -519,10 +518,11 @@ private fun ReviewBoard(
                     val disc = state.board[position]
                     val legal = variationEnabled && position in state.legalMoves
                     val evaluation = evaluations[position]
+                    val isBestMove = evaluation != null && evaluation.score.value == bestScore
                     Box(
                         Modifier
                             .weight(1f)
-                            .border(if (position == bestMove) 1.dp else 0.5.dp, if (position == bestMove) ChanrivaColors.evaluation else ChanrivaColors.boardGrid)
+                            .border(if (isBestMove) 1.dp else 0.5.dp, if (isBestMove) ChanrivaColors.evaluation else ChanrivaColors.boardGrid)
                             .semantics {
                                 contentDescription = buildString {
                                     append("${('A'.code + column).toChar()}${row + 1}、")
@@ -531,16 +531,21 @@ private fun ReviewBoard(
                                         Disc.WHITE -> "白石"
                                         Disc.EMPTY -> if (position in state.legalMoves) "合法手" else "空き"
                                     })
-                                    evaluation?.let { append("、評価 ${formatEvaluation(it.score.value, it.score.kind)}") }
+                                    evaluation?.let { append("、評価 ${formatEvaluation(it.score.value)}") }
                                 }
                             }
                             .clickable(enabled = legal) { onMove(position) },
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (disc != Disc.EMPTY) Box(Modifier.size(34.dp).background(if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc, CircleShape))
+                        if (disc != Disc.EMPTY) Box(
+                            Modifier
+                                .size(34.dp)
+                                .background(if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc, CircleShape)
+                                .border(1.dp, ChanrivaColors.discOutline, CircleShape),
+                        )
                         else if (evaluation != null) {
                             val score = evaluation.score
-                            Text(formatEvaluation(score.value, score.kind), color = if (position == bestMove) ChanrivaColors.evaluation else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                            Text(formatEvaluation(score.value), color = if (isBestMove) ChanrivaColors.evaluation else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                         } else if (legal) Box(Modifier.size(10.dp).background(ChanrivaColors.legalMove, CircleShape))
                     }
                 }
@@ -549,14 +554,7 @@ private fun ReviewBoard(
     }
 }
 
-private fun formatEvaluation(value: Int, kind: EvaluationKind): String {
-    val signed = if (value > 0) "+$value" else value.toString()
-    return when (kind) {
-        EvaluationKind.EXACT -> "$signed exact"
-        EvaluationKind.BOOK -> "$signed book"
-        EvaluationKind.HEURISTIC -> "≈$signed"
-    }
-}
+private fun formatEvaluation(value: Int): String = if (value > 0) "+$value" else value.toString()
 
 private fun InputStream.readAtMost(maximumBytes: Int): ByteArray {
     require(maximumBytes > 0)
@@ -828,8 +826,8 @@ internal fun ReviewScreenV2(
         }
         Button(onClick = { requested = !running; analysisRun++; }, enabled = status.nativeAvailable, modifier = Modifier.fillMaxWidth()) { Text(if (running) "解析をキャンセル" else "全合法手を解析") }
         Text(message)
-        saveMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
-        result?.evaluations.orEmpty().forEach { evaluation -> Text("${evaluation.move.column + 1},${evaluation.move.row + 1} ${formatEvaluation(evaluation.score.value, evaluation.score.kind)}", style = MaterialTheme.typography.bodySmall) }
+        saveMessage?.let { Text(it, color = ChanrivaColors.accent) }
+        result?.evaluations.orEmpty().forEach { evaluation -> Text("${evaluation.move.column + 1},${evaluation.move.row + 1} ${formatEvaluation(evaluation.score.value)}", style = MaterialTheme.typography.bodySmall) }
         if (researchParticipationRepository != null && researchPositionRepository != null) ResearchReviewPanel(state, researchParticipationRepository, researchPositionRepository)
     }
 }
