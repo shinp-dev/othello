@@ -101,11 +101,12 @@ private fun OthelloApp(
     sessionOwner: OnlineSessionViewModel = viewModel(),
 ) {
     val context = LocalContext.current
+    val application = context.applicationContext as OthelloApplication
     val analysisDataManager = remember { EdaxDataManager(context) }
     val analysisEngine = remember { ProductionAnalysisEngine() }
-    val localPersistenceViewModel: LocalGameRecordPersistenceViewModel = viewModel()
-    val localRecordStore = localPersistenceViewModel.store
-    val localRecordPersistence = localPersistenceViewModel.coordinator
+    val localRecordStore = application.localGameRecordStore
+    val localRecordPersistence = application.localGameRecordPersistence.coordinator
+    val localRecordSaveStates by localRecordPersistence.saveStates.collectAsState()
     var localMatch by remember { mutableStateOf(false) }
     var localMatchMode by remember { mutableStateOf(LocalMatchMode.HUMAN) }
     var localHumanDisc by remember { mutableStateOf(Disc.BLACK) }
@@ -271,6 +272,8 @@ private fun OthelloApp(
                 loginError = loginError,
                 authNotice = authNotice,
                 authNoticeIsError = authNoticeIsError,
+                failedLocalRecordSaves = localRecordSaveStates.values
+                    .filter { it.status == LocalRecordSaveStatus.FAILED },
                 onLogin = { email, password ->
                     val auth = component?.authGateway ?: return@HomeScreen
                     scope.launch {
@@ -324,6 +327,7 @@ private fun OthelloApp(
                 onCancel = { matchmaking?.let { scope.launch { it.cancel() } } },
                 onLocalHumanStart = { localMatchMode = LocalMatchMode.HUMAN; localHumanDisc = Disc.BLACK; localMatch = true },
                 onLocalAiStart = { destination = AppDestination.LOCAL_AI_SETUP },
+                onRetryLocalRecordSave = localRecordPersistence::retry,
                 onProfile = { destination = AppDestination.PROFILE },
                 onRecords = { destination = AppDestination.RECORDS },
                 onCredential = { destination = AppDestination.CREDENTIAL },
@@ -492,6 +496,7 @@ private fun HomeScreen(
     loginError: String?,
     authNotice: String?,
     authNoticeIsError: Boolean,
+    failedLocalRecordSaves: List<LocalRecordSaveState>,
     onLogin: (String, String) -> Unit,
     onSignUp: (String, String) -> Unit,
     onSignOut: () -> Unit,
@@ -499,6 +504,7 @@ private fun HomeScreen(
     onCancel: () -> Unit,
     onLocalHumanStart: () -> Unit,
     onLocalAiStart: () -> Unit,
+    onRetryLocalRecordSave: (String) -> Unit,
     onProfile: () -> Unit,
     onRecords: () -> Unit,
     onCredential: () -> Unit,
@@ -556,6 +562,25 @@ private fun HomeScreen(
         ) { Text("対局する") }
         OutlinedButton(onClick = onLocalHumanStart, modifier = Modifier.fillMaxWidth()) { Text("ふたりで対局") }
         OutlinedButton(onClick = onLocalAiStart, modifier = Modifier.fillMaxWidth()) { Text("AIと対局") }
+        if (failedLocalRecordSaves.isNotEmpty()) {
+            Card(Modifier.fillMaxWidth()) {
+                Column(
+                    Modifier.fillMaxWidth().padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        "ローカル棋譜の保存に失敗しました（${failedLocalRecordSaves.size}件）",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    failedLocalRecordSaves.forEach { failed ->
+                        OutlinedButton(
+                            onClick = { onRetryLocalRecordSave(failed.localId) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("保存を再試行") }
+                    }
+                }
+            }
+        }
         if (session != null) {
             OutlinedButton(onClick = onProfile, modifier = Modifier.fillMaxWidth()) { Text("プロフィール") }
             OutlinedButton(onClick = onRecords, modifier = Modifier.fillMaxWidth()) { Text("棋譜・レビュー") }

@@ -1,14 +1,15 @@
 package com.example.othello
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
 import com.example.othello.records.LocalGameRecord
 import com.example.othello.records.LocalGameRecordStore
 import java.util.concurrent.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,7 +25,7 @@ data class LocalRecordSaveState(
 
 /**
  * Owns completed local-record writes independently from the match screen.
- * The scope is supplied by a ViewModel in production so screen disposal cannot cancel a save.
+ * Production supplies the process-owned scope from [LocalGameRecordPersistenceProcessOwner].
  */
 class LocalGameRecordPersistenceCoordinator(
     private val store: LocalGameRecordStore,
@@ -37,7 +38,9 @@ class LocalGameRecordPersistenceCoordinator(
     val saveStates: StateFlow<Map<String, LocalRecordSaveState>> = states.asStateFlow()
 
     fun enqueue(record: LocalGameRecord): Job? = synchronized(this) {
-        records[record.localId] = record
+        val existing = records[record.localId]
+        require(existing == null || existing == record) { "localId collision: ${record.localId}" }
+        records.putIfAbsent(record.localId, record)
         val current = states.value[record.localId]
         if (current?.status == LocalRecordSaveStatus.SAVED) return@synchronized null
         jobs[record.localId]?.takeIf { it.isActive }?.let { return@synchronized it }
@@ -74,12 +77,35 @@ class LocalGameRecordPersistenceCoordinator(
 
     fun state(localId: String): LocalRecordSaveState? = saveStates.value[localId]
 
+    fun pendingRecords(): List<LocalGameRecord> = recordsWithStatus(
+        LocalRecordSaveStatus.PENDING,
+        LocalRecordSaveStatus.SAVING,
+    )
+
+    fun failedRecords(): List<LocalGameRecord> = recordsWithStatus(LocalRecordSaveStatus.FAILED)
+
+    private fun recordsWithStatus(vararg statuses: LocalRecordSaveStatus): List<LocalGameRecord> = synchronized(this) {
+        val accepted = statuses.toSet()
+        records.values.filter { states.value[it.localId]?.status in accepted }
+    }
+
     private fun setState(localId: String, status: LocalRecordSaveStatus, errorMessage: String? = null) {
         states.value = states.value + (localId to LocalRecordSaveState(localId, status, errorMessage))
     }
 }
 
-class LocalGameRecordPersistenceViewModel(application: Application) : AndroidViewModel(application) {
-    val store = JsonFileLocalGameRecordStore(application)
-    val coordinator = LocalGameRecordPersistenceCoordinator(store, viewModelScope)
+/**
+ * Process-lifetime owner for formal local match records.
+ * Activity destruction never cancels this scope; only process teardown does.
+ */
+class LocalGameRecordPersistenceProcessOwner(
+    store: LocalGameRecordStore,
+    dispatcher: CoroutineDispatcher = Dispatchers.IO,
+) : AutoCloseable {
+    private val processScope = CoroutineScope(SupervisorJob() + dispatcher)
+    val coordinator = LocalGameRecordPersistenceCoordinator(store, processScope)
+
+    override fun close() {
+        processScope.cancel()
+    }
 }

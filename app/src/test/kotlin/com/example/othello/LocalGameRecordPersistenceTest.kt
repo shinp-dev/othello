@@ -10,12 +10,14 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
+import kotlin.coroutines.CoroutineContext
 
 class LocalGameRecordPersistenceTest {
     @Test
@@ -23,8 +25,8 @@ class LocalGameRecordPersistenceTest {
         val started = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
         val store = DelayedStore(started, release)
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        val coordinator = LocalGameRecordPersistenceCoordinator(store, scope)
+        val processOwner = LocalGameRecordPersistenceProcessOwner(store, Dispatchers.Default)
+        val coordinator = processOwner.coordinator
         val controller = LocalMatchController()
         var saveJob: Job? = null
         val closeable = controller.observe { it.completedRecord?.let { saveJob = coordinator.enqueue(it) } }
@@ -36,13 +38,13 @@ class LocalGameRecordPersistenceTest {
         val completed = assertNotNull(controller.viewState.completedRecord)
         started.await()
         controller.reset()
+        closeable.close() // Activity/screen owner is destroyed while the process save is suspended.
         release.complete(Unit)
         saveJob?.join()
 
         assertEquals(listOf(completed), store.records.values.toList())
         assertEquals(LocalRecordSaveStatus.SAVED, coordinator.state(completed.localId)?.status)
-        closeable.close()
-        scope.cancel()
+        processOwner.close()
     }
 
     @Test
@@ -50,8 +52,8 @@ class LocalGameRecordPersistenceTest {
         val started = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
         val store = DelayedStore(started, release)
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        val coordinator = LocalGameRecordPersistenceCoordinator(store, scope)
+        val processOwner = LocalGameRecordPersistenceProcessOwner(store, Dispatchers.Default)
+        val coordinator = processOwner.coordinator
         val controller = LocalMatchController()
         var saveJob: Job? = null
         val closeable = controller.observe { it.completedRecord?.let { saveJob = coordinator.enqueue(it) } }
@@ -63,14 +65,14 @@ class LocalGameRecordPersistenceTest {
         saveJob?.join()
 
         assertEquals(completed, store.records[completed.localId])
-        scope.cancel()
+        processOwner.close()
     }
 
     @Test
     fun failedSaveCanRetryWithSameIdAndDuplicateEnqueueIsIdempotent() = runBlocking {
         val store = FlakyStore()
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        val coordinator = LocalGameRecordPersistenceCoordinator(store, scope)
+        val processOwner = LocalGameRecordPersistenceProcessOwner(store, Dispatchers.Default)
+        val coordinator = processOwner.coordinator
         val record = LocalGameRecord("retry", listOf(Position(2, 3)), 1, LocalRecordType.LOCAL_HUMAN)
 
         coordinator.enqueue(record)?.join()
@@ -81,7 +83,95 @@ class LocalGameRecordPersistenceTest {
         assertEquals(2, store.attempts)
         assertEquals(1, store.records.size)
         assertEquals(LocalRecordSaveStatus.SAVED, coordinator.state(record.localId)?.status)
-        scope.cancel()
+        processOwner.close()
+    }
+
+    @Test
+    fun activityDestructionBeforeIoDispatchDoesNotCancelProcessSave() = runBlocking {
+        val dispatcher = QueuedDispatcher()
+        val store = RecordingStore()
+        val processOwner = LocalGameRecordPersistenceProcessOwner(store, dispatcher)
+        val coordinator = processOwner.coordinator
+        val controller = LocalMatchController()
+        val activityOwner = FakeActivityOwner(controller, coordinator)
+
+        val completed = assertNotNull(controller.resign())
+        activityOwner.destroy()
+        assertEquals(LocalRecordSaveStatus.SAVING, coordinator.state(completed.localId)?.status)
+
+        dispatcher.runAll()
+        activityOwner.saveJob?.join()
+
+        assertEquals(listOf(completed), store.records.values.toList())
+        assertEquals(LocalRecordSaveStatus.SAVED, coordinator.state(completed.localId)?.status)
+        processOwner.close()
+    }
+
+    @Test
+    fun resetFailureRemainsDiscoverableAfterActivityRecreationAndRetriesOnce() = runBlocking {
+        val store = FlakyStore()
+        val processOwner = LocalGameRecordPersistenceProcessOwner(store, Dispatchers.Default)
+        val coordinator = processOwner.coordinator
+        val controller = LocalMatchController()
+        val firstActivityOwner = FakeActivityOwner(controller, coordinator)
+
+        val completed = assertNotNull(controller.resign())
+        controller.reset()
+        firstActivityOwner.destroy()
+        firstActivityOwner.saveJob?.join()
+
+        assertEquals(listOf(completed), coordinator.failedRecords())
+        assertEquals(emptyList(), coordinator.pendingRecords())
+
+        // A recreated Activity obtains the same process owner and can retry by stable localId.
+        coordinator.retry(coordinator.failedRecords().single().localId)?.join()
+
+        assertEquals(2, store.attempts)
+        assertEquals(listOf(completed), store.records.values.toList())
+        assertEquals(LocalRecordSaveStatus.SAVED, coordinator.state(completed.localId)?.status)
+        processOwner.close()
+    }
+
+    @Test
+    fun destroyingActivityWithIncompleteMatchDoesNotEnqueueRecord() {
+        val store = RecordingStore()
+        val processOwner = LocalGameRecordPersistenceProcessOwner(store, Dispatchers.Default)
+        val coordinator = processOwner.coordinator
+        val controller = LocalMatchController()
+        val activityOwner = FakeActivityOwner(controller, coordinator)
+
+        controller.play(controller.viewState.game.legalMoves.first())
+        activityOwner.destroy()
+
+        assertNull(activityOwner.saveJob)
+        assertEquals(emptyList(), coordinator.pendingRecords())
+        assertEquals(emptyList(), coordinator.failedRecords())
+        assertEquals(emptyList(), store.records.values.toList())
+        processOwner.close()
+    }
+
+    @Test
+    fun duplicateEnqueueWhileSavingUsesOneActiveWriteAndOneFinalRecord() = runBlocking {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val store = DelayedStore(started, release)
+        val processOwner = LocalGameRecordPersistenceProcessOwner(store, Dispatchers.Default)
+        val coordinator = processOwner.coordinator
+        val record = LocalGameRecord("saving", listOf(Position(2, 3)), 1, LocalRecordType.LOCAL_HUMAN)
+
+        val first = assertNotNull(coordinator.enqueue(record))
+        started.await()
+        val duplicate = coordinator.enqueue(record)
+        assertEquals(first, duplicate)
+        assertEquals(listOf(record), coordinator.pendingRecords())
+
+        release.complete(Unit)
+        first.join()
+
+        assertEquals(1, store.attempts)
+        assertEquals(listOf(record), store.records.values.toList())
+        assertEquals(LocalRecordSaveStatus.SAVED, coordinator.state(record.localId)?.status)
+        processOwner.close()
     }
 
     private class DelayedStore(
@@ -89,10 +179,12 @@ class LocalGameRecordPersistenceTest {
         private val release: CompletableDeferred<Unit>,
     ) : LocalGameRecordStore {
         val records = linkedMapOf<String, LocalGameRecord>()
+        var attempts = 0
 
         override suspend fun list(limit: Int) = records.values.take(limit)
 
         override suspend fun save(record: LocalGameRecord) {
+            attempts++
             started.complete(Unit)
             release.await()
             records[record.localId] = record
@@ -117,6 +209,49 @@ class LocalGameRecordPersistenceTest {
 
         override suspend fun delete(localId: String) {
             records.remove(localId)
+        }
+    }
+
+    private class RecordingStore : LocalGameRecordStore {
+        val records = linkedMapOf<String, LocalGameRecord>()
+
+        override suspend fun list(limit: Int) = records.values.take(limit)
+
+        override suspend fun save(record: LocalGameRecord) {
+            records[record.localId] = record
+        }
+
+        override suspend fun delete(localId: String) {
+            records.remove(localId)
+        }
+    }
+
+    private class FakeActivityOwner(
+        controller: LocalMatchController,
+        coordinator: LocalGameRecordPersistenceCoordinator,
+    ) {
+        var saveJob: Job? = null
+            private set
+        private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        private val observation = controller.observe { state ->
+            state.completedRecord?.let { saveJob = coordinator.enqueue(it) }
+        }
+
+        fun destroy() {
+            observation.close()
+            activityScope.cancel()
+        }
+    }
+
+    private class QueuedDispatcher : CoroutineDispatcher() {
+        private val tasks = ArrayDeque<Runnable>()
+
+        override fun dispatch(context: CoroutineContext, block: Runnable) {
+            tasks.addLast(block)
+        }
+
+        fun runAll() {
+            while (tasks.isNotEmpty()) tasks.removeFirst().run()
         }
     }
 }
