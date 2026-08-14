@@ -24,8 +24,8 @@ const features = [
     number: "03",
     label: "ANALYSIS",
     title: "人の打ち方まで、分析する。",
-    body: "ちゃんりばの大きな特徴は、レート帯別の傾向分析。実際のプレイヤーが、その実力帯でどのような傾向を持っているかを研究できます。リアル大会を意識する人にとって、実際に対戦する人間の傾向を知ることは、次の一手をつくる大きな材料になります。",
-    tags: ["レート帯別分析", "プレイヤー傾向", "実戦研究", "大会対策"],
+    body: "実際の対局データから、プレイヤー全体の打ち方や進行の傾向を分析できます。AIの最善手だけを見るのではなく、人が実際にどのような手を選んでいるのかを研究できます。",
+    tags: ["全体傾向", "プレイヤー傾向", "実戦研究", "大会を意識した分析"],
     image: "/images/analysis.jpg",
     alt: "グラフや分布、プレイヤー層を思わせる分析画面と女性",
   },
@@ -54,7 +54,7 @@ export default function Home() {
           <p className="eyebrow"><span className="eyebrow-line" /> ちゃんとリバーシ</p>
           <h1 id="hero-title">対局を、<br /><em>もっと深く。</em></h1>
           <p className="hero-lead">対局・検討・傾向分析まで。<br />強くなりたいプレイヤーのためのリバーシ。</p>
-          <p className="hero-body">オンライン対局から一局の振り返り、さらにレート帯ごとの傾向分析まで。打って終わりではなく、次の一手につながる体験を。</p>
+          <p className="hero-body">オンライン対局から一局の振り返り、さらにプレイヤー全体の傾向分析まで。打って終わりではなく、次の一手につながる体験を。</p>
           <a className="button button-primary" href="#start">ちゃんりばを始める <span aria-hidden="true">↗</span></a>
           <p className="hero-note">対局から、学びのサイクルへ。</p>
         </div>
@@ -75,12 +75,12 @@ export default function Home() {
         {features.map((feature, index) => (
           <article className={`feature ${index % 2 ? "feature-reverse" : ""}`} id={feature.id} key={feature.id}>
             <div className="feature-image"><img src={feature.image} alt={feature.alt} loading="lazy" width="1280" height="960" /></div>
-            <div className="feature-copy"><div className="feature-label"><span>{feature.number}</span>{feature.label}</div><h3>{feature.title}</h3><p>{feature.body}</p><div className="tags">{feature.tags.map(tag => <span key={tag}>{tag}</span>)}</div></div>
+            <div className="feature-copy"><div className="feature-label"><span>{feature.number}</span>{feature.label}</div><h3>{feature.title}</h3><p>{feature.body}</p>{feature.id === "analysis" && <div className="analysis-status"><strong>現在利用できること</strong><p>プレイヤー全体の傾向や、よく選ばれる進行・着手を、実際の対局データから確認できます。</p><div className="coming-soon"><span>COMING SOON</span><strong>レート帯別分析</strong><p>データの蓄積後、レート帯ごとの進行や着手傾向を比較できる分析機能を提供予定です。将来的には大会を意識した研究にも活用できる機能へ拡張します。</p></div></div>}<div className="tags">{feature.tags.map(tag => <span key={tag}>{tag}</span>)}</div></div>
           </article>
         ))}
       </section>
 
-      <section className="audience section" aria-labelledby="audience-title"><div className="audience-inner"><div className="section-kicker"><span>03</span><i /> FOR PLAYERS</div><h2 id="audience-title">もっと強くなりたい<br /><em>人へ。</em></h2><div className="audience-list"><p>リバーシをもっと強くなりたい</p><p>対局後にきちんと振り返りたい</p><p>自分より上のレート帯の傾向を知りたい</p><p>リアル大会を意識している</p><p>感覚だけでなくデータも使って研究したい</p></div></div></section>
+      <section className="audience section" aria-labelledby="audience-title"><div className="audience-inner"><div className="section-kicker"><span>03</span><i /> FOR PLAYERS</div><h2 id="audience-title">もっと強くなりたい<br /><em>人へ。</em></h2><div className="audience-list"><p>リバーシをもっと強くなりたい</p><p>対局後にきちんと振り返りたい</p><p>プレイヤー全体の傾向を知りたい</p><p>リアル大会を意識している</p><p>感覚だけでなくデータも使って研究したい</p></div></div></section>
 
       <section className="final-cta section" id="start" aria-labelledby="start-title"><div className="cta-glow" aria-hidden="true" /><div className="section-kicker"><span>04</span><i /> START HERE</div><h2 id="start-title">その一局を、<br /><em>次の一手へ。</em></h2><p>ちゃんりばは、対局・検討・傾向分析をひとつにつなぐリバーシアプリです。</p><a className="button button-primary" href="#top">ちゃんりばを始める <span aria-hidden="true">↗</span></a><small>サービスの公開準備中です。最新情報をお待ちください。</small></section>
 
