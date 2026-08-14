@@ -209,12 +209,20 @@ internal fun AnalysisSettingsScreen(
 
 @Composable
 internal fun AboutScreen(onBack: () -> Unit, onLicenses: () -> Unit) {
+    val uriHandler = LocalUriHandler.current
+
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SettingsHeader("このアプリについて", onBack)
         Text("ちゃんりば")
         Text("ちゃんとリバーシ。軽く一局打っても、その一局がちゃんと残り、振り返りが次につながるリバーシアプリです。")
         Text("対局後レビューの解析エンジンとしてEdaxを使用します。Edax公式・公認アプリではありません。")
         Button(onClick = onLicenses, modifier = Modifier.fillMaxWidth()) { Text("オープンソースライセンス") }
+        OutlinedButton(
+            onClick = { uriHandler.openUri("https://chanriva.shinp-studio.com/privacy") },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("プライバシーポリシー")
+        }
     }
 }
 
