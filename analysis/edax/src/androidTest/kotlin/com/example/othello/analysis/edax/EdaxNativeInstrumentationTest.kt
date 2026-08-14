@@ -1,5 +1,6 @@
 package com.example.othello.analysis.edax
 
+import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.othello.analysis.api.AnalysisAsset
@@ -16,6 +17,8 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
@@ -64,6 +67,76 @@ class EdaxNativeInstrumentationTest {
         assertTrue(NativeEdax.validateBook(oversizedNodeCount.absolutePath).orEmpty().contains("node count"))
     }
 
+    @Test
+    fun dataManagerReplacesEvaluationOnlyAfterValidationAndPersistsTheActiveSlot() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val manager = EdaxDataManager(context)
+        val firstSource = File(context.cacheDir, "manager-eval-first.dat")
+        val secondSource = File(context.cacheDir, "manager-eval-second.dat")
+        val invalidSource = File(context.cacheDir, "manager-eval-invalid.dat")
+        manager.deleteEvaluationData()
+        try {
+            writeSyntheticEvaluationData(firstSource)
+            writeSyntheticEvaluationData(secondSource, marker = 1)
+            invalidSource.writeBytes(byteArrayOf(1, 2, 3, 4))
+
+            val first = manager.importEvaluationData(Uri.fromFile(firstSource))
+            assertEquals(EVAL_SIZE, manager.status().evaluationData?.sizeBytes)
+
+            val second = manager.importEvaluationData(Uri.fromFile(secondSource))
+            assertEquals(second.sha256, manager.status().evaluationData?.sha256)
+            assertFalse(File(first.appPrivatePath).exists())
+
+            assertFailsWith<IllegalStateException> {
+                manager.importEvaluationData(Uri.fromFile(invalidSource))
+            }
+            assertEquals(second.sha256, EdaxDataManager(context).status().evaluationData?.sha256)
+
+            manager.deleteEvaluationData()
+            assertNull(manager.status().evaluationData)
+        } finally {
+            manager.deleteEvaluationData()
+            firstSource.delete()
+            secondSource.delete()
+            invalidSource.delete()
+        }
+    }
+
+    @Test
+    fun dataManagerAcceptsSmallValidBookReplacesItAndPreservesItOnInvalidImport() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val manager = EdaxDataManager(context)
+        val firstSource = File(context.cacheDir, "manager-book-first.dat")
+        val secondSource = File(context.cacheDir, "manager-book-second.dat")
+        val invalidSource = File(context.cacheDir, "manager-book-invalid.dat")
+        manager.deleteOpeningBook()
+        try {
+            writeSyntheticEmptyBook(firstSource, day = 9)
+            writeSyntheticEmptyBook(secondSource, day = 10)
+            invalidSource.writeBytes(byteArrayOf(1, 2, 3, 4))
+
+            val first = manager.importOpeningBook(Uri.fromFile(firstSource))
+            assertEquals(42L, first.sizeBytes)
+
+            val second = manager.importOpeningBook(Uri.fromFile(secondSource))
+            assertEquals(second.sha256, manager.status().openingBook?.sha256)
+            assertFalse(File(first.appPrivatePath).exists())
+
+            assertFailsWith<IllegalStateException> {
+                manager.importOpeningBook(Uri.fromFile(invalidSource))
+            }
+            assertEquals(second.sha256, EdaxDataManager(context).status().openingBook?.sha256)
+
+            manager.deleteOpeningBook()
+            assertNull(manager.status().openingBook)
+        } finally {
+            manager.deleteOpeningBook()
+            firstSource.delete()
+            secondSource.delete()
+            invalidSource.delete()
+        }
+    }
+
     private fun deterministicEndgame(targetEmpty: Int): GameState {
         var state = GameState()
         while (state.board.emptyCount() > targetEmpty) {
@@ -79,7 +152,7 @@ class EdaxNativeInstrumentationTest {
         return state
     }
 
-    private fun writeSyntheticEvaluationData(file: File) {
+    private fun writeSyntheticEvaluationData(file: File, marker: Int = 0) {
         RandomAccessFile(file, "rw").use { output ->
             output.setLength(EVAL_SIZE)
             val header = ByteBuffer.allocate(28).order(ByteOrder.nativeOrder())
@@ -91,11 +164,15 @@ class EdaxNativeInstrumentationTest {
             header.putDouble(0.0)
             output.seek(0)
             output.write(header.array())
+            if (marker != 0) {
+                output.seek(128)
+                output.write(marker)
+            }
         }
     }
 
     /** A header-only Edax 4.6 book created by this test; it contains no third-party positions. */
-    private fun writeSyntheticEmptyBook(file: File, nodeCount: Int = 0) {
+    private fun writeSyntheticEmptyBook(file: File, nodeCount: Int = 0, day: Int = 9) {
         val header = ByteBuffer.allocate(42).order(ByteOrder.nativeOrder())
         header.putInt(EDAX_MAGIC)
         header.putInt(BOOK_MAGIC)
@@ -103,7 +180,7 @@ class EdaxNativeInstrumentationTest {
         header.put(6)
         header.putShort(2026)
         header.put(8)
-        header.put(9)
+        header.put(day.toByte())
         header.put(0)
         header.put(0)
         header.put(0)

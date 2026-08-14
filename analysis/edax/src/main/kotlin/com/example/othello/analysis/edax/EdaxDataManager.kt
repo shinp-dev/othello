@@ -145,15 +145,21 @@ class EdaxDataManager(context: Context) {
             clearMetadata(prefix)
             return null
         }
+        val actualSize = file.length()
+        val recordedSize = preferences.getLong("$prefix.size", actualSize)
+        if (actualSize <= 0L || recordedSize != actualSize) {
+            clearMetadata(prefix)
+            return null
+        }
         val sha256 = preferences.getString("$prefix.sha256", null)
-        if (sha256.isNullOrBlank()) {
+        if (sha256 == null || !SHA256.matches(sha256)) {
             clearMetadata(prefix)
             return null
         }
         return ImportedAnalysisFile(
             fileName = preferences.getString("$prefix.name", null) ?: file.name,
             appPrivatePath = file.absolutePath,
-            sizeBytes = preferences.getLong("$prefix.size", file.length()),
+            sizeBytes = actualSize,
             sha256 = sha256,
             importedAtEpochMillis = preferences.getLong("$prefix.importedAt", 0L),
         )
@@ -187,5 +193,6 @@ class EdaxDataManager(context: Context) {
         const val MAX_LEVEL = 18
         const val EVAL_MAX_BYTES = 13_952_436L
         const val BOOK_MAX_BYTES = 256L * 1024L * 1024L
+        val SHA256 = Regex("[0-9a-f]{64}")
     }
 }

@@ -15,11 +15,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,6 +30,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import com.example.othello.analysis.edax.EdaxDataManager
 import com.example.othello.analysis.edax.ImportedAnalysisFile
@@ -36,6 +39,7 @@ import com.example.othello.designsystem.ChanrivaSpacing
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlinx.coroutines.launch
 
 @Composable
@@ -70,6 +74,8 @@ internal fun AnalysisSettingsScreen(
     var status by remember(manager) { mutableStateOf(manager.status()) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var showSetupGuide by remember { mutableStateOf(false) }
+    val uriHandler = LocalUriHandler.current
 
     fun refresh() { status = manager.status(); onDataChanged() }
     fun importEvaluation(uri: android.net.Uri) {
@@ -77,7 +83,9 @@ internal fun AnalysisSettingsScreen(
         scope.launch {
             runCatching { manager.importEvaluationData(uri) }
                 .onSuccess { message = "評価データをインポートしました"; refresh() }
-                .onFailure { message = "評価データを読み込めません: ${it.message}" }
+                .onFailure {
+                    message = "このデータを評価データとして読み込めませんでした。Edax互換ファイルか確認してください。"
+                }
             busy = false
         }
     }
@@ -85,8 +93,10 @@ internal fun AnalysisSettingsScreen(
         busy = true
         scope.launch {
             runCatching { manager.importOpeningBook(uri) }
-                .onSuccess { message = "Opening Bookをインポートしました"; refresh() }
-                .onFailure { message = "Opening Bookを読み込めません: ${it.message}" }
+                .onSuccess { message = "オープニングブックをインポートしました"; refresh() }
+                .onFailure {
+                    message = "このデータをオープニングブックとして読み込めませんでした。Edax互換ファイルか確認してください。"
+                }
             busy = false
         }
     }
@@ -125,6 +135,47 @@ internal fun AnalysisSettingsScreen(
         )
         Text("スマホ向けの既定値はレベル8です。解析は棋譜レビュー画面で明示的に開始した時だけ動作します。", style = MaterialTheme.typography.bodySmall)
 
+        Text("解析データについて", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Edax解析には評価データを使用します。初めて設定する場合は、取得・設定方法をご確認ください。対応するデータをお持ちの場合は、そのままインポートして利用できます。",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedButton(
+            onClick = { showSetupGuide = !showSetupGuide },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(if (showSetupGuide) "取得・設定方法を閉じる" else "取得・設定方法を見る") }
+        if (showSetupGuide) {
+            Card(Modifier.fillMaxWidth()) {
+                Column(
+                    Modifier.padding(ChanrivaSpacing.card),
+                    verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
+                ) {
+                    Text("評価データ", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "Edaxが中盤局面を評価するために必要なデータです。Edax公式リリースから評価データ配布物を取得・解凍し、取り出したeval.datを「評価データをインポート」から選択してください。",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            runCatching { uriHandler.openUri(EDAX_RELEASES_URL) }
+                                .onFailure { message = "Edax公式リリースを開けませんでした。ブラウザを確認してください。" }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Edax公式リリースを開く") }
+                    Text("オープニングブック（任意）", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "序盤の候補手を利用するためのEdax互換データです。未設定でも通常探索で解析できます。利用する場合は、配布条件を確認できる入手元から取得したファイル、またはご自身が所有する対応ファイルを「オープニングブックをインポート」から選択してください。",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        "再度インポートすると、現在のデータを検証済みの新しいデータへ置き換えます。アプリからの自動ダウンロードやデータ配布は行いません。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+
         AnalysisFileStatus("評価データ", status.evaluationData, required = true)
         Button(
             onClick = { evaluationPicker.launch(arrayOf("application/octet-stream", "*/*")) },
@@ -137,20 +188,20 @@ internal fun AnalysisSettingsScreen(
             modifier = Modifier.fillMaxWidth(),
         ) { Text("評価データを削除") }
 
-        AnalysisFileStatus("Opening Book", status.openingBook, required = false)
+        AnalysisFileStatus("オープニングブック", status.openingBook, required = false)
         Button(
             onClick = { bookPicker.launch(arrayOf("application/octet-stream", "*/*")) },
             enabled = status.nativeAvailable && !busy,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("Opening Bookをインポート") }
+        ) { Text("オープニングブックをインポート") }
         OutlinedButton(
-            onClick = { manager.deleteOpeningBook(); message = "Opening Bookを削除しました"; refresh() },
+            onClick = { manager.deleteOpeningBook(); message = "オープニングブックを削除しました"; refresh() },
             enabled = status.openingBook != null && !busy,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("Opening Bookを削除") }
+        ) { Text("オープニングブックを削除") }
 
         Text("ファイルはStorage Access Frameworkから選び、アプリprivate storageへコピーします。広範なストレージ権限は使用しません。")
-        Text("eval.datと第三者Bookはアプリに同梱されていません。正当に取得・所有しているEdax互換ファイルだけを選択してください。", style = MaterialTheme.typography.bodySmall)
+        Text("評価データと第三者オープニングブックはアプリに同梱されていません。正当に取得・所有しているEdax互換ファイルだけを選択してください。", style = MaterialTheme.typography.bodySmall)
         if (busy) Text("検証・コピー中…")
         message?.let { Text(it, color = if (it.contains("ません")) MaterialTheme.colorScheme.error else ChanrivaColors.accent) }
     }
@@ -188,13 +239,20 @@ internal fun OpenSourceLicensesScreen(onBack: () -> Unit) {
 
 @Composable
 private fun AnalysisFileStatus(label: String, file: ImportedAnalysisFile?, required: Boolean) {
+    var showDetails by remember(file?.sha256) { mutableStateOf(false) }
     Text("$label: ${if (file == null) "未設定" else "読込済み"}", style = MaterialTheme.typography.titleSmall)
     if (file == null) {
         Text(if (required) "解析に必要です" else "任意。未設定時は通常探索を使用します", style = MaterialTheme.typography.bodySmall)
     } else {
-        Text(file.fileName)
-        Text("${file.sizeBytes / 1024} KiB / SHA-256 ${file.sha256.take(12)}…", style = MaterialTheme.typography.bodySmall)
         Text("取込日時: ${formatImportDate(file.importedAtEpochMillis)}", style = MaterialTheme.typography.bodySmall)
+        TextButton(onClick = { showDetails = !showDetails }) {
+            Text(if (showDetails) "詳細情報を閉じる" else "詳細情報")
+        }
+        if (showDetails) {
+            Text("ファイル名: ${file.fileName}", style = MaterialTheme.typography.bodySmall)
+            Text("サイズ: ${formatAnalysisFileSize(file.sizeBytes)}", style = MaterialTheme.typography.bodySmall)
+            Text("SHA-256: ${file.sha256}", style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 
@@ -213,3 +271,11 @@ internal fun SettingsHeader(title: String, onBack: () -> Unit) {
 private fun formatImportDate(epochMillis: Long): String = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
     .withZone(ZoneId.systemDefault())
     .format(Instant.ofEpochMilli(epochMillis))
+
+internal fun formatAnalysisFileSize(sizeBytes: Long): String = when {
+    sizeBytes < 1024L -> "$sizeBytes B（1 KiB未満）"
+    sizeBytes < 1024L * 1024L -> String.format(Locale.ROOT, "%.1f KiB", sizeBytes / 1024.0)
+    else -> String.format(Locale.ROOT, "%.1f MiB", sizeBytes / (1024.0 * 1024.0))
+}
+
+private const val EDAX_RELEASES_URL = "https://github.com/abulmo/edax-reversi/releases"
