@@ -21,4 +21,4 @@
 - Data at rest、providerのbackup、server access logの保持はコードだけでは確認不能。OWNER/各providerで確認する。
 - 「shared」は第三者SDKへの広告共有ではなく、オンライン対局の相手やサービス処理に必要な範囲を意味する。Play Consoleの分類に合わせて入力する。
 - 広告SDK・広告表示は現在なし。Ads declarationは `Contains ads: No` の候補。
-- account creationがあるため、in-app deletionに加えてWeb deletion linkが必要。現状Webでの送信受付は未実装で、公開BLOCKER。
+- account creationがあるため、in-app deletionに加えてWeb deletion linkが必要。LPには既存Authで本人確認する受付を実装済み。Play Consoleには `https://chanriva.shinp-studio.com/account-deletion` を登録する。Cloudflare本番deployとSupabase anon key secret設定後に実URLの稼働確認を行う。

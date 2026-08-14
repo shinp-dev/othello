@@ -4,17 +4,62 @@ import test from "node:test";
 
 const templateRoot = new URL("../", import.meta.url);
 
-async function render() {
+async function render(path = "/") {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);
 
   return worker.fetch(
-    new Request("http://localhost/", { headers: { accept: "text/html" } }),
+    new Request(`http://localhost${path}`, { headers: { accept: "text/html" } }),
     { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
     { waitUntil() {}, passThroughOnException() {} },
   );
 }
+
+test("renders the external account deletion request flow without app redirect", async () => {
+  const response = await render("/account-deletion");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /アカウント削除/);
+  assert.match(html, /削除リクエストを開始/);
+  assert.match(html, /登録済みのちゃんりばアカウント/);
+  assert.match(html, /削除リクエストの受付・処理状態/);
+  assert.doesNotMatch(html, /公開前ステータス|Web削除リクエスト受付は未実装/);
+  assert.doesNotMatch(html, /intent:|android-app:|market:\/\//i);
+});
+
+test("renders privacy policy with the same deletion URL", async () => {
+  const response = await render("/privacy");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /アカウント削除ページ/);
+  assert.doesNotMatch(html, /ブラウザ単独の削除リクエスト受付は現在準備中/);
+});
+
+test("keeps the deletion API same-origin and fail-closed without its runtime secret", async () => {
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("api-test", `${process.pid}-${Date.now()}`);
+  const { default: worker } = await import(workerUrl.href);
+  const env = { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } };
+  const ctx = { waitUntil() {}, passThroughOnException() {} };
+
+  const getResponse = await worker.fetch(new Request("http://localhost/api/account-deletion/start"), env, ctx);
+  assert.equal(getResponse.status, 405);
+
+  const crossOriginResponse = await worker.fetch(new Request("http://localhost/api/account-deletion/start", {
+    method: "POST",
+    headers: { "content-type": "application/json", Origin: "https://attacker.example" },
+    body: JSON.stringify({ email: "someone@example.com", password: "not-a-real-password" }),
+  }), env, ctx);
+  assert.equal(crossOriginResponse.status, 403);
+
+  const missingSecretResponse = await worker.fetch(new Request("http://localhost/api/account-deletion/start", {
+    method: "POST",
+    headers: { "content-type": "application/json", Origin: "https://chanriva.shinp-studio.com" },
+    body: JSON.stringify({ email: "someone@example.com", password: "not-a-real-password" }),
+  }), env, ctx);
+  assert.equal(missingSecretResponse.status, 503);
+});
 
 test("server-renders the Chanriva landing page", async () => {
   const response = await render();

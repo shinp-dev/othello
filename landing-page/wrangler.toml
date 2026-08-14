@@ -3,6 +3,11 @@ main = "dist/server/index.js"
 compatibility_date = "2026-08-13"
 compatibility_flags = ["nodejs_compat"]
 
+[vars]
+SUPABASE_URL = "https://zgzllmaoyymoeiqtybck.supabase.co"
+# Set with: wrangler secret put SUPABASE_ANON_KEY
+# This is the public Supabase client key used server-side; never use the service-role key here.
+
 [assets]
 directory = "./dist/client"
 binding = "ASSETS"

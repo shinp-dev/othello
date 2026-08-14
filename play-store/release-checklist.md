@@ -26,7 +26,8 @@
 - [ ] developer account種別を確定。ResearchがHuman Subjects Research appに該当する場合はOrganization account要件を確認
 - [ ] Data Safetyを入力（[data-safety.md](data-safety.md)）
 - [ ] Privacy Policy URL: `https://chanriva.shinp-studio.com/privacy`
-- [ ] Account deletion URL: `https://chanriva.shinp-studio.com/account-deletion`。ただし現状はWeb受付未実装のため公開前に修正必須
+- [x] Account deletion URL: `https://chanriva.shinp-studio.com/account-deletion`。LPに既存Authで本人確認するWeb受付を実装
+- [ ] OWNER ACTION REQUIRED: `chanriva` Workerへ `SUPABASE_ANON_KEY` secretを設定し、既存Cloudflare本番環境へdeploy。deploy後にURLのHTTP 200と実受付を確認
 - [ ] App accessを入力（[app-access.md](app-access.md)）
 - [ ] Ads declaration: Contains ads = No（dependency/code監査根拠あり）
 - [ ] Target audienceをOWNER DECISIONとして確定
@@ -50,6 +51,6 @@
 - [ ] release AABをupload keyで署名
 - [ ] 本番endpointのみを参照
 - [ ] Privacy Policyと実装の一致
-- [ ] ログイン不要のWeb account deletion request受付
+- [ ] 本番にデプロイ済みであることを確認したWeb account deletion request受付
 - [ ] 16 KiB native alignmentとPlay Console bundle inspection
 - [ ] 主要機能のrelease smoke / physical device確認

@@ -25,6 +25,14 @@
 - [App testing requirements](https://support.google.com/googleplay/android-developer/answer/14151465): 2023年11月13日以後に作成した個人アカウントでは、production access前に12人以上が14日間継続opt-inしたclosed testが必要。
 - [Data safety](https://support.google.com/googleplay/android-developer/answer/10787469)、[account deletion](https://support.google.com/googleplay/android-developer/answer/13327111)、[prepare for review](https://support.google.com/googleplay/android-developer/answer/9859455)、[store listing assets](https://support.google.com/googleplay/android-developer/answer/9866151)、[content rating](https://support.google.com/googleplay/android-developer/answer/9859655)
 
+## Account deletion
+
+- IN-APP: 実装済み。認証済みAndroidユーザーが既存の `request_account_deletion()` を呼び出す。
+- EXTERNAL WEB: 実装済み。`https://chanriva.shinp-studio.com/account-deletion` のフォームが既存Supabase Email/Password Authで本人確認し、同じ `request_account_deletion()` を呼び出す。アプリの再インストールや起動は要求しない。
+- 実削除: 受付RPCの後、既存の信頼済み `cloudflare-admin` Workerが証明画像、private data、Auth identityを処理し、Research identityをunlinkする。Web側に削除ロジックを複製していない。
+- Play Console Account deletion URL: `https://chanriva.shinp-studio.com/account-deletion`
+- 本番公開には `chanriva` Workerへの `SUPABASE_ANON_KEY` secret設定とCloudflare deployが必要。これはOWNER ACTION REQUIREDであり、未デプロイの状態を公開済みとは扱わない。
+
 Play Console、developer account、署名鍵、外部サービス管理画面にはこのリポジトリからアクセスできません。未確認の項目は各資料で明示しています。
 
 ## 資料
