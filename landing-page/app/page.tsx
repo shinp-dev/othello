@@ -86,7 +86,7 @@ export default function Home() {
 
       <section className="final-cta section" id="start" aria-labelledby="start-title"><div className="cta-glow" aria-hidden="true" /><div className="section-kicker"><span>05</span><i /> START HERE</div><h2 id="start-title">その一局を、<br /><em>次の一手へ。</em></h2><p>ちゃんりばは、対局・検討・傾向分析をひとつにつなぐリバーシアプリです。</p><a className="button button-primary" href="#top">ちゃんりばを始める <span aria-hidden="true">↗</span></a><small>サービスの公開準備中です。最新情報をお待ちください。</small></section>
 
-      <footer className="site-footer"><div className="footer-brand"><img src="/images/app-icon.png" alt="" width="48" height="48" /><div><b>ちゃんりば</b><small>CHANRIVA</small></div></div><div className="footer-meta"><span>ちゃんとリバーシ</span><span>Shinp Studio</span></div><div className="footer-legal"><span>Privacy</span><span>Terms</span><span>© Shinp Studio</span></div></footer>
+      <footer className="site-footer"><div className="footer-brand"><img src="/images/app-icon.png" alt="" width="48" height="48" /><div><b>ちゃんりば</b><small>CHANRIVA</small></div></div><div className="footer-meta"><span>ちゃんとリバーシ</span><span>Shinp Studio</span></div><div className="footer-legal"><a href="/privacy">Privacy</a><a href="/account-deletion">Account deletion</a><span>© Shinp Studio</span></div></footer>
     </main>
   );
 }

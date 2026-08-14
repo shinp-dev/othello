@@ -86,7 +86,7 @@ function Wait-UiText([string]$device, [string]$text) {
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     do {
         Recover-SystemUiAnr $device
-        $appPid = (& $adb -s $device shell pidof com.example.othello 2>$null) -join ''
+        $appPid = (& $adb -s $device shell pidof com.shinpstudio.chanriva 2>$null) -join ''
         if ([string]::IsNullOrWhiteSpace($appPid)) { throw "$device app process exited while waiting for UI text: $text" }
         if ((Get-UiXml $device) -like "*$text*") { return }
         Start-Sleep -Seconds 2
@@ -170,8 +170,8 @@ try {
     }
     foreach ($player in $devices) {
         Invoke-Adb $player.Id @('install', '-r', (Resolve-Path $ApkPath).Path) | Out-Null
-        Invoke-Adb $player.Id @('shell', 'pm', 'clear', 'com.example.othello') | Out-Null
-        $launchArgs = @('shell', 'am', 'start', '-n', 'com.example.othello/.MainActivity')
+        Invoke-Adb $player.Id @('shell', 'pm', 'clear', 'com.shinpstudio.chanriva') | Out-Null
+        $launchArgs = @('shell', 'am', 'start', '-n', 'com.shinpstudio.chanriva/com.example.othello.MainActivity')
         if ($AutoPlay) { $launchArgs += @('--ez', 'othello.e2e.autoplay', 'true') }
         if ($TimeControlMillis -gt 0) {
             if ($TimeControlMillis -lt 1000 -or $TimeControlMillis -gt 60000) { throw 'TimeControlMillis must be 1000..60000 for the debug E2E hook.' }

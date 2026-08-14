@@ -8,7 +8,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.othello"
+        applicationId = "com.shinpstudio.chanriva"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

@@ -73,7 +73,7 @@ npm run deploy
 
 `MatchTransport`のWebRTC DataChannel実装を使用し、Supabase RealtimeのPostgres ChangesはSDP offer/answerの確立時だけ使用します。DB signaling rowはsubscription準備前送信のfallbackも兼ねます。P2P接続後に着手や時計をSupabaseへ送信しません。実機2台では、Auth設定、同一Supabase project、TURN/STUN設定、2台のqueue参加、DataChannel成立、両者start ACK、双方の同一棋譜・hash、結果提出の順で確認します。
 
-`applicationId = com.example.othello` は開発用の仮値です。Google Play公開前に必ず正式な所有ドメイン由来のIDを決定し、公開後に変更しない運用へ移行します。repository名と内部package/DB識別子の`othello`は、公開ブランドではなく既存の技術識別子として今回変更していません。
+`applicationId = com.shinpstudio.chanriva` をGoogle Play公開用の正式IDとして使用します。repository名と内部package/DB識別子の`othello`は、公開ブランドではなく既存の技術識別子として変更していません。
 
 Emulator A/Bの再現手順と、emulatorで完了できる項目・物理端末に残る項目は
 [`docs/DEVICE_TEST.md`](docs/DEVICE_TEST.md)を参照してください。`build/e2e/`には
@@ -100,7 +100,7 @@ Reviewでは実戦開始局面、任意ply、最終局面、保存前variation�
 
 ## 公開前に残る判断と実機確認
 
-- ユーザー判断: 正式applicationId、repository renameの要否、launcher icon/最終ビジュアル、Google Play公開、TURN provider、Privacy Policyと外部アカウント削除URL。
+- ユーザー判断: repository renameの要否、launcher icon/最終ビジュアル、Google Play公開、TURN provider、Privacy Policyと外部アカウント削除URL。
 - 物理端末: arm64 native実性能、Edaxの持続性能・thermal・battery、Wi-Fi↔mobile/mobile↔mobile、carrier NAT/CGNAT/symmetric NAT、STUN-only成功率とTURN必要率、network handover、メーカー固有background挙動。
 
 現在のICE設定はPublic STUNのみです。Emulator A/B成功はTURN不要の根拠にはせず、物理ネットワーク試験後に導入判断します。有料サービスを前提にした設定は含めていません。
