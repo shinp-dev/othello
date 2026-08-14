@@ -1,5 +1,4 @@
-import Link from "next/link";
-
+/* eslint-disable @next/next/no-html-link-for-pages -- vinext Link prefetch throws in the production legal pages. */
 export const metadata = {
   title: "プライバシーポリシー | ちゃんりば",
   description: "ちゃんりば（CHANRIVA）のプライバシーポリシー。",
@@ -9,7 +8,7 @@ export default function PrivacyPage() {
   return (
     <main className="policy-page">
       <div className="policy-page-inner">
-        <Link className="policy-back" href="/">← ちゃんりばトップへ</Link>
+        <a className="policy-back" href="/">← ちゃんりばトップへ</a>
         <p className="section-kicker">CHANRIVA / PRIVACY</p>
         <h1>プライバシーポリシー</h1>
         <p className="policy-updated">最終確認日: 2026年8月14日</p>
@@ -43,7 +42,7 @@ export default function PrivacyPage() {
         <p>対象年齢および13歳未満を含めるかどうかは、Google Playへの公開前に運営者が決定します。対象設定に応じて、Google PlayのFamilies関連要件を確認します。</p>
         <h2>7. 改定・問い合わせ</h2>
         <p>本ポリシーの改定時はこのページの更新日を変更します。削除に関する手続きは<a href="/account-deletion">アカウント削除ページ</a>から開始してください。</p>
-        <div className="policy-footer"><Link href="/account-deletion">アカウント削除の案内へ</Link> · <Link href="/">ちゃんりばトップへ</Link></div>
+        <div className="policy-footer"><a href="/account-deletion">アカウント削除の案内へ</a> · <a href="/">ちゃんりばトップへ</a></div>
       </div>
     </main>
   );

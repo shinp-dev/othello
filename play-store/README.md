@@ -31,7 +31,8 @@
 - EXTERNAL WEB: 実装済み。`https://chanriva.shinp-studio.com/account-deletion` のフォームが既存Supabase Email/Password Authで本人確認し、同じ `request_account_deletion()` を呼び出す。アプリの再インストールや起動は要求しない。
 - 実削除: 受付RPCの後、既存の信頼済み `cloudflare-admin` Workerが証明画像、private data、Auth identityを処理し、Research identityをunlinkする。Web側に削除ロジックを複製していない。
 - Play Console Account deletion URL: `https://chanriva.shinp-studio.com/account-deletion`
-- 本番公開には `chanriva` Workerへの `SUPABASE_ANON_KEY` secret設定とCloudflare deployが必要。これはOWNER ACTION REQUIREDであり、未デプロイの状態を公開済みとは扱わない。
+- 本番稼働確認済み（2026-08-14）。`chanriva` Workerへ必要なsecretを設定し、既存Cloudflare環境へdeploy済み。OWNERが実機からWeb削除を開始し、約4分54秒後に管理Workerが `COMPLETED` へ到達した。
+- 本番後監査では、対象Auth identityの削除、レーティング・資格情報・本人の棋譜参照・証明Storageの0件化、プロフィールの「退会済みユーザー」化、共有棋譜3件の保持を確認した。対象アカウントには確認可能なResearch linkがなかったため、Research contribution保持を含むE2Eは別途確認対象。
 
 Play Console、developer account、署名鍵、外部サービス管理画面にはこのリポジトリからアクセスできません。未確認の項目は各資料で明示しています。
 

@@ -27,7 +27,9 @@
 - [ ] Data Safetyを入力（[data-safety.md](data-safety.md)）
 - [ ] Privacy Policy URL: `https://chanriva.shinp-studio.com/privacy`
 - [x] Account deletion URL: `https://chanriva.shinp-studio.com/account-deletion`。LPに既存Authで本人確認するWeb受付を実装
-- [ ] OWNER ACTION REQUIRED: `chanriva` Workerへ `SUPABASE_ANON_KEY` secretを設定し、既存Cloudflare本番環境へdeploy。deploy後にURLのHTTP 200と実受付を確認
+- [x] `chanriva` Workerへ必要なsecretを設定し、既存Cloudflare本番環境へdeploy。HTTPS表示と実受付を確認
+- [x] OWNER実機E2E: Web本人確認から管理Workerの `COMPLETED` まで約4分54秒。Auth identity、個人DB参照、証明Storageの削除と共有棋譜の匿名化保持を管理画面で確認
+- [ ] Research参加履歴を持つ専用テストアカウントで、account linkのunlinkとaccepted contribution保持をE2E確認
 - [ ] App accessを入力（[app-access.md](app-access.md)）
 - [ ] Ads declaration: Contains ads = No（dependency/code監査根拠あり）
 - [ ] Target audienceをOWNER DECISIONとして確定
@@ -51,6 +53,6 @@
 - [ ] release AABをupload keyで署名
 - [ ] 本番endpointのみを参照
 - [ ] Privacy Policyと実装の一致
-- [ ] 本番にデプロイ済みであることを確認したWeb account deletion request受付
+- [x] 本番にデプロイ済みであることを確認したWeb account deletion request受付
 - [ ] 16 KiB native alignmentとPlay Console bundle inspection
 - [ ] 主要機能のrelease smoke / physical device確認
