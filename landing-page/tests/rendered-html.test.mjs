@@ -27,6 +27,10 @@ test("server-renders the Chanriva landing page", async () => {
   assert.match(html, /強くなるための、/);
   assert.match(html, /screen-online-match\.png/);
   assert.match(html, /screen-review\.png/);
+  assert.match(html, /ANALYSIS SETUP/);
+  assert.match(html, /GUIDED SETUP/);
+  assert.match(html, /CUSTOM DATA/);
+  assert.match(html, /Edax用の評価データやオープニングブック/);
   assert.match(html, /screen-analysis\.png/);
   assert.match(html, /screen-login\.png/);
   assert.match(html, /COMING SOON/);
@@ -46,6 +50,9 @@ test("keeps metadata, responsive styling, and current assets in place", async ()
   assert.match(layout, /app-icon\.png/);
   assert.match(page, /開発中の画面です。表示内容は変更される場合があります。/);
   assert.match(page, /プレイヤー全体の傾向/);
+  assert.match(page, /取得・設定方法を、アプリ内で案内します。/);
+  assert.match(page, /自分が所有するものへ置き換えて利用できます。/);
+  assert.doesNotMatch(page, /ちゃんりばから.*ダウンロード|評価データを配布|すべて同梱/);
   assert.match(page, /COMING SOON/);
   assert.match(css, /@media \(max-width:820px\)/);
   assert.match(css, /@media \(max-width:390px\)/);

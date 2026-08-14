@@ -64,6 +64,16 @@ export default function Home() {
           <figure className="review-screen feature-screen"><img src="/images/screen-review.png" alt="棋譜レビューと評価値、候補手が表示されたちゃんりば画面" loading="lazy" width="394" height="816" /></figure>
         </article>
 
+        <aside className="analysis-setup" aria-labelledby="analysis-setup-title">
+          <div className="setup-label"><span>ANALYSIS SETUP</span> EDAX</div>
+          <h3 id="analysis-setup-title">解析環境も、<br />ちゃんと選べる。</h3>
+          <p className="setup-lead">ちゃんりばでは、高度な棋譜解析を支えるEdax用の評価データやオープニングブックを利用できます。初めての方には必要なデータの取得・設定方法をアプリ内で案内し、対応データを持つ方は自分の環境に合わせて置き換えられます。</p>
+          <div className="setup-cards">
+            <section className="setup-card" aria-labelledby="guided-setup-title"><small>GUIDED SETUP</small><h4 id="guided-setup-title">はじめて使う人</h4><p>必要な評価データやオープニングブックの取得・設定方法を、アプリ内で案内します。</p></section>
+            <section className="setup-card" aria-labelledby="custom-data-title"><small>CUSTOM DATA</small><h4 id="custom-data-title">すでに環境を持っている人</h4><p>対応する評価データやオープニングブックを、自分が所有するものへ置き換えて利用できます。</p></section>
+          </div>
+        </aside>
+
         <article className="feature-analysis feature-block" id="analysis">
           <div className="analysis-copy feature-copy"><FeatureLabel number="C">ANALYSIS</FeatureLabel><h3>人の打ち方まで、<br />分析する。</h3><p>実際の対局データから、プレイヤー全体の打ち方や進行の傾向を分析できます。AIの最善手だけを見るのではなく、人が実際にどのような手を選んでいるのかを研究できます。</p><div className="analysis-status"><strong>現在利用できること</strong><p>プレイヤー全体の傾向や、よく選ばれる進行・着手、勝・引分・負の傾向を、実際の対局データから確認できます。</p><div className="coming-soon"><span>COMING SOON</span><strong>レート帯別分析</strong><p>データの蓄積後、レート帯ごとの進行や着手傾向を比較できる分析機能を提供予定です。将来的には大会を意識した研究にも活用できる機能へ拡張します。</p></div></div><Tags items={tags.analysis} /></div>
           <figure className="analysis-screen feature-screen"><img src="/images/screen-analysis.png" alt="プレイヤー全体の傾向と勝敗分布を表示するちゃんりば画面" loading="lazy" width="394" height="814" /></figure>
