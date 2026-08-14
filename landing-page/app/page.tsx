@@ -65,8 +65,8 @@ export default function Home() {
         </article>
 
         <article className="feature-analysis feature-block" id="analysis">
-          <figure className="analysis-screen feature-screen"><img src="/images/screen-analysis.png" alt="プレイヤー全体の傾向と勝敗分布を表示するちゃんりば画面" loading="lazy" width="394" height="814" /></figure>
           <div className="analysis-copy feature-copy"><FeatureLabel number="03">ANALYSIS</FeatureLabel><h3>人の打ち方まで、<br />分析する。</h3><p>実際の対局データから、プレイヤー全体の打ち方や進行の傾向を分析できます。AIの最善手だけを見るのではなく、人が実際にどのような手を選んでいるのかを研究できます。</p><div className="analysis-status"><strong>現在利用できること</strong><p>プレイヤー全体の傾向や、よく選ばれる進行・着手、勝・引分・負の傾向を、実際の対局データから確認できます。</p><div className="coming-soon"><span>COMING SOON</span><strong>レート帯別分析</strong><p>データの蓄積後、レート帯ごとの進行や着手傾向を比較できる分析機能を提供予定です。将来的には大会を意識した研究にも活用できる機能へ拡張します。</p></div></div><Tags items={tags.analysis} /></div>
+          <figure className="analysis-screen feature-screen"><img src="/images/screen-analysis.png" alt="プレイヤー全体の傾向と勝敗分布を表示するちゃんりば画面" loading="lazy" width="394" height="814" /></figure>
         </article>
       </section>
 
