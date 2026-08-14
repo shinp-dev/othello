@@ -55,17 +55,17 @@ export default function Home() {
         <div className="section-heading"><div className="section-kicker"><span>02</span><i /> FEATURES</div><h2 id="features-title">強くなるための、<br /><em>3つの視点。</em></h2></div>
 
         <article className="feature-match feature-block" id="match">
-          <div className="match-copy feature-copy"><FeatureLabel number="01">MATCH</FeatureLabel><h3>ちゃんと対局する。</h3><p>オンラインで対局し、その一局を次の学びにつなげます。単に勝敗を決めるだけではなく、その後の検討・分析につながる対局体験です。</p><Tags items={tags.match} /></div>
+          <div className="match-copy feature-copy"><FeatureLabel number="A">MATCH</FeatureLabel><h3>ちゃんと対局する。</h3><p>オンラインで対局し、その一局を次の学びにつなげます。単に勝敗を決めるだけではなく、その後の検討・分析につながる対局体験です。</p><Tags items={tags.match} /></div>
           <figure className="match-screen feature-screen"><img src="/images/screen-online-match.png" alt="オンライン対局中のちゃんりば画面" loading="lazy" width="1080" height="2233" /><figcaption>開発中の画面です。表示内容は変更される場合があります。</figcaption></figure>
         </article>
 
         <article className="feature-review feature-block" id="review">
-          <div className="review-copy feature-copy"><FeatureLabel number="02">REVIEW</FeatureLabel><h3>ちゃんと振り返る。</h3><p>評価値や候補手を確認しながら、一局を振り返ります。「勝った」「負けた」で終わらせず、どこで形勢が動いたのか、別の手ならどうだったのかを検討できます。</p><Tags items={tags.review} /></div>
+          <div className="review-copy feature-copy"><FeatureLabel number="B">REVIEW</FeatureLabel><h3>ちゃんと振り返る。</h3><p>評価値や候補手を確認しながら、一局を振り返ります。「勝った」「負けた」で終わらせず、どこで形勢が動いたのか、別の手ならどうだったのかを検討できます。</p><Tags items={tags.review} /></div>
           <figure className="review-screen feature-screen"><img src="/images/screen-review.png" alt="棋譜レビューと評価値、候補手が表示されたちゃんりば画面" loading="lazy" width="394" height="816" /></figure>
         </article>
 
         <article className="feature-analysis feature-block" id="analysis">
-          <div className="analysis-copy feature-copy"><FeatureLabel number="03">ANALYSIS</FeatureLabel><h3>人の打ち方まで、<br />分析する。</h3><p>実際の対局データから、プレイヤー全体の打ち方や進行の傾向を分析できます。AIの最善手だけを見るのではなく、人が実際にどのような手を選んでいるのかを研究できます。</p><div className="analysis-status"><strong>現在利用できること</strong><p>プレイヤー全体の傾向や、よく選ばれる進行・着手、勝・引分・負の傾向を、実際の対局データから確認できます。</p><div className="coming-soon"><span>COMING SOON</span><strong>レート帯別分析</strong><p>データの蓄積後、レート帯ごとの進行や着手傾向を比較できる分析機能を提供予定です。将来的には大会を意識した研究にも活用できる機能へ拡張します。</p></div></div><Tags items={tags.analysis} /></div>
+          <div className="analysis-copy feature-copy"><FeatureLabel number="C">ANALYSIS</FeatureLabel><h3>人の打ち方まで、<br />分析する。</h3><p>実際の対局データから、プレイヤー全体の打ち方や進行の傾向を分析できます。AIの最善手だけを見るのではなく、人が実際にどのような手を選んでいるのかを研究できます。</p><div className="analysis-status"><strong>現在利用できること</strong><p>プレイヤー全体の傾向や、よく選ばれる進行・着手、勝・引分・負の傾向を、実際の対局データから確認できます。</p><div className="coming-soon"><span>COMING SOON</span><strong>レート帯別分析</strong><p>データの蓄積後、レート帯ごとの進行や着手傾向を比較できる分析機能を提供予定です。将来的には大会を意識した研究にも活用できる機能へ拡張します。</p></div></div><Tags items={tags.analysis} /></div>
           <figure className="analysis-screen feature-screen"><img src="/images/screen-analysis.png" alt="プレイヤー全体の傾向と勝敗分布を表示するちゃんりば画面" loading="lazy" width="394" height="814" /></figure>
         </article>
       </section>
