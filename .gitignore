@@ -2,6 +2,10 @@
 **/build/
 **/.cxx/
 local.properties
+*.jks
+*.keystore
+signing*.properties
+key.properties
 .idea/
 *.iml
 captures/

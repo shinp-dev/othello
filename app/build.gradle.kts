@@ -1,6 +1,31 @@
+import java.util.zip.ZipFile
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
+}
+
+val chanrivaSigningEnvironmentNames = listOf(
+    "CHANRIVA_UPLOAD_KEYSTORE_PATH",
+    "CHANRIVA_UPLOAD_KEY_ALIAS",
+    "CHANRIVA_UPLOAD_STORE_PASSWORD",
+    "CHANRIVA_UPLOAD_KEY_PASSWORD",
+)
+val chanrivaSigningEnvironmentValues = chanrivaSigningEnvironmentNames.associateWith { name ->
+    System.getenv(name)?.takeIf { it.isNotEmpty() }
+}
+val chanrivaMissingSigningEnvironmentNames = chanrivaSigningEnvironmentValues
+    .filterValues { it == null }
+    .keys
+val chanrivaConfiguredSigningEnvironmentCount = chanrivaSigningEnvironmentValues.count { it.value != null }
+val chanrivaSigningConfigured = chanrivaConfiguredSigningEnvironmentCount == chanrivaSigningEnvironmentNames.size
+
+if (chanrivaConfiguredSigningEnvironmentCount != 0 && !chanrivaSigningConfigured) {
+    throw GradleException(
+        "Incomplete CHANRIVA release signing configuration. Missing environment variables: " +
+            chanrivaMissingSigningEnvironmentNames.joinToString(", ") +
+            ". Set all four CHANRIVA_UPLOAD_* variables or leave all four unset. Secret values are not printed.",
+    )
 }
 
 android {
@@ -16,9 +41,59 @@ android {
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
+    val chanrivaUploadSigningConfig = if (chanrivaSigningConfigured) {
+        signingConfigs.create("chanrivaUpload") {
+            storeFile = project.file(chanrivaSigningEnvironmentValues["CHANRIVA_UPLOAD_KEYSTORE_PATH"]!!)
+            storePassword = chanrivaSigningEnvironmentValues["CHANRIVA_UPLOAD_STORE_PASSWORD"]
+            keyAlias = chanrivaSigningEnvironmentValues["CHANRIVA_UPLOAD_KEY_ALIAS"]
+            keyPassword = chanrivaSigningEnvironmentValues["CHANRIVA_UPLOAD_KEY_PASSWORD"]
+        }
+    } else {
+        null
+    }
+
+    buildTypes {
+        getByName("release") {
+            chanrivaUploadSigningConfig?.let { signingConfig = it }
+        }
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+}
+
+tasks.register("verifyPlayReleaseSigning") {
+    group = "publishing"
+    description = "Build and verify the signed AAB intended for Google Play upload."
+    dependsOn("bundleRelease")
+
+    doLast {
+        if (!chanrivaSigningConfigured) {
+            throw GradleException(
+                "Play release verification requires all four CHANRIVA_UPLOAD_* environment variables. " +
+                    "Missing environment variables: " + chanrivaMissingSigningEnvironmentNames.joinToString(", ") + ".",
+            )
+        }
+
+        val bundle = layout.buildDirectory.file("outputs/bundle/release/app-release.aab").get().asFile
+        if (!bundle.isFile) {
+            throw GradleException("Signed Play release artifact was not found: ${bundle.name}")
+        }
+
+        val hasJarSignature = ZipFile(bundle).use { zip ->
+            zip.entries().asSequence().any { entry ->
+                val entryName = entry.name.uppercase()
+                entryName.startsWith("META-INF/") &&
+                    (entryName.endsWith(".RSA") || entryName.endsWith(".DSA") || entryName.endsWith(".EC"))
+            }
+        }
+        if (!hasJarSignature) {
+            throw GradleException("The Play release artifact is not signed: ${bundle.name}")
+        }
+
+        logger.lifecycle("Verified signed Play release artifact: ${bundle.name}")
     }
 }
 

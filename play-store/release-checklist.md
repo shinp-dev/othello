@@ -12,6 +12,9 @@
 
 ## Signing
 
+- [x] Secret-free signing acceptance path: all four `CHANRIVA_UPLOAD_*` variables unset keeps normal release builds unsigned for CI audits; all four set applies the upload signing config.
+- [x] `./gradlew verifyPlayReleaseSigning` is the fail-closed Play artifact path and requires all four variables before accepting a signed AAB.
+
 - [x] repository内にkeystore、private key、password、signing propertiesは見つからない
 - [x] release build scriptにdebug keyを明示する設定はない
 - [ ] OWNER ACTION REQUIRED: upload keyを安全な端末またはsecret managerで作成
