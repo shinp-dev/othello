@@ -132,7 +132,7 @@ class ProductionAnalysisEngine private constructor(
         if (!fileExists(evaluationAsset.appPrivatePath)) return unavailable("解析用評価データが見つかりません。再インポートしてください")
         val bookAsset = (settings.bookSource as? BookSource.ImportedBook)?.asset
         if (bookAsset != null && !fileExists(bookAsset.appPrivatePath)) {
-            return unavailable("Opening Bookが見つかりません。削除または再インポートしてください")
+            return unavailable("オープニングブックが見つかりません。削除または再インポートしてください")
         }
 
         val state = position.state
