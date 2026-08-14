@@ -55,8 +55,8 @@ export default function Home() {
         <div className="section-heading"><div className="section-kicker"><span>02</span><i /> FEATURES</div><h2 id="features-title">強くなるための、<br /><em>3つの視点。</em></h2></div>
 
         <article className="feature-match feature-block" id="match">
-          <figure className="match-screen feature-screen"><img src="/images/screen-online-match.png" alt="オンライン対局中のちゃんりば画面" loading="lazy" width="1080" height="2233" /><figcaption>開発中の画面です。表示内容は変更される場合があります。</figcaption></figure>
           <div className="match-copy feature-copy"><FeatureLabel number="01">MATCH</FeatureLabel><h3>ちゃんと対局する。</h3><p>オンラインで対局し、その一局を次の学びにつなげます。単に勝敗を決めるだけではなく、その後の検討・分析につながる対局体験です。</p><Tags items={tags.match} /></div>
+          <figure className="match-screen feature-screen"><img src="/images/screen-online-match.png" alt="オンライン対局中のちゃんりば画面" loading="lazy" width="1080" height="2233" /><figcaption>開発中の画面です。表示内容は変更される場合があります。</figcaption></figure>
         </article>
 
         <article className="feature-review feature-block" id="review">
