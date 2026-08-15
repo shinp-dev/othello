@@ -17,7 +17,12 @@
 
 - [x] repository内にkeystore、private key、password、signing propertiesは見つからない
 - [x] release build scriptにdebug keyを明示する設定はない
-- [ ] OWNER ACTION REQUIRED: upload keyを安全な端末またはsecret managerで作成
+- [x] OWNERがちゃんりば専用upload key `chanriva-upload-v2.jks` を作成し、signed AABで使用した
+- [x] 正式upload key alias: `chanriva-upload`
+- [x] upload certificate SHA-256: `47:87:8B:52:E9:3A:9C:FD:5F:D9:0C:DE:BF:E3:B6:E4:02:9D:BF:8F:FB:A9:B4:48:14:0B:05:DB:A8:1C:79:DD`
+- [x] keystore側とsigned AAB側のcertificate fingerprint完全一致をOWNER確認済み
+- [x] upload key署名済みAABを生成し、`verifyPlayReleaseSigning` と署名検証に成功
+- [ ] OWNER ACTION REQUIRED: upload keystoreの暗号化された外部バックアップを作成
 - [ ] OWNER ACTION REQUIRED: Play ConsoleでPlay App Signingへ登録し、upload certificate / app signing certificateを管理
 - [ ] OWNER ACTION REQUIRED: CIでrelease signingを行う場合はGitHub Actions secretへ登録。秘密情報をrepoへ保存しない
 - [ ] OWNER ACTION REQUIRED: Google/OAuth等の外部サービスへPlay app signing certificateのSHA-256を登録（必要なサービスのみ）
