@@ -53,13 +53,13 @@ Hosted疎通環境を同じ設定で作り直す手順は [docs/SUPABASE_HOSTED_
 3. Android側へservice-role keyを置かず、AuthユーザーのJWTと公開anon keyだけをアプリ設定へ渡します。
 4. 新規AuthユーザーはDB triggerで`profiles`/`ratings`へbootstrapされます。マッチングは`enqueue_or_match()`だけを使用し、公式Rating snapshotとTTLをDB側で管理します。
 5. 結果提出は`submit_match_result(...)`を使用します。2件目の提出時に同一transaction内で自動finalizeされ、`finalize_match_v2(...)`はreconciliation用に残します。参加者以外・二重Rating更新・不一致結果はDB側で拒否または`DISPUTED`になります。
-6. legacy `public_profiles` viewは初回公開版ではクライアント権限を持ちません。対局相手ratingは参加者限定のmatchmaking RPCが成立時snapshotだけを返します。
+6. 公開プロフィールと`display_name`は初回公開版のDBから削除済みです。対局相手ratingは参加者限定のmatchmaking RPCが成立時snapshotだけを返します。
 
 ## Cloudflare Admin
 
-`cloudflare-admin`はアカウント削除を扱う信頼済み管理BFFです。service-role keyはWorker secretにだけ置き、`ADMIN_TOKEN`もWorker secretに置きます。初回公開版では段級位申請UI・通常クライアント権限・証明画像upload policyを閉じています。既存のcredential／verification tableと管理処理は過去データの削除互換性のため残します。
+`cloudflare-admin`はアカウント削除を扱う信頼済み管理BFFです。service-role keyはWorker secretにだけ置き、`ADMIN_TOKEN`もWorker secretに置きます。初回公開版に段級位申請・証明画像・verification管理機能はなく、関連DB/Storage/Worker経路も削除しています。
 
-削除要求は10分ごとのWorker Cronまたは管理endpointから再実行できます。証明画像の実体削除、私有データ削除、共有棋譜を壊さないプロフィール匿名化、Supabase Auth Admin削除、完了記録の順に処理し、途中失敗を完了扱いしません。ブラウザやAndroidへservice-role keyを配布しません。
+削除要求は10分ごとのWorker Cronまたは管理endpointから再実行できます。私有データ削除、Research identityのunlink、Supabase Auth Admin削除、完了記録の順に処理し、途中失敗を完了扱いしません。共有棋譜に必要な内部ID tombstoneは残りますが、表示名は保持しません。ブラウザやAndroidへservice-role keyを配布しません。
 
 ```powershell
 cd cloudflare-admin

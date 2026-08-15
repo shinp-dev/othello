@@ -1,8 +1,21 @@
-# Production cutover preflight: `202608150025_private_match_rating.sql`
+# Production cutover record: `202608150025_private_match_rating.sql`
 
 確認日: 2026-08-15 JST
 
-この資料は、公開プロフィールを閉じ、対局相手へserver-owned rating snapshotだけを返すmigrationの本番適用前preflightです。本番適用、rollback実行、Cloudflare設定変更はこの作業では実施していません。
+この資料は、公開プロフィールを閉じ、対局相手へserver-owned rating snapshotだけを返すmigrationの本番preflightと適用結果です。2026-08-15 JSTにSupabase Dashboard SQL Editorから1 transactionで本番適用し、rollbackとCloudflare設定変更は実施していません。
+
+後方互換不要というOWNER判断により、続く`202608150026_remove_retired_profile_verification.sql`で表示名・公開profile・連盟verification surfaceを物理削除しました。025用rollbackはそれらを復活させるため廃止し、026適用後は使用しません。
+
+## 026 cleanup適用結果
+
+- `othello-admin`を先に本番deployし、account deletionから旧verification DB/Storage依存を除去（Cloudflare Version `dc88fbb0-bf20-4132-b72e-a034912fd7a5`）。
+- 026をSupabase Dashboard SQL Editorから1 transactionで本番適用。
+- `profiles`は内部参照用の`id`と削除tombstone用の`deleted_at`だけに縮小。`display_name`、未使用の`created_at`、`updated_at`を物理削除。
+- `public_profiles` view、`federation_credentials`、`verification_submissions`、`credential_status`、旧verification/account-deletion evidence RPCを物理削除。
+- 空であることを確認した旧`verification` Storage bucketをSupabase Storage UIから削除。
+- `ratings`、`rating_history`、match開始時rating snapshot、matchmakingの`opponent_rating`は維持。
+- Researchはsegment 2件、position aggregate 56件、move aggregate 56件、accepted contributor 2件で不変。`rating_before`とalgorithm versionも維持。
+- Privacy PolicyをDB最終仕様へ合わせて本番deploy（Cloudflare Version `a4774d15-f3c0-456b-b654-456480c05c0d`）。`/privacy`と`/account-deletion`はHTTPS 200を確認。
 
 ## Migration監査
 
@@ -36,11 +49,11 @@
 
 対象の`ALTER TABLE ADD COLUMN`、function/policyのCREATE/DROP、GRANT/REVOKEはPostgreSQL transaction内で実行可能です。`CREATE INDEX CONCURRENTLY`等のtransaction外必須処理は含みません。
 
-本番には`supabase_migrations.schema_migrations`が存在しないため、現在のまま`supabase db push`を実行してはいけません。CLIは001以降を未適用と判断する可能性があります。次回cutoverでは、Dashboard SQL Editorで025の全文を`begin;` / `commit;`で一括実行し、成功後にread-only検証を行う方法を第一候補とします。
+本番には`supabase_migrations.schema_migrations`が存在しないため、現在のまま`supabase db push`を実行してはいけません。CLIは001以降を未適用と判断する可能性があります。025はDashboard SQL Editorで全文を`begin;` / `commit;`で一括実行し、成功後にread-only検証しました。
 
 この実行単位なら、途中失敗、function作成後の権限変更失敗、column追加後のRPC作成失敗はいずれもtransaction全体がrollbackされ、partial stateは残りません。`db push --dry-run`はpending fileの列挙であり、SQLを実行検証しない点にも注意します。
 
-## 本番DB read-only snapshot
+## 本番DB適用前read-only snapshot
 
 確認時点の構造は025適用前です。
 
@@ -58,6 +71,18 @@
 - 上記PENDING_RESULT/participantの期限は2026-08-09に失効済みで、現在進行中であることを示すものではない。ただしstale rowが残っている。
 - Research active policy: 1件、`collection_enabled=true`。025はこの状態を変更しない。
 
+## 本番適用結果
+
+- 2026-08-15 JST、適用直前のqueue 0件、`CREATED` match 0件を確認。
+- 025全文を明示的な`begin` / `commit`で実行し、成功。
+- rating snapshot列は0列から2列へ増加。
+- `enqueue_or_match()`と`claim_waiting_match()`の戻り値に`opponent_rating integer`が追加されたことを確認。
+- `handle_new_user()`がAuth metadataを参照せず、内部固定値を使うことを確認。
+- anon/authenticatedの`public_profiles` SELECT、authenticatedの`profiles` SELECTと`display_name` UPDATEが不可になったことを確認。
+- federation credential/submission/verification Storageの旧クライアント経路が閉じたことを確認。
+- Researchは適用前後ともsegment `ALL` 2件、position aggregate 56件、move aggregate 56件、accepted contributor 2件で不変。
+- `research_private.game_contributors.rating_before`と`rating_algorithm_version`を維持。レート帯別分析は現在未公開の将来機能だが、固定rating segmentを追加して再集計するためのschemaと元ratingは失われていない。
+
 ## Live利用影響
 
 - nullable・defaultなしの2列追加は短時間のtable lockを取るが、既存行のrewriteは不要。
@@ -69,17 +94,7 @@
 
 ## Rollback
 
-緊急rollback正本は`supabase/rollbacks/202608150025_private_match_rating.rollback.sql`です。1 transactionで次を旧仕様へ戻します。
-
-- 旧`handle_new_user()`（Auth metadata display name取込）
-- ratingなしの旧`enqueue_or_match()` / `claim_waiting_match()`
-- `public_profiles`、legacy `profiles`の旧権限/policies
-- federation credential/submissionの旧権限/policies
-- verification Storageのowner INSERT/SELECT policies
-
-snapshot列はデータ損失防止のため残します。完全なschema復元として列をDROPするとcutover後のsnapshotを失うため、自動rollbackには含めません。rollback後に作成された新規userの内部値や、cutover中に作られたsnapshotを旧display nameへ変換する処理もありません。
-
-rollbackはprivacy boundaryを再び開くため、重大なmatchmaking障害でforward fixが間に合わない場合だけOWNER承認で実行します。migration履歴テーブルがないため、rollback後の履歴repairも自動では行いません。
+025用rollbackは、不要と確定した表示名・公開profile・連盟verification surfaceを復活させるため廃止しました。rating snapshotと`opponent_rating`経路で問題が出た場合は、不要機能を再公開せずforward fixします。
 
 ## Cutover後検証
 
@@ -119,7 +134,7 @@ rollbackはprivacy boundaryを再び開くため、重大なmatchmaking障害で
 - email/UUID/Auth metadataを相手ratingの代替表示に使わない。
 - account deletionのrating削除、共有棋譜匿名化、Research unlink/retentionは025で変更しない。
 
-現時点は025未適用なので、本番Privacy PolicyとDBの公開profile/display name境界が不一致です。cutover成功と上記ACL検証が終わるまで公開BLOCKERです。
+025の本番適用とACL検証が完了し、本番Privacy PolicyとDBの公開profile/display name境界の一時的不整合は解消しました。
 
 ## Cloudflare Workers Builds経路
 
@@ -149,11 +164,11 @@ Dashboardで確認した`chanriva`の実設定:
 
 今後、エージェントは`main` pushを単なるGit操作として扱わず、本番Web deployとして扱います。feature branch pushもCloudflare version作成を伴うためOWNER承認対象です。
 
-## OWNER cutover gate
+## 適用後の残件
 
-- [ ] 現在のWeb/DB不整合を解消するため025を本番適用することを承認。
-- [ ] 適用方法を「SQL Editorでexact 025を明示transaction実行」とすることを承認。
-- [ ] 適用直前に非失効queue/active matchがないことを再確認。
+- [x] 現在のWeb/DB不整合を解消するため025を本番適用。
+- [x] SQL Editorでexact 025を明示transaction実行。
+- [x] 適用直前にqueue 0件、`CREATED` match 0件を確認。
 - [ ] 適用後に2テストアカウントでmatch/Elo E2Eを行うことを承認。
 - [ ] account deletionの破壊的E2Eは別途、削除可能な専用アカウントを指定して承認。
 - [ ] migration履歴がない本番を将来CLI管理へ移行するbaseline方針を別作業で決定。

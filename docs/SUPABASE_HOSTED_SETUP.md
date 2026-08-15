@@ -49,7 +49,7 @@ DashboardのSQL Editorを使う場合も、`202608090001_init.sql` から`202608
 
 - Match lifecycle / result / start ACK RPC
 - Realtime対象の `match_notifications` と `match_signaling`
-- privateな `verification` bucket、5 MiB上限、JPEG/PNG/WebP制限
+- 初回公開版では公開プロフィール、表示名、連盟段級位、証明画像Storageを作らない最終migration
 - Androidクライアントに必要な最小Data API権限
 - account deletionのservice-role-only準備/完了RPCと匿名profile tombstone
 - research private schema、Consent/participation RPC、compact source、service-only validator RPC
@@ -84,7 +84,7 @@ $env:OTHELLO_E2E_PLAYER_B_PASSWORD='<player-b-password>'
 
 ## 作成後の確認
 
-1. `verification` bucketがprivateである。
+1. `public_profiles`、`profiles.display_name`、連盟credential／verification tableが存在せず、旧`verification` bucketもStorage APIで削除済みである。
 2. Authユーザー作成時に `profiles` と `ratings` が各1行ずつ自動作成される。
 3. A/Bが同一Projectへログインできる。
 4. Queue参加、Realtime signaling、DataChannel成立、両者start ACKまで到達する。
@@ -93,6 +93,6 @@ $env:OTHELLO_E2E_PLAYER_B_PASSWORD='<player-b-password>'
 
 ## 信頼済み管理Worker
 
-`cloudflare-admin/wrangler.toml`の`SUPABASE_URL`だけを対象Projectへ変更し、`SUPABASE_SERVICE_ROLE_KEY`と`ADMIN_TOKEN`は`wrangler secret put`で登録します。Gitへ値を保存しません。`SUPABASE_VERIFICATION_BUCKET`はmigrationが作る`verification`です。Worker Cronは10分ごとに削除要求を再実行し、Storage APIで証明画像を消してからDB匿名化とAuth Admin削除を行います。Research validator / aggregationはGitHub Actionsの`Research batch` workflowが専用`research_batch` DB roleで実行します。Actionsへ`service_role`やDB owner passwordを渡してはいけません。`collection_enabled=false`ではbatch claimもno-opです。Cloudflare側で課金やカード登録を要求された場合はdeployしません。
+`cloudflare-admin/wrangler.toml`の`SUPABASE_URL`だけを対象Projectへ変更し、`SUPABASE_SERVICE_ROLE_KEY`と`ADMIN_TOKEN`は`wrangler secret put`で登録します。Gitへ値を保存しません。Worker Cronは10分ごとに削除要求を再実行し、DB private data処理、Research unlink、Auth Admin削除、完了記録を行います。Research validator / aggregationはGitHub Actionsの`Research batch` workflowが専用`research_batch` DB roleで実行します。Actionsへ`service_role`やDB owner passwordを渡してはいけません。`collection_enabled=false`ではbatch claimもno-opです。Cloudflare側で課金やカード登録を要求された場合はdeployしません。
 
 この環境を破棄しても、DB定義の正本は `supabase/migrations`、画面設定の正本はこの文書です。

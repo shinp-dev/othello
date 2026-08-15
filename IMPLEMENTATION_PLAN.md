@@ -20,7 +20,7 @@
 - Official-rating matchmaking RPC with queue TTL, cancellation, heartbeat, atomic candidate locking, and random color assignment.
 - Participant-only idempotent result submission and locked, explicit black/white finalization with server-side rating updates.
 - Additive `server_status`, canonical move storage path, per-user 50-record / 100-rating-history retention, and public profile projection.
-- Auth bootstrap trigger, atomic federation review RPC, Worker-side evidence deletion, remote-disc/fingerprint P2P validation, forced pass, and typed analysis scores.
+- Auth bootstrap trigger, remote-disc/fingerprint P2P validation, forced pass, and typed analysis scores. Pre-release federation verification and evidence upload were removed from the initial product.
 - Review follow-up: one-user active-match reservation/lease, participant-only abandon, atomic submit/finalize, terminal retention cleanup, Storage owner validation, retryable evidence cleanup, strict result payloads, deny-by-default internal RPCs, and pgTAP coverage.
 
 ## Current beta status

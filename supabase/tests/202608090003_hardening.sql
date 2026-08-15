@@ -1,6 +1,6 @@
 -- Run with `supabase test db` against local Supabase/Postgres + pgTAP.
 begin;
-select plan(287);
+select plan(280);
 
 select ok(not has_function_privilege('anon', 'public.prune_user_game_records(uuid)', 'execute'), 'anon cannot execute prune_user_game_records');
 select ok(not has_function_privilege('authenticated', 'public.prune_user_game_records(uuid)', 'execute'), 'authenticated cannot execute prune_user_game_records');
@@ -12,7 +12,7 @@ select ok(not exists (
 select ok(exists (select 1 from pg_constraint where conrelid = 'public.active_match_participants'::regclass and contype = 'p'), 'active reservations have a user primary key');
 select ok(to_regprocedure('public.abandon_match(uuid)') is not null, 'abandon_match RPC exists');
 select ok(exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'matches' and column_name = 'created_expires_at'), 'CREATED matches have a lease column');
-select ok(to_regprocedure('public.get_verification_evidence_cleanup(uuid)') is not null, 'evidence cleanup retry RPC exists');
+select ok(to_regprocedure('public.get_verification_evidence_cleanup(uuid)') is null, 'retired verification evidence cleanup RPC is absent');
 select ok(exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'game_records' and column_name = 'final_position_hash'), 'game records persist the verified final position hash');
 select ok(to_regprocedure('public.prepare_account_deletion(uuid)') is not null, 'trusted account deletion preparation RPC exists');
 select ok(to_regprocedure('public.complete_account_deletion(uuid)') is not null, 'trusted account deletion completion RPC exists');
@@ -23,17 +23,15 @@ select ok(not exists (
   select 1 from pg_constraint
    where conrelid = 'public.profiles'::regclass and confrelid = 'auth.users'::regclass and contype = 'f'
 ), 'shared profile tombstones do not cascade with Auth deletion');
-select ok(exists (select 1 from storage.buckets where id = 'verification' and public = false), 'verification bucket is private and migration-managed');
-select ok((select file_size_limit from storage.buckets where id = 'verification') = 5242880, 'verification bucket limits objects to 5 MiB');
-select ok((select allowed_mime_types from storage.buckets where id = 'verification') = array['image/jpeg', 'image/png', 'image/webp']::text[], 'verification bucket allows only image MIME types');
+select ok(not exists (select 1 from storage.objects where bucket_id = 'verification'), 'retired verification storage contains no objects');
+select ok(to_regclass('public.federation_credentials') is null, 'retired federation credential table is absent');
+select ok(to_regclass('public.verification_submissions') is null, 'retired verification submission table is absent');
 select ok(not exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'verification objects owner insert'), 'initial release has no client verification upload policy');
 select ok(not exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'verification objects owner read'), 'initial release has no client verification read policy');
-select ok(
-  has_table_privilege('service_role', 'public.verification_submissions', 'SELECT'),
-  'trusted verification admin can read pending submissions'
-);
+select ok(to_regtype('public.credential_status') is null, 'retired credential status type is absent');
 select ok(not has_table_privilege('authenticated', 'public.profiles', 'select'), 'authenticated cannot read legacy private profile rows');
-select ok(not has_column_privilege('authenticated', 'public.profiles', 'display_name', 'update'), 'authenticated cannot update the legacy display name column');
+select ok(not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'profiles' and column_name = 'display_name'), 'display name column is physically absent');
+select ok(not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'profiles' and column_name = 'created_at'), 'unused profile creation timestamp is physically absent');
 select ok(not has_table_privilege('authenticated', 'public.profiles', 'update'), 'authenticated has no table-wide profile update privilege');
 select ok(not has_table_privilege('authenticated', 'public.profiles', 'insert'), 'authenticated cannot create profile rows');
 select ok(not has_table_privilege('authenticated', 'public.profiles', 'delete'), 'authenticated cannot delete profile rows');
@@ -41,18 +39,18 @@ select ok(has_table_privilege('authenticated', 'public.ratings', 'select'), 'aut
 select ok(not has_table_privilege('authenticated', 'public.ratings', 'update'), 'authenticated cannot update ratings');
 select ok(has_table_privilege('authenticated', 'public.rating_history', 'select'), 'authenticated can read RLS-scoped rating history');
 select ok(has_table_privilege('authenticated', 'public.game_records', 'select'), 'authenticated can read RLS-scoped game records');
-select ok(not has_table_privilege('authenticated', 'public.federation_credentials', 'select'), 'initial release cannot read federation credentials');
-select ok(not has_table_privilege('authenticated', 'public.federation_credentials', 'insert'), 'initial release cannot self-declare federation credentials');
-select ok(not has_function_privilege('authenticated', 'public.submit_verification_submission(uuid,text)', 'execute'), 'initial release cannot submit federation verification evidence');
-select ok(not has_function_privilege('anon', 'public.submit_verification_submission(uuid,text)', 'execute'), 'anonymous callers cannot submit federation verification evidence');
+select ok(to_regprocedure('public.submit_verification_submission(uuid,text)') is null, 'retired verification submission RPC is absent');
+select ok(to_regprocedure('public.review_verification_submission(uuid,public.credential_status)') is null, 'retired verification review RPC is absent');
+select ok(to_regprocedure('public.get_account_deletion_evidence(uuid)') is null, 'account deletion has no retired evidence RPC dependency');
+select ok(to_regprocedure('public.mark_verification_evidence_deleted(uuid)') is null, 'retired evidence deletion marker RPC is absent');
 select ok(has_table_privilege('authenticated', 'public.match_signaling', 'select'), 'authenticated participants can read signaling');
 select ok(has_table_privilege('authenticated', 'public.match_signaling', 'insert'), 'authenticated participants can publish signaling');
 select ok(not has_table_privilege('authenticated', 'public.match_signaling', 'update'), 'authenticated cannot rewrite signaling');
 select ok(not has_table_privilege('authenticated', 'public.match_signaling', 'delete'), 'authenticated cannot delete signaling');
 select ok(has_table_privilege('authenticated', 'public.match_notifications', 'select'), 'authenticated can receive own match notifications');
 select ok(has_sequence_privilege('authenticated', 'public.match_signaling_id_seq', 'usage'), 'authenticated can allocate signaling identity values');
-select ok(not has_table_privilege('anon', 'public.public_profiles', 'select'), 'anon cannot read the retired public profile view');
-select ok(not has_table_privilege('authenticated', 'public.public_profiles', 'select'), 'authenticated cannot read the retired public profile view');
+select ok(to_regclass('public.public_profiles') is null, 'retired public profile view is physically absent');
+select ok(not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'profiles' and column_name = 'updated_at'), 'unused profile update timestamp is physically absent');
 select ok(not has_table_privilege('anon', 'public.profiles', 'select'), 'anon cannot read the base profile table');
 select ok(exists (
   select 1 from information_schema.columns
@@ -247,8 +245,8 @@ values
  ('00000000-0000-0000-0000-000000000008', 'authenticated', 'authenticated', 'research-black@example.test', '', now(), '{}', '{"display_name":"research-black"}'),
  ('00000000-0000-0000-0000-000000000009', 'authenticated', 'authenticated', 'research-white@example.test', '', now(), '{}', '{"display_name":"research-white"}')
 on conflict (id) do nothing;
-select is((select display_name from public.profiles where id = '00000000-0000-0000-0000-000000000007'), '非公開', 'new profile bootstrap uses an internal non-public marker');
-select is((select display_name from public.profiles where id = '00000000-0000-0000-0000-000000000001'), '非公開', 'Auth display_name metadata is never copied into the profile row');
+select ok(exists (select 1 from public.profiles where id = '00000000-0000-0000-0000-000000000007'), 'new account receives an internal profile identity row');
+select ok(position('raw_user_meta_data' in pg_get_functiondef('public.handle_new_user()'::regprocedure)) = 0, 'Auth display name metadata is never read by profile bootstrap');
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000007', false);
 select set_config('request.jwt.claim.role', 'authenticated', false);
@@ -945,25 +943,6 @@ select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000006
 select is((select public.submit_match_result('00000000-0000-0000-0000-000000000107', '', 'BLACK_WIN', '0000000000000000:0:0:0', 'RESIGNATION', null)::text), 'CONFIRMED', 'matching zero-ply resignation finalizes');
 select is((select canonical_moves from public.game_records where match_id = '00000000-0000-0000-0000-000000000107'), '', 'zero-ply canonical history is stored as empty text');
 
-insert into public.federation_credentials(user_id, organization, credential_type, value)
-values ('00000000-0000-0000-0000-000000000003', 'test', 'dan-bad', 'C1'),
-       ('00000000-0000-0000-0000-000000000003', 'test', 'dan-good', 'C2');
-insert into storage.objects(bucket_id, name, owner_id, metadata)
-values ('verification', '00000000-0000-0000-0000-000000000003/proof.png', '00000000-0000-0000-0000-000000000003', '{}'::jsonb),
-       ('verification', '00000000-0000-0000-0000-000000000003/not-owned.png', '00000000-0000-0000-0000-000000000004', '{}'::jsonb);
-select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
-select throws_ok(
-  $$select public.submit_verification_submission((select id from public.federation_credentials where credential_type = 'dan-bad'), '00000000-0000-0000-0000-000000000003/not-owned.png')$$,
-  'P0001', 'evidence object ownership required', 'unowned evidence object is rejected by ownership validation');
-select ok(public.submit_verification_submission((select id from public.federation_credentials where credential_type = 'dan-good'), '00000000-0000-0000-0000-000000000003/proof.png') is not null, 'owned evidence path is accepted');
-select set_config('request.jwt.claim.role', 'service_role', false);
-select is((select public.review_verification_submission((select id from public.verification_submissions where credential_id = (select id from public.federation_credentials where credential_type = 'dan-good')), 'VERIFIED'::public.credential_status)), 'VERIFIED', 'review returns actual DB status');
-select is((select public.review_verification_submission((select id from public.verification_submissions where credential_id = (select id from public.federation_credentials where credential_type = 'dan-good')), 'VERIFIED'::public.credential_status)), 'VERIFIED', 'same review decision is idempotent');
-select throws_ok($$select public.review_verification_submission((select id from public.verification_submissions where credential_id = (select id from public.federation_credentials where credential_type = 'dan-good')), 'REJECTED'::public.credential_status)$$, 'P0001', 'review decision conflict', 'conflicting terminal review is rejected');
-select is((select public.get_verification_evidence_cleanup((select id from public.verification_submissions where credential_id = (select id from public.federation_credentials where credential_type = 'dan-good')))), '00000000-0000-0000-0000-000000000003/proof.png', 'cleanup retry returns DB-owned path');
-select public.mark_verification_evidence_deleted((select id from public.verification_submissions where credential_id = (select id from public.federation_credentials where credential_type = 'dan-good')));
-select is((select public.get_verification_evidence_cleanup((select id from public.verification_submissions where credential_id = (select id from public.federation_credentials where credential_type = 'dan-good')))), null, 'successful cleanup removes the path reference');
-
 select ok(to_regclass('public.account_deletion_requests') is not null, 'account deletion request table exists');
 select ok(to_regprocedure('public.request_account_deletion()') is not null, 'account deletion request RPC exists');
 select ok(has_table_privilege('authenticated', 'public.account_deletion_requests', 'select'), 'authenticated users can read their deletion request');
@@ -978,24 +957,15 @@ select throws_ok(
   'P0001', 'account deletion is pending', 'deletion-requested users cannot re-enter matchmaking'
 );
 
-select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
-select public.request_account_deletion();
-select set_config('request.jwt.claim.role', 'service_role', false);
-select is(
-  cardinality(public.get_account_deletion_evidence('00000000-0000-0000-0000-000000000003')),
-  2,
-  'trusted deletion worker receives every verification object under the user prefix'
-);
-
--- User 5 has a shared record but no Storage objects, so the DB phase can be tested
--- independently without bypassing Storage API deletion protection.
+-- User 5 has a shared record, so deletion must retain the opponent's record
+-- without relying on any retired profile or verification data.
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000005', false);
 select set_config('request.jwt.claim.role', 'authenticated', false);
 select public.request_account_deletion();
 select set_config('request.jwt.claim.role', 'service_role', false);
 select is(public.prepare_account_deletion('00000000-0000-0000-0000-000000000005'), 'PROCESSING', 'trusted deletion preparation is retryable');
 select is((select count(*)::int from public.ratings where user_id = '00000000-0000-0000-0000-000000000005'), 0, 'account deletion removes private rating state');
-select ok((select display_name = '退会済みユーザー' and deleted_at is not null from public.profiles where id = '00000000-0000-0000-0000-000000000005'), 'account deletion anonymizes the shared profile tombstone');
+select ok((select deleted_at is not null from public.profiles where id = '00000000-0000-0000-0000-000000000005'), 'account deletion marks the internal identity tombstone without a display name');
 select is((select count(*)::int from public.game_records where match_id = '00000000-0000-0000-0000-000000000107'), 1, 'account deletion preserves the opponents shared immutable record');
 select is((select count(*)::int from public.user_game_records where user_id = '00000000-0000-0000-0000-000000000006' and match_id = '00000000-0000-0000-0000-000000000107'), 1, 'opponent keeps the bounded record reference');
 select is((select count(*)::int from public.user_game_records where user_id = '00000000-0000-0000-0000-000000000005'), 0, 'deleted user record references are removed');

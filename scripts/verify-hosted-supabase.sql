@@ -3,16 +3,11 @@
 select jsonb_build_object(
   'matches_table', to_regclass('public.matches') is not null,
   'signaling_table', to_regclass('public.match_signaling') is not null,
-  'verification_bucket', exists (
-    select 1
-    from storage.buckets
-    where id = 'verification'
-      and public = false
-      and file_size_limit = 5242880
-      and allowed_mime_types = array['image/jpeg', 'image/png', 'image/webp']::text[]
-  ),
-  'verification_admin_select',
-    has_table_privilege('service_role', 'public.verification_submissions', 'SELECT'),
+  'verification_retired',
+    to_regclass('public.federation_credentials') is null
+    and to_regclass('public.verification_submissions') is null
+    and to_regtype('public.credential_status') is null
+    and not exists (select 1 from storage.objects where bucket_id = 'verification'),
   'realtime_tables', (
     select count(*)
     from pg_publication_tables
@@ -106,9 +101,7 @@ select jsonb_build_object(
     and not has_table_privilege('authenticated', 'public.profiles', 'INSERT')
     and not has_table_privilege('authenticated', 'public.profiles', 'UPDATE')
     and not has_table_privilege('authenticated', 'public.profiles', 'DELETE'),
-  'public_profiles_retired',
-    not has_table_privilege('anon', 'public.public_profiles', 'SELECT')
-    and not has_table_privilege('authenticated', 'public.public_profiles', 'SELECT'),
+  'public_profiles_retired', to_regclass('public.public_profiles') is null,
   'match_rating_snapshots', exists (
     select 1
       from information_schema.columns
@@ -120,10 +113,11 @@ select jsonb_build_object(
   'ratings_select', has_table_privilege('authenticated', 'public.ratings', 'SELECT'),
   'history_select', has_table_privilege('authenticated', 'public.rating_history', 'SELECT'),
   'records_select', has_table_privilege('authenticated', 'public.game_records', 'SELECT'),
-  'credentials_closed',
-    not has_table_privilege('authenticated', 'public.federation_credentials', 'SELECT')
-    and not has_table_privilege('authenticated', 'public.federation_credentials', 'INSERT')
-    and not has_function_privilege('authenticated', 'public.submit_verification_submission(uuid,text)', 'EXECUTE'),
+  'profile_free_text_retired', not exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public' and table_name = 'profiles'
+       and column_name in ('display_name', 'created_at', 'updated_at')
+  ),
   'signaling_select', has_table_privilege('authenticated', 'public.match_signaling', 'SELECT'),
   'signaling_insert', has_table_privilege('authenticated', 'public.match_signaling', 'INSERT'),
   'signaling_sequence', has_sequence_privilege('authenticated', 'public.match_signaling_id_seq', 'USAGE')

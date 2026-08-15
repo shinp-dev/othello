@@ -2,7 +2,7 @@
 
 ## Scope
 
-This repository implements the Android-first Reversi product ちゃんりば. Local play, Supabase-backed matchmaking/finalization, WebRTC DataChannel play, immutable records, credential submission, account-deletion processing, and post-game Edax review are implemented behind explicit domain boundaries.
+This repository implements the Android-first Reversi product ちゃんりば. Local play, Supabase-backed matchmaking/finalization, WebRTC DataChannel play, immutable records, account-deletion processing, and post-game Edax review are implemented behind explicit domain boundaries.
 
 A user can start a local game without Supabase credentials. Network features require Auth and are never faked as authoritative local state.
 
@@ -19,8 +19,7 @@ A user can start a local game without Supabase credentials. Network features req
 | `:feature:match` | Match orchestration state machine and P2P move handling | Rating implementation, Edax |
 | `:feature:records` | Immutable game record storage/query port | Edax evaluation values |
 | `:feature:review` | Review session, cursor and variations | Match transport |
-| `:feature:profile` | Profile presentation/query boundary | Rating calculations |
-| `:feature:credential` | Federation credential submission/review boundary | Rating |
+| `:feature:profile` | Account-deletion request boundary | Rating calculations |
 | `:analysis:api` | `AnalysisEngine`, settings and result contracts | Match implementation |
 | `:analysis:edax` | Android-local Edax 4.6 JNI adapter and user-data storage | Match, Supabase |
 | `:transport:webrtc` | Android WebRTC SDK wiring and ICE configuration boundary | Game Core rules |
@@ -35,7 +34,7 @@ feature:review -> analysis:api
 feature:match -X-> analysis:edax
 transport:webrtc -> core:network
 data:supabase -> feature ports / core contracts
-feature:match -X-> feature:profile / feature:credential
+feature:match -X-> feature:profile
 ```
 
 `core:game` has no Android dependency. `feature:match` only consumes `GameState` and transport ports. A build-time boundary check fails if match source references `analysis`. Supabase SDK types are private to `:data:supabase`; `SupabaseModule` exposes only application-owned ports. WebRTC SDK types are private to `:transport:webrtc`; callers receive `MatchTransport`, payloads, and primitive diagnostics.
@@ -44,15 +43,14 @@ feature:match -X-> feature:profile / feature:credential
 
 | Data | Owner | Access path |
 | --- | --- | --- |
-| `profiles` | Profile | ProfileRepository |
+| `profiles` | Internal user identity/tombstone | Trusted server and database constraints |
 | `match_queue`, `matches` | Matchmaking / Match | RPC and repositories |
 | `match_submissions` | Match finalization | SubmitResult use case |
 | `game_records` | Records | RecordRepository |
 | `ratings`, `rating_history` | Rating policy/application | Server RPC only for official updates |
-| `federation_credentials`, `verification_submissions` | Credential / admin BFF | RLS + Cloudflare Worker |
 | `account_deletion_requests` | Profile / trusted admin BFF | owner request RPC + service-role processing RPCs |
 
-The Android client never contains a service-role key. It cannot mark a rating, match, or credential as verified.
+The Android client never contains a service-role key. It cannot mark a rating or match result as verified.
 
 ## Game Core
 
@@ -95,20 +93,16 @@ New GameRecords persist the verified final-position hash and fixed `5m` product 
 
 Edax evaluation data and opening books are user imports, never app assets. The cache key includes canonical board, side to move, Edax level, eval SHA-256 and optional book SHA-256. A data replacement therefore cannot reuse stale scores. One active book slot is represented as a named slot boundary so later multi-book switching does not change `analysis:api`.
 
-## Federation verification
-
-Users may self-declare a credential. A verification submission uploads evidence to Supabase Storage and is reviewed only through Cloudflare Worker -> Supabase. Public profiles show only `段級位確認済み`; evidence and legal names are private and removable after approval.
-
 ## Account deletion
 
-Android can only create an owner-scoped deletion request. The trusted Worker deletes every object under the user's verification prefix through the Storage API, calls a service-role-only DB preparation RPC, removes the Auth identity through the Auth Admin API, and then marks the request complete. DB preparation removes private ratings, credentials, submissions and record references, while retaining an anonymized profile tombstone so the opponent's immutable shared record and match foreign keys remain valid. A pending deletion request is excluded from matchmaking.
+Android can only create an owner-scoped deletion request. The trusted Worker calls a service-role-only DB preparation RPC, unlinks the Research subject, removes the Auth identity through the Auth Admin API, and then marks the request complete. DB preparation removes private ratings and record references while retaining an internal identity tombstone so the opponent's immutable shared record and match foreign keys remain valid. A pending deletion request is excluded from matchmaking.
 
 ## Security and forbidden dependencies
 
 - No moves or clocks are written to Supabase during a game.
 - Realtime Postgres Changes is signaling-only, protected by `match_signaling` RLS, and is unsubscribed after both start ACKs.
 - No service-role key is shipped to Android or browser.
-- Android cannot update rating, peak, official result, or verification status directly.
+- Android cannot update rating, peak, or official result directly.
 - Match cannot reference Edax; review alone can reference `AnalysisEngine`.
 - Live matchmaking, clocks, move transport, result submission and rating never construct or call `AnalysisEngine`.
 - Game records are immutable after finalization.
@@ -116,7 +110,6 @@ Android can only create an owner-scoped deletion request. The trusted Worker del
 - Matchmaking snapshots official `ratings.current_rating`, uses TTL queue rows and `FOR UPDATE SKIP LOCKED`; client rating input is not accepted.
 - `active_match_participants.user_id` is the database invariant for one active match per user. CREATED matches have a five-minute lease; `abandon_match` and stale cleanup release reservations without changing rating.
 - `submit_match_result` stores idempotently and auto-finalizes when both submissions exist; `finalize_match_v2` remains participant-scoped reconciliation. Payload enums, hashes, clock size, and canonical token format are checked in SQL.
-- Credential evidence must be a `verification/<auth.uid()>/...` Storage-owned object. Review is idempotent/conflict-safe; the Worker receives cleanup paths from the DB and can retry deletion before the path is nulled.
 - Terminal matches, records, and submissions have retention/cleanup RPCs. Internal pruning and cleanup functions have no execute permission for `anon`, `authenticated`, or `PUBLIC`; SECURITY DEFINER functions use an empty search path.
 - DataChannel move commands carry real moves only. Terminal control messages are a separate wire type. `TurnResolver` deterministically adds `--` locally on both peers; command IDs reserve their first payload even when that payload is rejected.
 
