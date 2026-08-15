@@ -83,10 +83,8 @@ class MainActivity : ComponentActivity() {
 
 private enum class AppDestination {
     HOME,
-    PROFILE,
     RECORDS,
     REVIEW,
-    CREDENTIAL,
     ACCOUNT_DELETION,
     SETTINGS,
     ANALYSIS_SETTINGS,
@@ -209,11 +207,6 @@ private fun OthelloApp(
                 showDiagnostics = showDiagnostics,
                 onBack = ::requestOnlineLeave,
             )
-            destination == AppDestination.PROFILE && session != null && component != null -> ProfileScreen(
-                requireNotNull(session).userId,
-                component.profileRepository,
-                onBack = { destination = AppDestination.HOME },
-            )
             destination == AppDestination.RECORDS -> RecordsScreenV2(
                 userId = session?.userId,
                 repository = component?.gameRecordRepository,
@@ -229,10 +222,6 @@ private fun OthelloApp(
                 researchParticipationRepository = component?.researchParticipationRepository,
                 researchPositionRepository = component?.researchPositionRepository,
                 onBack = { destination = AppDestination.RECORDS },
-            )
-            destination == AppDestination.CREDENTIAL && session != null && component != null -> CredentialScreen(
-                component.credentialRepository(requireNotNull(session).userId),
-                onBack = { destination = AppDestination.HOME },
             )
             destination == AppDestination.ACCOUNT_DELETION && component != null -> AccountDeletionScreen(
                 component.accountDeletionRepository, onBack = { destination = AppDestination.HOME },
@@ -331,9 +320,7 @@ private fun OthelloApp(
                 onLocalHumanStart = { localMatchMode = LocalMatchMode.HUMAN; localHumanDisc = Disc.BLACK; localMatch = true },
                 onLocalAiStart = { destination = AppDestination.LOCAL_AI_SETUP },
                 onRetryLocalRecordSave = localRecordPersistence::retry,
-                onProfile = { destination = AppDestination.PROFILE },
                 onRecords = { destination = AppDestination.RECORDS },
-                onCredential = { destination = AppDestination.CREDENTIAL },
                 onAccountDeletion = { destination = AppDestination.ACCOUNT_DELETION },
                 onSettings = { destination = AppDestination.SETTINGS },
             )
@@ -384,6 +371,10 @@ private fun OnlineMatchScreen(
             Spacer(Modifier.weight(1f))
             Text("オンライン対局", style = MaterialTheme.typography.titleLarge)
         }
+        Text(
+            opponentRatingLabel(coordinator.opponentRating),
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        )
         diagnostics?.let {
             Text("matchId: ${it.matchId}", style = MaterialTheme.typography.labelSmall)
             Text("status ${viewState.matchState.status.name} / disc ${viewState.localDisc}", style = MaterialTheme.typography.labelSmall)
@@ -516,9 +507,7 @@ private fun HomeScreen(
     onLocalHumanStart: () -> Unit,
     onLocalAiStart: () -> Unit,
     onRetryLocalRecordSave: (String) -> Unit,
-    onProfile: () -> Unit,
     onRecords: () -> Unit,
-    onCredential: () -> Unit,
     onAccountDeletion: () -> Unit,
     onSettings: () -> Unit,
 ) {
@@ -563,7 +552,7 @@ private fun HomeScreen(
                 )
             }
         } else {
-            Text("ログイン中: ${session.displayName}")
+            Text("ログイン済み")
             OutlinedButton(onClick = onSignOut) { Text("ログアウト") }
         }
         Button(
@@ -593,8 +582,6 @@ private fun HomeScreen(
             }
         }
         if (session != null) {
-            OutlinedButton(onClick = onProfile, modifier = Modifier.fillMaxWidth()) { Text("プロフィール") }
-            OutlinedButton(onClick = onCredential, modifier = Modifier.fillMaxWidth()) { Text("連盟段級位") }
             OutlinedButton(onClick = onAccountDeletion, modifier = Modifier.fillMaxWidth()) { Text("アカウントを削除") }
         }
         OutlinedButton(onClick = onRecords, modifier = Modifier.fillMaxWidth()) { Text("棋譜・レビュー") }
@@ -616,6 +603,8 @@ private fun HomeScreen(
         if (configurationError != null) Text(configurationError, color = MaterialTheme.colorScheme.error)
     }
 }
+
+internal fun opponentRatingLabel(rating: Int?): String = "相手　レート ${rating ?: "---"}"
 
 @Composable
 private fun MatchScreen(onBack: () -> Unit) {

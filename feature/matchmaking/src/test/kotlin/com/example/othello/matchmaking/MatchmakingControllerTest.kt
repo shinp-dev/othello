@@ -22,7 +22,7 @@ private class FakeMatchmakingRepository : MatchmakingRepository {
 }
 
 class MatchmakingControllerTest {
-    private val assignment = MatchAssignment("match", "opponent", AssignedDisc.BLACK)
+    private val assignment = MatchAssignment("match", "opponent", AssignedDisc.BLACK, 1520)
 
     @Test
     fun expiredQueueIsReenqueuedInsteadOfRemainingFalselyWaiting() = runBlocking {

@@ -107,7 +107,6 @@ dependencies {
     implementation(project(":feature:records"))
     implementation(project(":feature:review"))
     implementation(project(":feature:profile"))
-    implementation(project(":feature:credential"))
     implementation(project(":feature:research"))
     implementation(project(":analysis:api"))
     implementation(project(":analysis:edax"))

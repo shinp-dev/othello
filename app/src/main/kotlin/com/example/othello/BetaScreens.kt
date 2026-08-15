@@ -1,8 +1,5 @@
 package com.example.othello
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -39,7 +36,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -48,15 +44,11 @@ import com.example.othello.designsystem.ChanrivaColors
 import com.example.othello.designsystem.ChanrivaSpacing
 import com.example.othello.analysis.edax.EdaxDataManager
 import com.example.othello.analysis.edax.ProductionAnalysisEngine
-import com.example.othello.credential.CredentialRepository
-import com.example.othello.credential.FederationCredential
 import com.example.othello.game.CanonicalMoves
 import com.example.othello.game.Disc
 import com.example.othello.game.GameState
 import com.example.othello.game.Position
 import com.example.othello.profile.AccountDeletionRepository
-import com.example.othello.profile.Profile
-import com.example.othello.profile.ProfileRepository
 import com.example.othello.records.GameRecord
 import com.example.othello.records.GameRecordRepository
 import com.example.othello.records.FinishReason
@@ -76,50 +68,12 @@ import com.example.othello.research.ResearchPositionRepository
 import com.example.othello.research.ResearchPositionResult
 import com.example.othello.research.ResearchUnavailableReason
 import com.example.othello.research.researchPositionToken
-import java.io.ByteArrayOutputStream
-import java.io.InputStream
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-
-@Composable
-internal fun ProfileScreen(userId: String, repository: ProfileRepository, onBack: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    var profile by remember { mutableStateOf<Profile?>(null) }
-    var displayName by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(userId) {
-        runCatching { repository.get(userId) }
-            .onSuccess { profile = it; displayName = it.displayName }
-            .onFailure { error = it.message ?: "プロフィールを取得できませんでした" }
-    }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page), verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section)) {
-        ScreenHeader("プロフィール", onBack)
-        profile?.let { current ->
-            OutlinedTextField(displayName, { displayName = it.take(40) }, label = { Text("表示名") }, singleLine = true)
-            Button(
-                onClick = {
-                    scope.launch {
-                        runCatching { repository.updateDisplayName(userId, displayName.trim()) }
-                            .onSuccess { profile = it; error = null }
-                            .onFailure { error = it.message ?: "表示名を更新できませんでした" }
-                    }
-                },
-                enabled = displayName.trim().isNotEmpty() && displayName.trim() != current.displayName,
-            ) { Text("表示名を保存") }
-            Text("現在のレーティング: ${current.currentRating}")
-            Text("最高レーティング: ${current.peakRating}")
-            Text("安定レーティング帯: ${if (current.stableRatingBand == "CALCULATING") "算出中" else current.stableRatingBand}")
-            Text("連盟段級位: ${current.federationGrade ?: "未登録"}")
-            Text("確認状態: ${current.federationVerificationStatus ?: "未申請"}")
-            Text("公開プロフィールにメールアドレスや証明画像は表示されません", style = MaterialTheme.typography.bodySmall)
-        } ?: Text("読み込み中…")
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    }
-}
 
 @Composable
 internal fun RecordsScreen(
@@ -397,75 +351,6 @@ private fun formatResearchPercent(value: Double): String =
     String.format(Locale.ROOT, "%.1f%%", value.coerceIn(0.0, 1.0) * 100.0)
 
 @Composable
-internal fun CredentialScreen(repository: CredentialRepository, onBack: () -> Unit) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var credential by remember { mutableStateOf<FederationCredential?>(null) }
-    var value by remember { mutableStateOf("") }
-    var evidenceUri by remember { mutableStateOf<Uri?>(null) }
-    var message by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { evidenceUri = it }
-    LaunchedEffect(repository) {
-        runCatching { repository.current() }
-            .onSuccess { credential = it; if (it != null) value = it.value }
-            .onFailure { message = it.message ?: "段級位情報を取得できませんでした" }
-    }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ScreenHeader("連盟段級位", onBack)
-        Text("自己申告した段級位は、証明画像の審査完了まで未確認として表示されます")
-        OutlinedTextField(value, { value = it.take(40) }, label = { Text("段級位") }, singleLine = true)
-        Button(
-            onClick = {
-                busy = true
-                scope.launch {
-                    runCatching { repository.selfDeclare(value.trim()) }
-                        .onSuccess { credential = it; message = "自己申告を保存しました" }
-                        .onFailure { message = it.message ?: "自己申告を保存できませんでした" }
-                    busy = false
-                }
-            },
-            enabled = credential == null && value.trim().isNotEmpty() && !busy,
-        ) { Text("自己申告を保存") }
-        credential?.let { Text("状態: ${it.status}") }
-        OutlinedButton(onClick = { picker.launch("image/*") }, enabled = credential != null && !busy) { Text("証明画像を選択") }
-        Text(if (evidenceUri == null) "画像未選択" else "画像を選択済み（内容とファイル名は公開されません）")
-        Button(
-            onClick = {
-                val selected = evidenceUri ?: return@Button
-                val current = credential ?: return@Button
-                busy = true
-                scope.launch {
-                    runCatching {
-                        val mimeType = requireNotNull(context.contentResolver.getType(selected)) { "MIME typeを確認できません" }
-                        require(mimeType in ALLOWED_EVIDENCE_MIME_TYPES) { "JPEG/PNG/WebPのみ選択できます" }
-                        val bytes = requireNotNull(context.contentResolver.openInputStream(selected)).use {
-                            it.readAtMost(MAX_EVIDENCE_BYTES + 1)
-                        }
-                        require(bytes.size <= MAX_EVIDENCE_BYTES) { "証明画像は5MB以下にしてください" }
-                        val extension = when (mimeType) {
-                            "image/jpeg" -> "jpg"
-                            "image/png" -> "png"
-                            else -> "webp"
-                        }
-                        val path = repository.uploadEvidence("evidence-${System.currentTimeMillis()}.$extension", mimeType, bytes)
-                        repository.submitVerification(current, path)
-                    }.onSuccess {
-                        credential = it
-                        evidenceUri = null
-                        message = "審査申請を受け付けました"
-                    }.onFailure { message = it.message ?: "審査申請に失敗しました" }
-                    busy = false
-                }
-            },
-            enabled = credential != null && evidenceUri != null && credential?.status?.name != "PENDING" && !busy,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(if (busy) "処理中…" else "画像をアップロードして審査申請") }
-        message?.let { Text(it, color = if (it.contains("失敗") || it.contains("できません")) MaterialTheme.colorScheme.error else ChanrivaColors.accent) }
-    }
-}
-
-@Composable
 internal fun AccountDeletionScreen(repository: AccountDeletionRepository, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var confirmed by remember { mutableStateOf(false) }
@@ -473,7 +358,7 @@ internal fun AccountDeletionScreen(repository: AccountDeletionRepository, onBack
     var error by remember { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         ScreenHeader("アカウントを削除", onBack)
-        Text("削除リクエスト後、信頼されたサーバー処理が認証情報・非公開プロフィール・証明画像を削除します。対戦相手の棋譜は匿名化して保持される場合があります。")
+        Text("削除リクエスト後、信頼されたサーバー処理が認証情報・アカウント管理用の内部データ・レーティングを削除します。対戦相手の棋譜は匿名化して保持される場合があります。")
         Text("進行中の対局がある場合は受け付けません。処理完了までログインできる場合があります。", style = MaterialTheme.typography.bodySmall)
         when {
             requested -> Text("削除リクエストを受け付けました", color = ChanrivaColors.accent)
@@ -560,18 +445,6 @@ private fun ReviewBoard(
 
 private fun formatEvaluation(value: Int): String = if (value > 0) "+$value" else value.toString()
 
-private fun InputStream.readAtMost(maximumBytes: Int): ByteArray {
-    require(maximumBytes > 0)
-    val output = ByteArrayOutputStream(minOf(maximumBytes, DEFAULT_BUFFER_SIZE))
-    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-    while (output.size() < maximumBytes) {
-        val count = read(buffer, 0, minOf(buffer.size, maximumBytes - output.size()))
-        if (count < 0) break
-        output.write(buffer, 0, count)
-    }
-    return output.toByteArray()
-}
-
 private fun MatchResult.labelFor(localIsBlack: Boolean): String {
     val localWon = (this == MatchResult.BLACK_WIN && localIsBlack) || (this == MatchResult.WHITE_WIN && !localIsBlack)
     return when {
@@ -598,9 +471,6 @@ private fun FinishReason.userLabel(): String = when (this) {
 private fun formatDate(epochMillis: Long): String = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
     .withZone(ZoneId.systemDefault())
     .format(Instant.ofEpochMilli(epochMillis))
-
-private const val MAX_EVIDENCE_BYTES = 5 * 1024 * 1024
-private val ALLOWED_EVIDENCE_MIME_TYPES = setOf("image/jpeg", "image/png", "image/webp")
 
 private enum class RecordTabV2 { LOCAL, SERVER }
 

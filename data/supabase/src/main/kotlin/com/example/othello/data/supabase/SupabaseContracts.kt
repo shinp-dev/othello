@@ -3,9 +3,6 @@ package com.example.othello.data.supabase
 import com.example.othello.auth.AuthGateway
 import com.example.othello.auth.SignUpResult
 import com.example.othello.auth.UserSession
-import com.example.othello.credential.CredentialRepository
-import com.example.othello.credential.CredentialStatus
-import com.example.othello.credential.FederationCredential
 import com.example.othello.match.MatchFinishResult
 import com.example.othello.match.MatchStartAck
 import com.example.othello.match.MatchSubmission
@@ -15,8 +12,6 @@ import com.example.othello.matchmaking.EnqueueResult
 import com.example.othello.matchmaking.MatchAssignment
 import com.example.othello.matchmaking.MatchmakingRepository
 import com.example.othello.network.CURRENT_PROTOCOL_VERSION
-import com.example.othello.profile.Profile
-import com.example.othello.profile.ProfileRepository
 import com.example.othello.profile.AccountDeletionRepository
 import com.example.othello.records.FinishReason
 import com.example.othello.records.GameRecord
@@ -44,8 +39,6 @@ import io.github.jan.supabase.postgrest.query.filter.FilterOperation
 import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.realtime.*
-import io.github.jan.supabase.storage.Storage
-import io.github.jan.supabase.storage.*
 import io.github.jan.supabase.SupabaseClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
@@ -59,7 +52,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import io.ktor.http.ContentType
 import java.time.Instant
 
 data class SupabaseConfig(val url: String, val anonKey: String) {
@@ -79,7 +71,6 @@ internal object SupabaseClientFactory {
             install(Auth)
             install(Postgrest)
             install(Realtime)
-            install(Storage)
         }
     }
 }
@@ -90,6 +81,7 @@ private data class EnqueueRow(
     val matched: Boolean,
     @SerialName("opponent_id") val opponentId: String? = null,
     @SerialName("assigned_disc") val assignedDisc: String? = null,
+    @SerialName("opponent_rating") val opponentRating: Int? = null,
 )
 
 @Serializable
@@ -97,6 +89,7 @@ private data class ClaimRow(
     @SerialName("match_id") val matchId: String,
     @SerialName("opponent_id") val opponentId: String,
     @SerialName("assigned_disc") val assignedDisc: String,
+    @SerialName("opponent_rating") val opponentRating: Int? = null,
 )
 
 internal class SupabaseMatchmakingRepository(private val client: SupabaseClient) : MatchmakingRepository {
@@ -111,6 +104,7 @@ internal class SupabaseMatchmakingRepository(private val client: SupabaseClient)
                     "WHITE" -> AssignedDisc.WHITE
                     else -> error("invalid assigned disc")
                 },
+                opponentRating = row.opponentRating,
             ),
         )
     }
@@ -127,6 +121,7 @@ internal class SupabaseMatchmakingRepository(private val client: SupabaseClient)
                     "WHITE" -> AssignedDisc.WHITE
                     else -> error("invalid assigned disc")
                 },
+                row.opponentRating,
             )
         }
     override suspend fun reconcileCallerActiveMatch(): Boolean =
@@ -211,9 +206,7 @@ internal class SupabaseOnlineMatchRepository(private val client: SupabaseClient)
 }
 
 internal class SupabaseAuthGateway(private val client: SupabaseClient) : AuthGateway {
-    override suspend fun currentSession(): UserSession? = client.auth.currentUserOrNull()?.let {
-        UserSession(it.id, it.email ?: it.id)
-    }
+    override suspend fun currentSession(): UserSession? = client.auth.currentUserOrNull()?.let { UserSession(it.id) }
 
     override suspend fun signIn(email: String, password: String): UserSession {
         require(email.isNotBlank()) { "email is required" }
@@ -243,67 +236,11 @@ internal class SupabaseAuthGateway(private val client: SupabaseClient) : AuthGat
 }
 
 @Serializable
-private data class ProfileRow(
-    val id: String,
-    @SerialName("display_name") val displayName: String,
-)
-
-@Serializable
 private data class RatingRow(
     @SerialName("user_id") val userId: String,
     @SerialName("current_rating") val currentRating: Int,
     @SerialName("peak_rating") val peakRating: Int,
 )
-
-@Serializable
-private data class DisplayNameUpdate(@SerialName("display_name") val displayName: String)
-
-@Serializable
-private data class ProfileProjectionRow(
-    val id: String,
-    @SerialName("display_name") val displayName: String,
-    @SerialName("current_rating") val currentRating: Int,
-    @SerialName("peak_rating") val peakRating: Int,
-    @SerialName("stable_rating_band") val stableRatingBand: String,
-    @SerialName("federation_grade") val federationGrade: String? = null,
-    @SerialName("federation_verification_status") val federationVerificationStatus: String? = null,
-)
-
-@Serializable
-private data class CredentialInsert(
-    @SerialName("user_id") val userId: String,
-    val organization: String,
-    @SerialName("credential_type") val credentialType: String,
-    val value: String,
-    val status: String = "SELF_DECLARED",
-)
-
-@Serializable
-private data class SubmitVerificationParams(
-    @SerialName("p_credential_id") val credentialId: String,
-    @SerialName("p_evidence_path") val evidencePath: String,
-)
-
-internal class SupabaseProfileRepository(private val client: SupabaseClient) : ProfileRepository {
-    override suspend fun get(userId: String): Profile {
-        val row = client.from("public_profiles").select { filter { eq("id", userId) } }.decodeSingle<ProfileProjectionRow>()
-        return Profile(
-            row.id,
-            row.displayName,
-            row.currentRating,
-            row.peakRating,
-            row.stableRatingBand,
-            row.federationGrade,
-            row.federationVerificationStatus == "VERIFIED",
-            row.federationVerificationStatus,
-        )
-    }
-
-    override suspend fun updateDisplayName(userId: String, displayName: String): Profile {
-        client.from("profiles").update(DisplayNameUpdate(displayName)) { filter { eq("id", userId) } }
-        return get(userId)
-    }
-}
 
 internal class SupabaseGameRecordRepository(private val client: SupabaseClient) : GameRecordRepository {
     override suspend fun recent(userId: String, limit: Int): List<GameRecord> = client.from("game_records")
@@ -335,53 +272,6 @@ private data class GameRecordRow(
         Instant.parse(startedAt).toEpochMilli(), Instant.parse(finishedAt).toEpochMilli(), timeControl,
         FinishReason.valueOf(finishReason), finalPositionHash,
     )
-}
-
-internal class SupabaseCredentialRepository(
-    private val client: SupabaseClient,
-    private val userId: String,
-) : CredentialRepository {
-    @Serializable
-    data class CredentialRow(
-        val id: String,
-        val organization: String,
-        @SerialName("credential_type") val credentialType: String,
-        val value: String,
-        val status: String,
-        @SerialName("verified_at") val verifiedAt: String? = null,
-    ) {
-        fun toDomain() = FederationCredential(organization, credentialType, value, CredentialStatus.valueOf(status), verifiedAt?.let { Instant.parse(it).toEpochMilli() }, id)
-    }
-
-    override suspend fun current(): FederationCredential? = client.from("federation_credentials")
-        .select { filter { eq("user_id", userId) }; limit(1) }
-        .decodeList<CredentialRow>()
-        .firstOrNull()
-        ?.toDomain()
-
-    override suspend fun selfDeclare(value: String): FederationCredential {
-        return client.from("federation_credentials").insert(CredentialInsert(userId, "日本オセロ連盟", "SELF_DECLARED", value)) { select() }
-            .decodeSingle<CredentialRow>().toDomain()
-    }
-
-    override suspend fun uploadEvidence(fileName: String, mimeType: String, bytes: ByteArray): String {
-        require(bytes.size <= 5 * 1024 * 1024) { "verification evidence must be at most 5 MB" }
-        require(mimeType in setOf("image/jpeg", "image/png", "image/webp")) { "verification evidence MIME type is not allowed" }
-        require(fileName.substringAfterLast('/').isNotBlank() && '/' !in fileName.substringAfterLast('/'))
-        val path = "$userId/${fileName.substringAfterLast('/')}"
-        client.storage.from("verification").upload(path, bytes) {
-            upsert = false
-            contentType = ContentType.parse(mimeType)
-        }
-        return path
-    }
-
-    override suspend fun submitVerification(credential: FederationCredential, evidencePath: String): FederationCredential {
-        require(evidencePath.startsWith("$userId/")) { "evidence object ownership required" }
-        val id = requireNotNull(credential.id) { "credential id is required" }
-        client.postgrest.rpc("submit_verification_submission", SubmitVerificationParams(id, evidencePath))
-        return credential.copy(status = CredentialStatus.PENDING)
-    }
 }
 
 internal class SupabaseAccountDeletionRepository(private val client: SupabaseClient) : AccountDeletionRepository {
@@ -663,17 +553,13 @@ class SupabaseComponent private constructor(
     val authGateway: AuthGateway,
     val matchmakingRepository: MatchmakingRepository,
     val onlineMatchRepository: OnlineMatchRepository,
-    val profileRepository: ProfileRepository,
     val accountDeletionRepository: AccountDeletionRepository,
     val gameRecordRepository: GameRecordRepository,
     val researchParticipationRepository: ResearchParticipationRepository,
     val researchPositionRepository: ResearchPositionRepository,
     val signalingDataSource: SupabaseSignalingDataSource,
-    private val client: SupabaseClient,
     private val scope: CoroutineScope,
 ) : AutoCloseable {
-    fun credentialRepository(userId: String): CredentialRepository = SupabaseCredentialRepository(client, userId)
-
     override fun close() {
         signalingDataSource.close()
         scope.cancel()
@@ -684,13 +570,11 @@ class SupabaseComponent private constructor(
             authGateway = SupabaseAuthGateway(client),
             matchmakingRepository = SupabaseMatchmakingRepository(client),
             onlineMatchRepository = SupabaseOnlineMatchRepository(client),
-            profileRepository = SupabaseProfileRepository(client),
             accountDeletionRepository = SupabaseAccountDeletionRepository(client),
             gameRecordRepository = SupabaseGameRecordRepository(client),
             researchParticipationRepository = SupabaseResearchParticipationRepository(client),
             researchPositionRepository = SupabaseResearchPositionRepository(client),
             signalingDataSource = SupabaseRealtimeSignalingDataSource(client, scope),
-            client = client,
             scope = scope,
         )
     }

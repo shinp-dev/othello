@@ -1,6 +1,6 @@
 package com.example.othello.auth
 
-data class UserSession(val userId: String, val displayName: String)
+data class UserSession(val userId: String)
 
 sealed interface SignUpResult {
     data class SignedIn(val session: UserSession) : SignUpResult

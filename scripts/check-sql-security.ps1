@@ -30,7 +30,7 @@ $requiredPatterns = @(
     'matches_created_lease_idx',
     'matches_retention_idx',
     'insert into storage.buckets',
-    'verification objects owner insert',
+    'drop policy if exists "verification objects owner insert" on storage.objects',
     'grant select on table public\.verification_submissions to service_role',
     'file_size_limit',
     'allowed_mime_types',
@@ -47,7 +47,14 @@ $requiredPatterns = @(
     'cleanup_terminal_matches',
     'alter default privileges in schema public revoke execute on functions from public',
     'revoke all on table[\s\S]*public\.match_signaling[\s\S]*from public, anon, authenticated',
-    'grant update \(display_name\) on table public\.profiles to authenticated',
+    'revoke all on table public\.profiles from public, anon, authenticated',
+    'revoke all on table public\.public_profiles from public, anon, authenticated',
+    'revoke all on table public\.federation_credentials from public, anon, authenticated',
+    'revoke all on table public\.verification_submissions from public, anon, authenticated',
+    'revoke execute on function public\.submit_verification_submission\(uuid, text\) from public, anon, authenticated',
+    'black_rating_at_start integer',
+    'white_rating_at_start integer',
+    'opponent_rating integer',
     'grant insert on table public\.match_signaling to authenticated',
     'grant usage, select on sequence public\.match_signaling_id_seq to authenticated',
     'delete from public\.match_notifications n[\s\S]*n\.match_id = row_value\.id',
@@ -103,7 +110,7 @@ $requiredPatterns = @(
     'create or replace function research_private\.batch_claim_aggregation',
     'create or replace function research_private\.batch_checkpoint_aggregation',
     'grant execute on function research_private\.batch_claim_validation\(integer, integer\)[\s\S]*to research_batch',
-    "coalesce\(nullif\(btrim\(new\.raw_user_meta_data ->> 'display_name'\), ''\), 'プレイヤー'\)"
+    "values \(new\.id, '非公開'\)"
 )
 $missing = $requiredPatterns | Where-Object { $sql -notmatch $_ }
 if ($missing) { $missing | ForEach-Object { Write-Error "Missing SQL security contract: $_" }; exit 1 }

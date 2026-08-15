@@ -1,6 +1,6 @@
 -- Run with `supabase test db` against local Supabase/Postgres + pgTAP.
 begin;
-select plan(277);
+select plan(287);
 
 select ok(not has_function_privilege('anon', 'public.prune_user_game_records(uuid)', 'execute'), 'anon cannot execute prune_user_game_records');
 select ok(not has_function_privilege('authenticated', 'public.prune_user_game_records(uuid)', 'execute'), 'authenticated cannot execute prune_user_game_records');
@@ -26,29 +26,40 @@ select ok(not exists (
 select ok(exists (select 1 from storage.buckets where id = 'verification' and public = false), 'verification bucket is private and migration-managed');
 select ok((select file_size_limit from storage.buckets where id = 'verification') = 5242880, 'verification bucket limits objects to 5 MiB');
 select ok((select allowed_mime_types from storage.buckets where id = 'verification') = array['image/jpeg', 'image/png', 'image/webp']::text[], 'verification bucket allows only image MIME types');
-select ok(exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'verification objects owner insert' and 'authenticated' = any(roles)), 'verification upload policy is authenticated-only');
-select ok(exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'verification objects owner read' and 'authenticated' = any(roles)), 'verification read policy is owner-scoped, not public');
+select ok(not exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'verification objects owner insert'), 'initial release has no client verification upload policy');
+select ok(not exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'verification objects owner read'), 'initial release has no client verification read policy');
 select ok(
   has_table_privilege('service_role', 'public.verification_submissions', 'SELECT'),
   'trusted verification admin can read pending submissions'
 );
-select ok(has_table_privilege('authenticated', 'public.profiles', 'select'), 'authenticated can read RLS-scoped profiles');
-select ok(has_column_privilege('authenticated', 'public.profiles', 'display_name', 'update'), 'authenticated can update only the profile display name column');
+select ok(not has_table_privilege('authenticated', 'public.profiles', 'select'), 'authenticated cannot read legacy private profile rows');
+select ok(not has_column_privilege('authenticated', 'public.profiles', 'display_name', 'update'), 'authenticated cannot update the legacy display name column');
 select ok(not has_table_privilege('authenticated', 'public.profiles', 'update'), 'authenticated has no table-wide profile update privilege');
+select ok(not has_table_privilege('authenticated', 'public.profiles', 'insert'), 'authenticated cannot create profile rows');
+select ok(not has_table_privilege('authenticated', 'public.profiles', 'delete'), 'authenticated cannot delete profile rows');
 select ok(has_table_privilege('authenticated', 'public.ratings', 'select'), 'authenticated can read RLS-scoped ratings');
 select ok(not has_table_privilege('authenticated', 'public.ratings', 'update'), 'authenticated cannot update ratings');
 select ok(has_table_privilege('authenticated', 'public.rating_history', 'select'), 'authenticated can read RLS-scoped rating history');
 select ok(has_table_privilege('authenticated', 'public.game_records', 'select'), 'authenticated can read RLS-scoped game records');
-select ok(has_table_privilege('authenticated', 'public.federation_credentials', 'select'), 'authenticated can read own credentials');
-select ok(has_table_privilege('authenticated', 'public.federation_credentials', 'insert'), 'authenticated can self-declare credentials');
+select ok(not has_table_privilege('authenticated', 'public.federation_credentials', 'select'), 'initial release cannot read federation credentials');
+select ok(not has_table_privilege('authenticated', 'public.federation_credentials', 'insert'), 'initial release cannot self-declare federation credentials');
+select ok(not has_function_privilege('authenticated', 'public.submit_verification_submission(uuid,text)', 'execute'), 'initial release cannot submit federation verification evidence');
+select ok(not has_function_privilege('anon', 'public.submit_verification_submission(uuid,text)', 'execute'), 'anonymous callers cannot submit federation verification evidence');
 select ok(has_table_privilege('authenticated', 'public.match_signaling', 'select'), 'authenticated participants can read signaling');
 select ok(has_table_privilege('authenticated', 'public.match_signaling', 'insert'), 'authenticated participants can publish signaling');
 select ok(not has_table_privilege('authenticated', 'public.match_signaling', 'update'), 'authenticated cannot rewrite signaling');
 select ok(not has_table_privilege('authenticated', 'public.match_signaling', 'delete'), 'authenticated cannot delete signaling');
 select ok(has_table_privilege('authenticated', 'public.match_notifications', 'select'), 'authenticated can receive own match notifications');
 select ok(has_sequence_privilege('authenticated', 'public.match_signaling_id_seq', 'usage'), 'authenticated can allocate signaling identity values');
-select ok(has_table_privilege('anon', 'public.public_profiles', 'select'), 'anon can read the sanitized public profile view');
+select ok(not has_table_privilege('anon', 'public.public_profiles', 'select'), 'anon cannot read the retired public profile view');
+select ok(not has_table_privilege('authenticated', 'public.public_profiles', 'select'), 'authenticated cannot read the retired public profile view');
 select ok(not has_table_privilege('anon', 'public.profiles', 'select'), 'anon cannot read the base profile table');
+select ok(exists (
+  select 1 from information_schema.columns
+   where table_schema = 'public' and table_name = 'matches'
+     and column_name in ('black_rating_at_start', 'white_rating_at_start')
+  having count(*) = 2
+), 'matches store both server-owned rating snapshots');
 select ok(not has_table_privilege('authenticated', 'public.active_match_participants', 'select'), 'active reservations remain RPC-only');
 select ok(to_regprocedure('public.ack_match_started(uuid)') is not null, 'start ack RPC exists');
 select ok(to_regprocedure('public.get_match_start_state(uuid)') is not null, 'participant start state RPC exists');
@@ -236,7 +247,8 @@ values
  ('00000000-0000-0000-0000-000000000008', 'authenticated', 'authenticated', 'research-black@example.test', '', now(), '{}', '{"display_name":"research-black"}'),
  ('00000000-0000-0000-0000-000000000009', 'authenticated', 'authenticated', 'research-white@example.test', '', now(), '{}', '{"display_name":"research-white"}')
 on conflict (id) do nothing;
-select is((select display_name from public.profiles where id = '00000000-0000-0000-0000-000000000007'), 'プレイヤー', 'default public display name never derives from email');
+select is((select display_name from public.profiles where id = '00000000-0000-0000-0000-000000000007'), '非公開', 'new profile bootstrap uses an internal non-public marker');
+select is((select display_name from public.profiles where id = '00000000-0000-0000-0000-000000000001'), '非公開', 'Auth display_name metadata is never copied into the profile row');
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000007', false);
 select set_config('request.jwt.claim.role', 'authenticated', false);
@@ -803,16 +815,25 @@ select ok((select not eligible and not can_view_research_data and reconsent_requ
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
 select set_config('request.jwt.claim.role', 'authenticated', false);
+update public.ratings set current_rating = 1490 where user_id = '00000000-0000-0000-0000-000000000001';
+update public.ratings set current_rating = 1520 where user_id = '00000000-0000-0000-0000-000000000002';
 select is((select matched from public.enqueue_or_match()), false, 'first user enters the queue');
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', false);
-select is((select matched from public.enqueue_or_match()), true, 'second user creates a match');
+create temporary table immediate_match_result on commit drop as select * from public.enqueue_or_match();
+select is((select matched from immediate_match_result), true, 'second user creates a match');
+select is((select opponent_rating from immediate_match_result), 1490, 'immediate matcher receives only the opponent rating snapshot');
+select ok((select black_rating_at_start in (1490, 1520) and white_rating_at_start in (1490, 1520)
+  and black_rating_at_start <> white_rating_at_start from public.matches
+  where id = (select match_id from immediate_match_result)), 'created match stores both participant rating snapshots');
 select is((select count(*)::int from public.active_match_participants), 2, 'both players receive one active reservation');
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
+create temporary table claimed_match_result on commit drop as select * from public.claim_waiting_match();
 select is(
-  (select match_id::text from public.claim_waiting_match()),
+  (select match_id::text from claimed_match_result),
   (select id::text from public.matches where '00000000-0000-0000-0000-000000000001'::uuid in (black_player, white_player) limit 1),
   'waiting participant can claim the created match'
 );
+select is((select opponent_rating from claimed_match_result), 1520, 'waiting participant receives the same match-start opponent rating snapshot');
 select is(
   (select count(*)::int from public.match_notifications where user_id = '00000000-0000-0000-0000-000000000001'),
   0,

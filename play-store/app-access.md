@@ -14,13 +14,12 @@
 
 - オンライン対局・matchmaking・rating
 - Supabase上のGameRecord / online records
-- 公開プロフィール、資格申請
 - Research参加設定・研究データ表示
 - アカウント削除リクエスト
 
 ## Reviewer instructions draft
 
-`ちゃんりば`を起動すると、ログインなしでホーム、ふたり対局、AI対局を確認できます。オンライン対局、クラウド棋譜、Research、プロフィール、アカウント削除を確認するには、審査用のログインアカウントが必要です。Play ConsoleのApp access欄へ、OWNERが実際に利用できるreviewer accountのメールアドレスと一時パスワード、ログイン手順、必要なら確認メールの扱いを入力してください。
+`ちゃんりば`を起動すると、ログインなしでホーム、ふたり対局、AI対局を確認できます。オンライン対局、クラウド棋譜、Research、アカウント削除を確認するには、審査用のログインアカウントが必要です。公開プロフィール、ニックネーム、連盟段級位入力は初回公開版にありません。Play ConsoleのApp access欄へ、OWNERが実際に利用できるreviewer accountのメールアドレスと一時パスワード、ログイン手順、必要なら確認メールの扱いを入力してください。
 
 審査用credentialをGit、README、Play listing、公開LPには保存しません。MFA/OTPはアプリコード上の実装を確認できませんが、Supabase Authのprovider設定でEmail confirmation等が有効だと審査の障害になるため、OWNERがテスト前に確認します。
 

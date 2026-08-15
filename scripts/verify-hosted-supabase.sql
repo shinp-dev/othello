@@ -100,12 +100,30 @@ select jsonb_build_object(
     and not has_table_privilege('authenticated', 'research_private.game_contributors', 'SELECT')
     and not has_table_privilege('authenticated', 'research_private.subject_position_totals', 'SELECT')
     and not has_table_privilege('authenticated', 'research_private.move_aggregates', 'SELECT'),
-  'profiles_select', has_table_privilege('authenticated', 'public.profiles', 'SELECT'),
-  'profile_name_update', has_column_privilege('authenticated', 'public.profiles', 'display_name', 'UPDATE'),
+  'profiles_private',
+    not has_table_privilege('anon', 'public.profiles', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.profiles', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.profiles', 'INSERT')
+    and not has_table_privilege('authenticated', 'public.profiles', 'UPDATE')
+    and not has_table_privilege('authenticated', 'public.profiles', 'DELETE'),
+  'public_profiles_retired',
+    not has_table_privilege('anon', 'public.public_profiles', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.public_profiles', 'SELECT'),
+  'match_rating_snapshots', exists (
+    select 1
+      from information_schema.columns
+     where table_schema = 'public'
+       and table_name = 'matches'
+       and column_name in ('black_rating_at_start', 'white_rating_at_start')
+    having count(*) = 2
+  ),
   'ratings_select', has_table_privilege('authenticated', 'public.ratings', 'SELECT'),
   'history_select', has_table_privilege('authenticated', 'public.rating_history', 'SELECT'),
   'records_select', has_table_privilege('authenticated', 'public.game_records', 'SELECT'),
-  'credentials_insert', has_table_privilege('authenticated', 'public.federation_credentials', 'INSERT'),
+  'credentials_closed',
+    not has_table_privilege('authenticated', 'public.federation_credentials', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.federation_credentials', 'INSERT')
+    and not has_function_privilege('authenticated', 'public.submit_verification_submission(uuid,text)', 'EXECUTE'),
   'signaling_select', has_table_privilege('authenticated', 'public.match_signaling', 'SELECT'),
   'signaling_insert', has_table_privilege('authenticated', 'public.match_signaling', 'INSERT'),
   'signaling_sequence', has_sequence_privilege('authenticated', 'public.match_signaling_id_seq', 'USAGE')

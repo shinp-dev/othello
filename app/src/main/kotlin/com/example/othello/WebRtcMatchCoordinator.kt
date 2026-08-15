@@ -32,6 +32,7 @@ class WebRtcMatchCoordinator(
     debugTimeControlMillis: Long? = null,
 ) : AutoCloseable {
     val matchId: String get() = assignment.matchId
+    val opponentRating: Int? get() = assignment.opponentRating
     private val sessionJob = SupervisorJob(scope.coroutineContext[Job])
     private val sessionScope = CoroutineScope(scope.coroutineContext + sessionJob)
     private val transport = AndroidWebRtcTransportFactory(context.applicationContext)

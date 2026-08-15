@@ -49,7 +49,7 @@
 
 | Table | 現行の事実 | 研究機能での扱い |
 | --- | --- | --- |
-| `profiles` | Auth作成時にtriggerで作成。表示名を持つ。account deletion後も表示上のtombstoneとして残る | research contributorのFK先には使わない。account削除後の研究retentionをprofile tombstoneへ依存させない |
+| `profiles` | Auth作成時にtriggerで作成する内部互換row。legacy `display_name`列はクライアント非公開・更新不可。account deletion後も共有棋譜整合性のtombstoneとして残る | research contributorのFK先には使わない。account削除後の研究retentionをprofile tombstoneへ依存させない |
 | `ratings` | 現在rating・peakを保持。Androidは更新不能 | 研究では現在値を使わず、対局確定時のrating beforeをsnapshotする |
 | `rating_history` | 1 user / matchでunique。確定時に2行追加。ユーザーごと最新100件へprune | 長期研究の再集計元にはできない。確定時に `rating - delta` を研究側へcopyする |
 | `matches` | server statusは `CREATED/PENDING_RESULT/CONFIRMED/DISPUTED/ABANDONED`。participantのみSELECT | `CONFIRMED` 遷移だけを研究captureの起点とする |
@@ -93,7 +93,7 @@
 - Androidへservice-role keyを置かない。
 - authenticated roleには必要最小限のtable権限だけを付与し、RLSを併用する。
 - internal cleanup/prune RPCはauthenticated/PUBLICから実行不能である。
-- `public_profiles` は表示名、rating、検証済み段級位等を返す個人単位の公開projectionである。
+- legacy `public_profiles` viewは初回公開版では`anon`・`authenticated`の両方から権限を撤回し、公開プロフィールとして利用しない。
 
 研究APIは `public_profiles` とjoinしてはならない。研究responseには `user_id`、表示名、opponent、match ID、個別棋譜へのlinkを含めない。
 
@@ -612,7 +612,7 @@ research source、subject、contributionは「研究機能の提供・再集計�
 
 ### Viewを使わない理由
 
-Supabase/Postgresの通常viewはcreator権限で動作する場合があり、現行の `public_profiles` のような明示公開projectionには使えるが、研究ではcaller eligibilityとdynamic thresholdが必要である。client-facing surfaceはtable/view SELECTではなく、narrow RPCへ限定する。
+Supabase/Postgresの通常viewはcreator権限で動作する場合がある。legacy `public_profiles`は初回公開版でクライアント権限を撤回しており、研究でもcaller eligibilityとdynamic thresholdが必要なため利用しない。client-facing surfaceはtable/view SELECTではなく、narrow RPCへ限定する。
 
 ## 11. Abuse / privacy threat model
 

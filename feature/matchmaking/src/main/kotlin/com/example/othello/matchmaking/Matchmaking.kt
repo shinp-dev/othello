@@ -6,7 +6,12 @@ data class MatchAssignment(
     val matchId: String,
     val opponentId: String,
     val assignedDisc: AssignedDisc,
-)
+    val opponentRating: Int? = null,
+) {
+    init {
+        require(opponentRating == null || opponentRating > 0)
+    }
+}
 
 sealed interface EnqueueResult {
     data object Waiting : EnqueueResult
