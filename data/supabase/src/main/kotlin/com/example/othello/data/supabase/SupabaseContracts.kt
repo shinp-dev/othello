@@ -94,7 +94,27 @@ private data class ClaimRow(
     @SerialName("opponent_rating") val opponentRating: Int? = null,
 )
 
-internal class SupabaseMatchmakingRepository(private val client: SupabaseClient) : MatchmakingRepository {
+@Serializable
+private data class MatchNotificationRow(
+    @SerialName("user_id") val userId: String,
+    @SerialName("match_id") val matchId: String,
+)
+
+internal class MatchNotificationTracker {
+    private var observedMatchIds = emptySet<String>()
+
+    fun observe(matchIds: Set<String>): Boolean {
+        val hasUnseenMatch = (matchIds - observedMatchIds).isNotEmpty()
+        observedMatchIds = matchIds
+        return hasUnseenMatch
+    }
+}
+
+@OptIn(SupabaseExperimental::class)
+internal class SupabaseMatchmakingRepository(
+    private val client: SupabaseClient,
+    private val scope: CoroutineScope,
+) : MatchmakingRepository {
     override suspend fun enqueueOrMatch(): EnqueueResult {
         val row = client.postgrest.rpc("enqueue_or_match").decodeList<EnqueueRow>().single()
         return if (!row.matched) EnqueueResult.Waiting else EnqueueResult.Matched(
@@ -126,6 +146,34 @@ internal class SupabaseMatchmakingRepository(private val client: SupabaseClient)
                 row.opponentRating,
             )
         }
+    override fun subscribeToMatchNotifications(
+        onMatchAvailable: () -> Unit,
+        onError: (Throwable) -> Unit,
+    ): AutoCloseable {
+        val job = scope.launch {
+            val userId = client.auth.currentUserOrNull()?.id
+            if (userId == null) {
+                onError(IllegalStateException("authenticated session required for match notifications"))
+                return@launch
+            }
+            val notificationTracker = MatchNotificationTracker()
+            client.from("match_notifications").selectAsFlow(
+                MatchNotificationRow::matchId,
+                channelName = "match-notifications:$userId",
+                filter = FilterOperation("user_id", FilterOperator.EQ, userId),
+            ).retryWhen { _, attempt ->
+                if (attempt >= 2) false else {
+                    kotlinx.coroutines.delay(500L * (attempt + 1))
+                    true
+                }
+            }.catch { onError(it) }
+                .collect { rows ->
+                    val matchIds = rows.mapTo(mutableSetOf(), MatchNotificationRow::matchId)
+                    if (notificationTracker.observe(matchIds)) onMatchAvailable()
+                }
+        }
+        return AutoCloseable { job.cancel() }
+    }
     override suspend fun reconcileCallerActiveMatch(): Boolean =
         client.postgrest.rpc("reconcile_expired_active_match_for_user").decodeAs<Int>() > 0
 }
@@ -570,7 +618,7 @@ class SupabaseComponent private constructor(
     internal companion object {
         fun create(client: SupabaseClient, scope: CoroutineScope): SupabaseComponent = SupabaseComponent(
             authGateway = SupabaseAuthGateway(client),
-            matchmakingRepository = SupabaseMatchmakingRepository(client),
+            matchmakingRepository = SupabaseMatchmakingRepository(client, scope),
             onlineMatchRepository = SupabaseOnlineMatchRepository(client),
             accountDeletionRepository = SupabaseAccountDeletionRepository(client),
             gameRecordRepository = SupabaseGameRecordRepository(client),

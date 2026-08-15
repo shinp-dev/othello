@@ -1,5 +1,8 @@
 package com.example.othello.matchmaking
 
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+
 enum class AssignedDisc { BLACK, WHITE }
 
 data class MatchAssignment(
@@ -25,6 +28,10 @@ interface MatchmakingRepository {
     suspend fun heartbeatWaiting(): Boolean
     suspend fun claimMatchedAssignment(): MatchAssignment? = null
     suspend fun reconcileCallerActiveMatch(): Boolean = false
+    fun subscribeToMatchNotifications(
+        onMatchAvailable: () -> Unit,
+        onError: (Throwable) -> Unit = {},
+    ): AutoCloseable = AutoCloseable {}
 }
 
 enum class MatchmakingStatus { IDLE, WAITING, SIGNALING, P2P_CONNECTED, PLAYING, FINISHING, CONFIRMED, DISCONNECTED, FAILED }
@@ -40,6 +47,7 @@ class MatchmakingController(private val repository: MatchmakingRepository) {
     var state: MatchmakingViewState = MatchmakingViewState()
         private set
     private val listeners = mutableSetOf<(MatchmakingViewState) -> Unit>()
+    private val operationMutex = Mutex()
 
     fun observe(listener: (MatchmakingViewState) -> Unit): AutoCloseable {
         listeners += listener
@@ -47,19 +55,27 @@ class MatchmakingController(private val repository: MatchmakingRepository) {
         return AutoCloseable { listeners -= listener }
     }
 
-    suspend fun enqueue() {
+    suspend fun enqueue() = operationMutex.withLock {
         state = MatchmakingViewState(MatchmakingStatus.WAITING)
         publishState()
         runCatching { repository.enqueueOrMatch() }.onSuccess { result ->
-            state = when (result) {
-                EnqueueResult.Waiting -> MatchmakingViewState(MatchmakingStatus.WAITING)
-                is EnqueueResult.Matched -> MatchmakingViewState(MatchmakingStatus.SIGNALING, result.assignment)
+            if (state.status == MatchmakingStatus.WAITING) {
+                state = when (result) {
+                    EnqueueResult.Waiting -> MatchmakingViewState(MatchmakingStatus.WAITING)
+                    is EnqueueResult.Matched -> MatchmakingViewState(MatchmakingStatus.SIGNALING, result.assignment)
+                }
+                publishState()
             }
-            publishState()
-        }.onFailure { state = MatchmakingViewState(MatchmakingStatus.FAILED, error = it.message); publishState() }
+        }.onFailure {
+            if (state.status == MatchmakingStatus.WAITING) {
+                state = MatchmakingViewState(MatchmakingStatus.FAILED, error = it.message)
+                publishState()
+            }
+        }
     }
 
-    suspend fun cancel() {
+    suspend fun cancel() = operationMutex.withLock {
+        if (state.status != MatchmakingStatus.WAITING) return@withLock
         runCatching {
             val cancelled = repository.cancelWaiting()
             if (cancelled) null else repository.claimMatchedAssignment()
@@ -71,7 +87,8 @@ class MatchmakingController(private val repository: MatchmakingRepository) {
             .onFailure { state = state.copy(status = MatchmakingStatus.FAILED, error = it.message); publishState() }
     }
 
-    suspend fun heartbeat() {
+    suspend fun heartbeat() = operationMutex.withLock {
+        if (state.status != MatchmakingStatus.WAITING) return@withLock
         runCatching {
             val queueAlive = repository.heartbeatWaiting()
             val assignment = repository.claimMatchedAssignment()
@@ -86,8 +103,33 @@ class MatchmakingController(private val repository: MatchmakingRepository) {
                     publishState()
                 }
             }
-        }.onFailure { state = state.copy(status = MatchmakingStatus.FAILED, error = it.message); publishState() }
+        }.onFailure {
+            if (state.status == MatchmakingStatus.WAITING) {
+                state = state.copy(status = MatchmakingStatus.FAILED, error = it.message)
+                publishState()
+            }
+        }
     }
+
+    suspend fun claimNotifiedMatch() = operationMutex.withLock {
+        if (state.status != MatchmakingStatus.WAITING) return@withLock
+        runCatching { repository.claimMatchedAssignment() }
+            .onSuccess { assignment ->
+                if (assignment != null && state.status == MatchmakingStatus.WAITING) {
+                    state = MatchmakingViewState(MatchmakingStatus.SIGNALING, assignment)
+                    publishState()
+                }
+            }
+            .onFailure {
+                // The heartbeat loop remains the fallback if Realtime delivery or
+                // the immediate claim races with another queue operation.
+            }
+    }
+
+    fun subscribeToMatchNotifications(
+        onMatchAvailable: () -> Unit,
+        onError: (Throwable) -> Unit = {},
+    ): AutoCloseable = repository.subscribeToMatchNotifications(onMatchAvailable, onError)
 
     fun reset() {
         state = MatchmakingViewState()

@@ -39,11 +39,12 @@ class MatchmakingControllerTest {
 
     @Test
     fun heartbeatClaimsMatchThatRacedWithQueueDeletion() = runBlocking {
-        val repository = FakeMatchmakingRepository().apply {
-            heartbeatResult = false
-            claimResult = assignment
-        }
+        val repository = FakeMatchmakingRepository()
         val controller = MatchmakingController(repository)
+        controller.enqueue()
+        repository.enqueueCalls = 0
+        repository.heartbeatResult = false
+        repository.claimResult = assignment
 
         controller.heartbeat()
 
@@ -59,6 +60,48 @@ class MatchmakingControllerTest {
             claimResult = assignment
         }
         val controller = MatchmakingController(repository)
+        controller.enqueue()
+
+        controller.cancel()
+
+        assertEquals(MatchmakingStatus.SIGNALING, controller.state.status)
+        assertEquals(assignment, controller.state.assignment)
+    }
+
+    @Test
+    fun realtimeNotificationClaimsWaitingMatchImmediately() = runBlocking {
+        val repository = FakeMatchmakingRepository().apply { claimResult = assignment }
+        val controller = MatchmakingController(repository)
+        controller.enqueue()
+
+        controller.claimNotifiedMatch()
+
+        assertEquals(MatchmakingStatus.SIGNALING, controller.state.status)
+        assertEquals(assignment, controller.state.assignment)
+    }
+
+    @Test
+    fun lateNotificationDoesNotReplaceEstablishedAssignment() = runBlocking {
+        val first = assignment
+        val second = MatchAssignment("other-match", "other-opponent", AssignedDisc.WHITE, 1480)
+        val repository = FakeMatchmakingRepository().apply {
+            enqueueResult = EnqueueResult.Matched(first)
+            claimResult = second
+        }
+        val controller = MatchmakingController(repository)
+        controller.enqueue()
+
+        controller.claimNotifiedMatch()
+
+        assertEquals(first, controller.state.assignment)
+    }
+
+    @Test
+    fun lateCancelDoesNotHideRealtimeAssignment() = runBlocking {
+        val repository = FakeMatchmakingRepository().apply { claimResult = assignment }
+        val controller = MatchmakingController(repository)
+        controller.enqueue()
+        controller.claimNotifiedMatch()
 
         controller.cancel()
 

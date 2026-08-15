@@ -128,6 +128,14 @@ private fun OthelloApp(
         val closeable = matchmaking?.observe { matchmakingState = it }
         onDispose { closeable?.close() }
     }
+    DisposableEffect(matchmakingState?.status, matchmaking) {
+        val closeable = if (matchmakingState?.status == MatchmakingStatus.WAITING) {
+            matchmaking?.subscribeToMatchNotifications(
+                onMatchAvailable = { scope.launch { matchmaking.claimNotifiedMatch() } },
+            )
+        } else null
+        onDispose { closeable?.close() }
+    }
     LaunchedEffect(component) {
         runCatching { component?.authGateway?.currentSession() }
             .onSuccess { session = it }
@@ -145,8 +153,8 @@ private fun OthelloApp(
     LaunchedEffect(matchmakingState?.status, matchmakingState?.assignment) {
         if (matchmakingState?.status == MatchmakingStatus.WAITING) {
             while (isActive) {
-                matchmaking?.heartbeat()
                 delay(10_000)
+                matchmaking?.heartbeat()
             }
         }
     }
