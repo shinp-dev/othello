@@ -36,6 +36,16 @@ test("renders privacy policy with the same deletion URL", async () => {
   assert.doesNotMatch(html, /ブラウザ単独の削除リクエスト受付は現在準備中/);
 });
 
+test("renders the email confirmation completion page without an app redirect", async () => {
+  const response = await render("/signup-complete");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /CHANRIVA \/ SIGN-UP/);
+  assert.match(html, /メールアドレスの確認が完了しました/);
+  assert.match(html, /アプリに戻ってログインしてください/);
+  assert.doesNotMatch(html, /intent:|android-app:|market:\/\//i);
+});
+
 test("keeps the deletion API same-origin and fail-closed without its runtime secret", async () => {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("api-test", `${process.pid}-${Date.now()}`);

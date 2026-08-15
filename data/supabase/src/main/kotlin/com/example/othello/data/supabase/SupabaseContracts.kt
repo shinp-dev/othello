@@ -54,6 +54,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.Instant
 
+private const val EMAIL_CONFIRMATION_REDIRECT_URL = "https://chanriva.shinp-studio.com/signup-complete"
+
 data class SupabaseConfig(val url: String, val anonKey: String) {
     fun validate(): Result<SupabaseConfig> = if (url.isBlank() || anonKey.isBlank()) {
         Result.failure(SupabaseConfigurationException("Supabase URL/anon key is not configured. Set supabase.url and supabase.anonKey in local.properties."))
@@ -221,7 +223,7 @@ internal class SupabaseAuthGateway(private val client: SupabaseClient) : AuthGat
     override suspend fun signUp(email: String, password: String): SignUpResult {
         require(email.isNotBlank()) { "email is required" }
         require(password.length >= 8) { "password must be at least 8 characters" }
-        client.auth.signUpWith(Email) {
+        client.auth.signUpWith(Email, redirectUrl = EMAIL_CONFIRMATION_REDIRECT_URL) {
             this.email = email
             this.password = password
         }
