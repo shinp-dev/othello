@@ -68,7 +68,7 @@ select ok(position('opponent_id uuid' in pg_get_function_result(to_regprocedure(
   'matchmaking returns internal opponent identity and server-owned rating snapshot');
 select ok(position('opponent_rating integer' in pg_get_function_result(to_regprocedure('public.claim_waiting_match()'))) > 0,
   'waiting-match claim returns only the server-owned opponent rating snapshot');
-select ok(position('display_name' in pg_get_functiondef('public.handle_new_user()')) = 0,
+select ok(position('display_name' in pg_get_functiondef(to_regprocedure('public.handle_new_user()'))) = 0,
   'new-user bootstrap does not import or construct a public display name');
 select ok(not exists (
   select 1 from information_schema.columns
