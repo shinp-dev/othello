@@ -63,10 +63,10 @@ select ok(exists (
   having count(*) = 2
 ), 'matches store both server-owned rating snapshots');
 select ok(to_regprocedure('public.enqueue_or_match()') is not null, 'matchmaking exposes the release RPC');
-select ok(position('opponent_id uuid' in pg_get_function_result('public.enqueue_or_match()')) > 0
-  and position('opponent_rating integer' in pg_get_function_result('public.enqueue_or_match()')) > 0,
+select ok(position('opponent_id uuid' in pg_get_function_result(to_regprocedure('public.enqueue_or_match()'))) > 0
+  and position('opponent_rating integer' in pg_get_function_result(to_regprocedure('public.enqueue_or_match()'))) > 0,
   'matchmaking returns internal opponent identity and server-owned rating snapshot');
-select ok(position('opponent_rating integer' in pg_get_function_result('public.claim_waiting_match()')) > 0,
+select ok(position('opponent_rating integer' in pg_get_function_result(to_regprocedure('public.claim_waiting_match()'))) > 0,
   'waiting-match claim returns only the server-owned opponent rating snapshot');
 select ok(position('display_name' in pg_get_functiondef('public.handle_new_user()')) = 0,
   'new-user bootstrap does not import or construct a public display name');
