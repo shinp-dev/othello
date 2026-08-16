@@ -1,6 +1,6 @@
 -- Run with `supabase test db` against local Supabase/Postgres + pgTAP.
 begin;
-select plan(280);
+select plan(285);
 
 select ok(not has_function_privilege('anon', 'public.prune_user_game_records(uuid)', 'execute'), 'anon cannot execute prune_user_game_records');
 select ok(not has_function_privilege('authenticated', 'public.prune_user_game_records(uuid)', 'execute'), 'authenticated cannot execute prune_user_game_records');
@@ -40,7 +40,11 @@ select ok(not has_table_privilege('authenticated', 'public.ratings', 'update'), 
 select ok(has_table_privilege('authenticated', 'public.rating_history', 'select'), 'authenticated can read RLS-scoped rating history');
 select ok(has_table_privilege('authenticated', 'public.game_records', 'select'), 'authenticated can read RLS-scoped game records');
 select ok(to_regprocedure('public.submit_verification_submission(uuid,text)') is null, 'retired verification submission RPC is absent');
-select ok(to_regprocedure('public.review_verification_submission(uuid,public.credential_status)') is null, 'retired verification review RPC is absent');
+select ok(not exists (
+  select 1 from pg_proc
+   where pronamespace = 'public'::regnamespace
+     and proname = 'review_verification_submission'
+), 'retired verification review RPC is absent');
 select ok(to_regprocedure('public.get_account_deletion_evidence(uuid)') is null, 'account deletion has no retired evidence RPC dependency');
 select ok(to_regprocedure('public.mark_verification_evidence_deleted(uuid)') is null, 'retired evidence deletion marker RPC is absent');
 select ok(has_table_privilege('authenticated', 'public.match_signaling', 'select'), 'authenticated participants can read signaling');
@@ -58,6 +62,19 @@ select ok(exists (
      and column_name in ('black_rating_at_start', 'white_rating_at_start')
   having count(*) = 2
 ), 'matches store both server-owned rating snapshots');
+select ok(to_regprocedure('public.enqueue_or_match()') is not null, 'matchmaking exposes the release RPC');
+select ok(position('opponent_id uuid' in pg_get_function_result('public.enqueue_or_match()')) > 0
+  and position('opponent_rating integer' in pg_get_function_result('public.enqueue_or_match()')) > 0,
+  'matchmaking returns internal opponent identity and server-owned rating snapshot');
+select ok(position('opponent_rating integer' in pg_get_function_result('public.claim_waiting_match()')) > 0,
+  'waiting-match claim returns only the server-owned opponent rating snapshot');
+select ok(position('display_name' in pg_get_functiondef('public.handle_new_user()')) = 0,
+  'new-user bootstrap does not import or construct a public display name');
+select ok(not exists (
+  select 1 from information_schema.columns
+   where table_schema = 'public' and table_name in ('matches', 'match_queue')
+     and column_name in ('opponent_name', 'opponent_email', 'opponent_uuid')
+), 'matchmaking schema has no public opponent name, email, or UUID display fields');
 select ok(not has_table_privilege('authenticated', 'public.active_match_participants', 'select'), 'active reservations remain RPC-only');
 select ok(to_regprocedure('public.ack_match_started(uuid)') is not null, 'start ack RPC exists');
 select ok(to_regprocedure('public.get_match_start_state(uuid)') is not null, 'participant start state RPC exists');
