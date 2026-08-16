@@ -12,6 +12,12 @@ Supabase `service_role` key.
 
 Confirm the project ref in the Dashboard URL before every production change.
 
+The production read-only audit on 2026-08-15 observed the active policy with
+`collection_enabled=true`, and a later disposable-account E2E confirmed capture,
+account unlink, retained aggregate/statistical contribution, and no reverse account
+identifier in the Research boundary. Changing the collection flag remains an OWNER
+operation; do not infer production state from the migration default.
+
 ## Migration rollout
 
 Apply migrations in filename order:

@@ -19,7 +19,7 @@ A user can start a local game without Supabase credentials. Network features req
 | `:feature:match` | Match orchestration state machine and P2P move handling | Rating implementation, Edax |
 | `:feature:records` | Immutable game record storage/query port | Edax evaluation values |
 | `:feature:review` | Review session, cursor and variations | Match transport |
-| `:feature:profile` | Account-deletion request boundary | Rating calculations |
+| `:feature:profile` | Account-deletion request and current-rating read boundaries | Rating calculations and official rating writes |
 | `:analysis:api` | `AnalysisEngine`, settings and result contracts | Match implementation |
 | `:analysis:edax` | Android-local Edax 4.6 JNI adapter and user-data storage | Match, Supabase |
 | `:transport:webrtc` | Android WebRTC SDK wiring and ICE configuration boundary | Game Core rules |
@@ -72,8 +72,8 @@ The state machine is a pure reducer. UI observes state; it does not decide trans
 
 ## P2P flow
 
-1. A later queue participant gets a match and creates a non-trickle WebRTC offer.
-2. The offer is delivered to the waiting participant through private Supabase Realtime signaling only.
+1. A later queue participant gets a match. The database stores participant-scoped `match_notifications` rows; the waiting Android client observes its private row through Realtime and immediately calls `claim_waiting_match()`. The heartbeat/claim loop remains a fallback if notification delivery is delayed.
+2. The matched participant creates a non-trickle WebRTC offer and delivers it through participant-only `match_signaling` Realtime rows.
 3. The answer is returned and DataChannel opens. Each participant writes one start ACK; the client enters `PLAYING` only after the server reports both ACKs, then removes the signaling subscription.
 4. Each move is sent only on DataChannel. Every move command contains `matchId`, `ply`, `move`, `commandId`, and `previousStateHash`. Resignation/timeout/disconnect use a separate terminal DataChannel control message so both peers submit the same result; it cannot carry a move.
 5. Receiver validates the server-assigned remote disc, command fingerprint, idempotency, ply, legality and hash. A reused command id with a different payload is a protocol error.
@@ -100,7 +100,7 @@ Android can only create an owner-scoped deletion request. The trusted Worker cal
 ## Security and forbidden dependencies
 
 - No moves or clocks are written to Supabase during a game.
-- Realtime Postgres Changes is signaling-only, protected by `match_signaling` RLS, and is unsubscribed after both start ACKs.
+- Realtime Postgres Changes is used only for participant-scoped match-availability notification (`match_notifications`) and SDP signaling (`match_signaling`). Match notification observation ends after assignment; signaling observation ends after both start ACKs. Moves, clocks, board state, results, and rating never use Realtime.
 - No service-role key is shipped to Android or browser.
 - Android cannot update rating, peak, or official result directly.
 - Match cannot reference Edax; review alone can reference `AnalysisEngine`.
@@ -116,4 +116,6 @@ Android can only create an owner-scoped deletion request. The trusted Worker cal
 ## Change log
 
 - 2026-08-09: Initial module boundaries and pure Game Core were established.
-- 2026-08-10: Online beta, bounded records, WebRTC/start ACK/clock/finalization, credential administration, account deletion, and Edax post-game analysis were completed without crossing the Match/Analysis boundary.
+- 2026-08-10: Online beta, bounded records, WebRTC/start ACK/clock/finalization, account deletion, and Edax post-game analysis were completed without crossing the Match/Analysis boundary. The pre-release federation credential prototype was subsequently removed from the initial product.
+- 2026-08-15: Public profiles and free-text display names were retired. Match-start opponent rating snapshots and private profile tombstones became the initial-release identity boundary.
+- 2026-08-16: Waiting-match detection began using private Realtime notifications with heartbeat polling as fallback; the home screen began reading the signed-in user's server-managed current rating.

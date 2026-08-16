@@ -124,6 +124,14 @@
 3. rating削除、profile tombstone、Research account unlink、accepted contribution保持は、OWNERが削除可能と指定した専用アカウントでのみE2E確認する。
 4. 実アカウント削除は行わない。
 
+### 2026-08-15 E2E follow-up
+
+- 新規／使い捨てテストアカウントでオンライン対局を成立・完了し、実機では対局相手の成立時rating snapshot表示と結果確定後のrating更新を確認した。
+- Research参加中の対局がcaptureされることを確認した。
+- 同じ使い捨てテストアカウントの削除完了後、Auth identityとprivate rating等が削除され、profile tombstoneと共有棋譜の匿名化保持が維持されることを確認した。
+- Research account linkはunlinkされ、accepted contributionと統計値は減少せず、Research schema／公開集計から削除済みaccountへ逆参照する識別子が残らないことを確認した。
+- これらはdebug実機と本番backendの確認であり、signed release / Play生成APKのruntime確認は未実施。
+
 ## Privacy Policy整合
 
 025適用後は次の点で現在の本番Privacy Policyと一致します。
@@ -169,8 +177,8 @@ Dashboardで確認した`chanriva`の実設定:
 - [x] 現在のWeb/DB不整合を解消するため025を本番適用。
 - [x] SQL Editorでexact 025を明示transaction実行。
 - [x] 適用直前にqueue 0件、`CREATED` match 0件を確認。
-- [ ] 適用後に2テストアカウントでmatch/Elo E2Eを行うことを承認。
-- [ ] account deletionの破壊的E2Eは別途、削除可能な専用アカウントを指定して承認。
+- [x] 適用後にテストアカウントでmatch、相手rating snapshot、結果確定、Elo更新をE2E確認。
+- [x] Research参加済みの削除可能な使い捨てテストアカウントでaccount deletion、unlink、統計値保持、逆参照不可をE2E確認。
 - [ ] migration履歴がない本番を将来CLI管理へ移行するbaseline方針を別作業で決定。
 - [ ] production Researchの`collection_enabled=true`が意図した運用状態か確認。025は変更しない。
 

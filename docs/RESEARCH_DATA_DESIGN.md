@@ -1,12 +1,12 @@
 # ちゃんりば 研究データ機能 大枠設計
 
-- Status: Product decisions accepted（未実装）
+- Status: Implemented（migrations 018–023 / Android / Research batch）。本文は実装前設計の履歴
 - Repository baseline: `260c1381663fe76c405f33e02be2ac0cc6c831f0`
 - Previous design document commit: `3f92338593beda96c8afeac6e5edcfba3d7b2dcc`
 - Reviewed at: 2026-08-11
 - Scope: 対局後に「人間がその局面で何を選び、その後どうなったか」を集約公開する機能
 
-この文書は、実装前の設計判断を記録する。以下では、現行コード・migrationから確認できる事実を「現行の事実」、今回確定した研究機能の仕様を「確定設計」、実装担当が合理的に選択できる事項を「実装時判断」と明記する。
+この文書は、実装前の設計判断と、その実装へ渡した不変条件を保存する履歴資料である。本文中の「現行の事実」は上記Repository baseline時点を指し、現在のHEADを意味しない。設計はmigrations 018–023、`:feature:research`、`:data:supabase`、`cloudflare-admin`のvalidator/batch、`.github/workflows/research-batch.yml`として実装済みである。現在の運用手順は[`RESEARCH_OPERATIONS.md`](RESEARCH_OPERATIONS.md)、現在のDB正本は[`supabase/migrations`](../supabase/migrations)を参照する。
 
 ## 0. 結論
 
@@ -802,7 +802,9 @@ Supabase/Postgresの通常viewはcreator権限で動作する場合がある。`
 30. live match、rating、WebRTC、clock、finish protocolが研究validator/aggregationの完了を待たない。
 31. Edax評価と人間実戦統計を同じmetricとして混同しない。
 
-## 16. 次のPRへ切り出す推奨タスク
+## 16. 実装時に想定したPR分割（履歴）
+
+以下は未着手backlogではなく、実装前に想定した分割記録である。現在状態はmigration、コード、テスト、[`RESEARCH_OPERATIONS.md`](RESEARCH_OPERATIONS.md)を正とする。
 
 ### PR 2A: Research foundation / consent
 
@@ -876,7 +878,7 @@ Supabase/Postgresの通常viewはcreator権限で動作する場合がある。`
 - Edaxとの表示比較方法。
 - 自分自身の傾向比較。ただし個人データは本人専用RPCとして別設計にする。
 
-## 18. 次のSol高実装フェーズへ渡すための確定仕様
+## 18. 実装フェーズへ渡した確定仕様（履歴）
 
 - 基準はmerge commit `260c1381663fe76c405f33e02be2ac0cc6c831f0`。
 - 研究提供は整数versionで管理するcurrent consentへの明示Opt-in。OFFでもonline、GameRecord、Edax、local/variation機能は制限しない。consent mismatchではcollection/閲覧とも無効。

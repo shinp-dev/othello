@@ -32,7 +32,8 @@
 - 実削除: 受付RPCの後、既存の信頼済み `cloudflare-admin` Workerがprivate dataとAuth identityを処理し、Research identityをunlinkする。初回公開版に証明画像機能はなく、Web側に削除ロジックを複製していない。
 - Play Console Account deletion URL: `https://chanriva.shinp-studio.com/account-deletion`
 - 本番稼働確認済み（2026-08-14）。`chanriva` Workerへ必要なsecretを設定し、既存Cloudflare環境へdeploy済み。OWNERが実機からWeb削除を開始し、約4分54秒後に管理Workerが `COMPLETED` へ到達した。
-- 旧構成の本番後監査では、対象Auth identityの削除、レーティング・本人の棋譜参照の0件化、共有棋譜3件の保持を確認した。その後、未公開の資格情報・証明Storage・表示名機能は物理削除した。対象アカウントには確認可能なResearch linkがなかったため、Research contribution保持を含むE2Eは別途確認対象。
+- 旧構成の本番後監査では、対象Auth identityの削除、レーティング・本人の棋譜参照の0件化、共有棋譜3件の保持を確認した。その後、未公開の資格情報・証明Storage・表示名機能は物理削除した。
+- cleanup後はResearch参加済みの使い捨てテストアカウントで、対局capture、削除完了、account link unlink、accepted contributionと統計値の保持、削除済みaccountへ戻る識別子がResearch境界に残らないことをE2E確認済み。
 
 Play Console、developer account、署名鍵、外部サービス管理画面にはこのリポジトリからアクセスできません。未確認の項目は各資料で明示しています。
 

@@ -1,40 +1,38 @@
-# vinext-starter
+# ちゃんりば公式サイト
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+`landing-page/`は、ちゃんりば / CHANRIVAの公式LPとGoogle Play向け法務・アカウント導線の正本です。Cloudflare Worker `chanriva`として`https://chanriva.shinp-studio.com`へ配信します。
 
-## Prerequisites
+## 公開ルート
 
-- Node.js `>=22.13.0`
+- `/`: 製品LP
+- `/privacy`: プライバシーポリシー
+- `/account-deletion`: アプリを利用できないユーザー向けのWebアカウント削除受付
+- `/signup-complete`: Supabase Authのメール確認完了案内
+- `/api/account-deletion/start`: 同一originの削除受付API。既存Supabase Email/Password Authで本人確認し、Androidと同じ`request_account_deletion()` RPCを呼ぶ
 
-## Quick Start
+Web削除APIはservice-role keyを持ちません。パスワードやaccess tokenを保存・ログ出力せず、実削除は`cloudflare-admin`の信頼済みWorkerが行います。`SUPABASE_ANON_KEY`はCloudflare runtime設定から渡し、tracked fileへ値を記録しません。
 
-```bash
-npm install
-npm run dev
-npm run build
+## 開発・検証
+
+必要環境はNode.js `>=22.13.0`です。
+
+```powershell
+npm.cmd ci
+npm.cmd test
+npm.cmd run lint
+npm.cmd run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+`npm test`はproduction build後、LP、Privacy Policy、Web account deletion、signup completion、same-origin/fail-closed API境界を確認します。
 
-## Included Shape
+## Cloudflare設定
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
+- Worker name: `chanriva`
+- production domain: `chanriva.shinp-studio.com`
+- tracked config: `wrangler.toml`
+- required runtime value: `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`はこのWorkerへ設定しない
 
-## Useful Commands
+Cloudflare Workers BuildsはGitHub repository `shinp-dev/othello`と連携しています。production branchは`main`、root directoryは`landing-page`、production deploy commandは`npx wrangler deploy`です。`main`へのpushは、このディレクトリに差分がなくても監視path設定により本番Web deployを起動し得ます。main pushとCloudflare設定変更はOWNER承認対象です。
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+手動deploy、別Worker/siteの作成、route変更は通常のbuild/testに含めません。

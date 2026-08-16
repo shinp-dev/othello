@@ -2,7 +2,7 @@
 
 ## Repository / build
 
-- [x] 専用branch `codex/google-play-prep` で作業
+- [x] Google Play準備変更をレビュー・CI後に`main`へ統合
 - [x] `applicationId = com.shinpstudio.chanriva`
 - [x] namespace / Kotlin packageは変更なし
 - [x] `targetSdk = 36`, `minSdk = 26`
@@ -37,7 +37,7 @@
 - [x] Account deletion URL: `https://chanriva.shinp-studio.com/account-deletion`。LPに既存Authで本人確認するWeb受付を実装
 - [x] `chanriva` Workerへ必要なsecretを設定し、既存Cloudflare本番環境へdeploy。HTTPS表示と実受付を確認
 - [x] OWNER実機E2E: Web本人確認から管理Workerの `COMPLETED` まで約4分54秒。Auth identity、個人DB参照、証明Storageの削除と共有棋譜の匿名化保持を管理画面で確認
-- [ ] Research参加履歴を持つ専用テストアカウントで、account linkのunlinkとaccepted contribution保持をE2E確認
+- [x] Research参加済みの使い捨てテストアカウントで、capture、account link unlink、accepted contribution／統計値保持、削除済みaccountへの逆参照不可をE2E確認
 - [ ] App accessを入力（[app-access.md](app-access.md)）
 - [ ] Ads declaration: Contains ads = No（dependency/code監査根拠あり）
 - [ ] Target audienceをOWNER DECISIONとして確定
@@ -58,9 +58,9 @@
 
 公開前に以下をすべて解消する。
 
-- [ ] release AABをupload keyで署名
-- [ ] 本番endpointのみを参照
-- [ ] Privacy Policyと実装の一致
+- [x] upload keyによるsigned AAB生成とcertificate fingerprint一致を検証（Play提出直前に最終AABを再生成する）
+- [x] release contents監査で本番endpointのみを参照
+- [x] Privacy Policyと現在の公開プロフィール／rating／削除／Research仕様の一致
 - [x] 本番にデプロイ済みであることを確認したWeb account deletion request受付
 - [ ] 16 KiB native alignmentとPlay Console bundle inspection
 - [ ] 主要機能のrelease smoke / physical device確認

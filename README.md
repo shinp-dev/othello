@@ -71,7 +71,9 @@ npm run deploy
 
 ## オンライン対局
 
-`MatchTransport`のWebRTC DataChannel実装を使用し、Supabase RealtimeのPostgres ChangesはSDP offer/answerの確立時だけ使用します。DB signaling rowはsubscription準備前送信のfallbackも兼ねます。P2P接続後に着手や時計をSupabaseへ送信しません。実機2台では、Auth設定、同一Supabase project、TURN/STUN設定、2台のqueue参加、DataChannel成立、両者start ACK、双方の同一棋譜・hash、結果提出の順で確認します。
+`MatchTransport`のWebRTC DataChannel実装を使用します。Supabase RealtimeのPostgres Changesは、待機側へのparticipant限定`match_notifications`と、SDP offer/answer用`match_signaling`だけに使用します。通知を受けた待機側は即座にmatchをclaimし、heartbeat pollingは通知失敗時のfallbackとして残します。P2P接続後に着手、時計、盤面、結果をRealtimeへ送信しません。実機2台では、Auth設定、同一Supabase project、TURN/STUN設定、2台のqueue参加、DataChannel成立、両者start ACK、双方の同一棋譜・hash、結果提出の順で確認します。
+
+ログイン後のホームには本人のサーバー管理`ratings.current_rating`を表示します。対局画面には成立時に保存した相手rating snapshotだけを表示し、ニックネーム、メールアドレス、UUIDをプレイヤー名として表示しません。
 
 `applicationId = com.shinpstudio.chanriva` をGoogle Play公開用の正式IDとして使用します。repository名と内部package/DB識別子の`othello`は、公開ブランドではなく既存の技術識別子として変更していません。
 
@@ -100,7 +102,9 @@ Reviewでは実戦開始局面、任意ply、最終局面、保存前variation�
 
 ## 公開前に残る判断と実機確認
 
-- ユーザー判断: repository renameの要否、launcher icon/最終ビジュアル、Google Play公開、TURN provider、Privacy Policyと外部アカウント削除URL。
+- ユーザー判断: repository renameの要否、Google Playの公開version・価格・対象年齢・配信国、公開support email、TURN provider、Play App Signingとtesting/publication。
 - 物理端末: arm64 native実性能、Edaxの持続性能・thermal・battery、Wi-Fi↔mobile/mobile↔mobile、carrier NAT/CGNAT/symmetric NAT、STUN-only成功率とTURN必要率、network handover、メーカー固有background挙動。
+
+launcher icon、アプリ内Privacy Policy導線、公開Privacy Policy（`https://chanriva.shinp-studio.com/privacy`）、アプリ不要のWeb削除受付（`https://chanriva.shinp-studio.com/account-deletion`）は実装済みです。signed release / Play生成APKでの最終runtime確認はPlay App Signing後の別ゲートです。
 
 現在のICE設定はPublic STUNのみです。Emulator A/B成功はTURN不要の根拠にはせず、物理ネットワーク試験後に導入判断します。有料サービスを前提にした設定は含めていません。

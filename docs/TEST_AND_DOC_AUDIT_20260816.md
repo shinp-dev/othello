@@ -22,6 +22,8 @@
 - matchmaking関連スキーマに相手の名前、メール、UUID用の公開表示フィールドがないこと。
 - 既存の `matches` rating snapshot、private profile、public profile削除、RLS検査と同じDB hardening suiteで検証すること。
 
+GitHub ActionsのDB testでplan `285`、実行`285`、Failed `0`、parse errorなしを確認済み。同じCIでGradle test、lint、debug/release build、dependency boundary、SQL security、release contentsも成功した。
+
 Android側の自動テストでは、相手ratingの正常値と未取得時fallback（`---`）を固定している。本人の現在rating表示はCompose画面内の非同期取得であり、コード構造から接続先を確認しているが、表示結果は実機・エミュレーター確認が必要なため、release前に以下を手動確認する。
 
 1. ログイン後、ホームに本人の現在ratingが表示される。
@@ -40,6 +42,13 @@ Android側の自動テストでは、相手ratingの正常値と未取得時fall
 
 - Play Consoleへ入力するData Safety / Content Rating / Target Audienceの最終回答。
 - Play生成APKまたはsigned releaseの実機で、ホームの本人ratingと対局画面の相手ratingを確認。
-- Research contributionを持つ使い捨てテストアカウントで、capture後の削除、account link unlink、統計値の保持を確認。
+
+## 実機・本番E2Eで確認済み
+
+- 使い捨てテストアカウントでResearch参加中のオンライン対局を完了し、Research captureを確認した。
+- 同アカウントの削除完了後、Auth/個人データが削除され、Research account linkがunlinkされたことを確認した。
+- accepted contributionと統計値が削除前後で減らず、公開集計またはResearch schemaから削除済みaccountへ逆参照する識別子が残らないことを確認した。
+
+上記はdebug実機と本番backendのE2Eであり、signed release / Play生成APKのruntime確認を代替しない。
 
 この文書は設計・確認事項の記録であり、本番DB、Play Console、Cloudflare設定を変更しない。

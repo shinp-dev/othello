@@ -13,6 +13,7 @@
 ## Loginが必要な機能
 
 - オンライン対局・matchmaking・rating
+- ホームの本人current rating
 - Supabase上のGameRecord / online records
 - Research参加設定・研究データ表示
 - アカウント削除リクエスト
@@ -21,11 +22,11 @@
 
 `ちゃんりば`を起動すると、ログインなしでホーム、ふたり対局、AI対局を確認できます。オンライン対局、クラウド棋譜、Research、アカウント削除を確認するには、審査用のログインアカウントが必要です。公開プロフィール、ニックネーム、連盟段級位入力は初回公開版にありません。Play ConsoleのApp access欄へ、OWNERが実際に利用できるreviewer accountのメールアドレスと一時パスワード、ログイン手順、必要なら確認メールの扱いを入力してください。
 
-審査用credentialをGit、README、Play listing、公開LPには保存しません。MFA/OTPはアプリコード上の実装を確認できませんが、Supabase Authのprovider設定でEmail confirmation等が有効だと審査の障害になるため、OWNERがテスト前に確認します。
+審査用credentialをGit、README、Play listing、公開LPには保存しません。本番Supabase AuthはConfirm EmailとCustom SMTPを有効化し、確認メールから`https://chanriva.shinp-studio.com/signup-complete`へ到達する構成をOWNER確認済みです。審査用accountは事前にメール確認を完了し、審査時に新規登録や確認メール受信を要求しない状態にします。アプリ独自のMFA/OTP UIはありません。
 
 ## OWNER ACTION REQUIRED
 
 - reviewer用accountを作成し、Play Consoleへ安全に登録
 - 主要オンライン機能を審査できる状態を用意
-- Web account deletion受付をログイン不要で用意
+- Web account deletionページはアプリのインストールや起動なしで直接開ける。受付送信時は登録済みEmail/Passwordで本人確認する（メールアドレスだけでは削除しない）
 - Edax解析を審査対象に含める場合、配布権利のある評価データを別途用意。アプリへ同梱しない

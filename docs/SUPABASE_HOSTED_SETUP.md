@@ -32,18 +32,19 @@ supabase link --project-ref <project-ref>
 supabase db push
 ```
 
-Current repository endpoint: `202608110023_research_batch_platform_acl.sql`.
-Apply migrations `001` through `023` in filename order. Migrations 020–023 add the
-private aggregation/privacy boundary, account unlink lifecycle, and least-privilege
-Actions batch executor/Hosted ACL hardening; none enables collection. The active policy must remain
-`collection_enabled = false` until
-the separate operations/launch phase.
+Current repository endpoint: `202608150026_remove_retired_profile_verification.sql`.
+Apply migrations `001` through `026` in filename order. Migrations 018–023 add the
+Research consent/capture/aggregation/unlink and least-privilege Actions batch boundary;
+024 hardens the then-existing verification administration boundary; 025 adds private
+match-start rating snapshots; and 026 removes the retired public-profile and verification
+surface. The migration default keeps Research `collection_enabled = false`; enabling it is
+a separate operator action described in `RESEARCH_OPERATIONS.md`.
 
 After 019/020 are intentionally deployed, the trusted Worker can build one immutable
 aggregate generation through authenticated `POST /admin/research/aggregate`. This is
 an operator action in this stage; no production aggregation schedule is configured.
 
-DashboardのSQL Editorを使う場合も、`202608090001_init.sql` から`202608110019_research_capture_validator.sql`までを順番に適用します。途中失敗時の部分適用を避けるため、まとめて実行する場合は `begin;` / `commit;` で囲みます。
+DashboardのSQL Editorを使う場合も、`202608090001_init.sql` から`202608150026_remove_retired_profile_verification.sql`までを順番に適用します。途中失敗時の部分適用を避けるため、まとめて実行する場合は `begin;` / `commit;` で囲みます。
 
 適用後、`scripts/verify-hosted-supabase.sql` をSQL Editorで実行します。`realtime_tables` は `2`、ほかはすべて `true` であることを確認します。これにより次を同時に確認できます。
 
@@ -58,9 +59,9 @@ DashboardのSQL Editorを使う場合も、`202608090001_init.sql` から`202608
 ## Auth
 
 - Authentication > ProvidersでEmail providerを有効のままにする。
-- アプリの「アカウント作成」からEmail/Passwordユーザーを作成できる。確認メールを有効にする場合は、確認後にログインする。
-- 疎通用ユーザーA/Bを先に用意する場合は、Authentication > Usersから作成してもよい。
-- Dashboard作成時にAuto Confirm Userを有効にし、メール送信に依存させない。
+- アプリの「アカウント作成」からEmail/Passwordユーザーを作成できる。production-shaped確認ではConfirm Emailを有効にし、確認後にログインする。
+- 疎通用ユーザーA/Bを先に用意する場合は、Authentication > Usersから作成し、Dashboard上でそのテストユーザーだけを確認済みにしてもよい。これはproductionのConfirm Email設定を無効化する指示ではない。
+- 確認メールを使う場合、Site URL / Redirect URLには公開済みの`https://chanriva.shinp-studio.com/signup-complete`を使用し、`localhost`へ戻さない。
 - A/Bのメールアドレスとパスワードはリポジトリへ保存しない。
 
 ## Androidの接続値
@@ -89,7 +90,7 @@ $env:OTHELLO_E2E_PLAYER_B_PASSWORD='<player-b-password>'
 3. A/Bが同一Projectへログインできる。
 4. Queue参加、Realtime signaling、DataChannel成立、両者start ACKまで到達する。
 5. 同一棋譜の結果提出で `CONFIRMED`、GameRecord 1件、Rating更新1回になる。
-6. 研究参加をON/OFFでき、研究収集は準備中（`collection_enabled = false`）と表示される。
+6. migration直後は研究参加をON/OFFでき、研究収集は準備中（`collection_enabled = false`）と表示される。収集E2Eを行う場合だけ、`RESEARCH_OPERATIONS.md`の手順で明示的に有効化する。
 
 ## 信頼済み管理Worker
 

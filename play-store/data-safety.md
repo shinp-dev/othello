@@ -23,4 +23,4 @@
 - Googleの定義では`Name`にnicknameが含まれ、`Other user-generated content`にはbio・note・自由回答等が含まれる。初回公開版にはいずれも存在しない。
 - ratingはユーザー入力ではなく、account-linkedなgameplayからサーバーが算出する値。対局相手には成立時snapshotだけを表示し、名前・メール・UUIDはUIへ表示しない。
 - 広告SDK・広告表示は現在なし。Ads declarationは `Contains ads: No` の候補。
-- account creationがあるため、in-app deletionに加えてWeb deletion linkが必要。LPには既存Authで本人確認する受付を実装し、`https://chanriva.shinp-studio.com/account-deletion` で本番稼働を確認済み。OWNER実機E2Eでは受付から約4分54秒で `COMPLETED` となり、Auth identity、個人DB参照、証明Storageの削除と共有棋譜の匿名化保持を確認した。Research参加履歴を持つ専用テストアカウントでのunlink/retention E2Eは未実施。
+- account creationがあるため、in-app deletionに加えてWeb deletion linkが必要。LPには既存Authで本人確認する受付を実装し、`https://chanriva.shinp-studio.com/account-deletion` で本番稼働を確認済み。OWNER実機E2Eでは受付から約4分54秒で `COMPLETED` となり、Auth identity、個人DB参照、当時存在した証明Storageの削除と共有棋譜の匿名化保持を確認した。cleanup後はResearch参加済みの使い捨てテストアカウントでも、capture、account unlink、accepted contributionと統計値の保持、Research境界から削除済みaccountを逆参照できないことを確認済み。

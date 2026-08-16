@@ -37,9 +37,9 @@ transport tests are not a substitute for this run. Evidence is written below
 ## Acceptance sequence
 
 1. Confirm API level/package install and app startup on both emulators. Sign in as A and B. Internal IDs and transport diagnostics are debug-build-only and must not appear in release UI.
-2. Tap `対局する` on both devices. The first device remains `WAITING`; the second enters `SIGNALING`.
-3. Confirm the signaling diagnostics show only the expected offer/answer exchange. Full SDP, credentials, and service keys must not appear in logs.
-4. Confirm the DataChannel reaches `OPEN`, both clients call `ack_match_started` once, and both observe `bothStartAcked=true` before `PLAYING`. The server sets `p2p_started_at` only after both acks; Realtime is then unsubscribed.
+2. Tap `対局する` on both devices. The first device remains `WAITING`; the second creates the match. Confirm the first device observes its private `match_notifications` row and claims the match without waiting for the next heartbeat interval; heartbeat/claim remains the fallback.
+3. Confirm the signaling diagnostics show only the expected offer/answer exchange through participant-only `match_signaling`. Full SDP, credentials, and service keys must not appear in logs.
+4. Confirm the DataChannel reaches `OPEN`, both clients call `ack_match_started` once, and both observe `bothStartAcked=true` before `PLAYING`. The server sets `p2p_started_at` only after both acks; the match-notification subscription has ended after claim and the signaling subscription ends after both acks.
 5. Verify black moves first. `-AutoPlay` selects the first legal move through `MatchController` on each side; no board state is copied and moves do not use Realtime.
 6. Submit on both sides. Verify `CONFIRMED` produces one GameRecord and rating update. Repeat matchmaking for a second match and confirm the prior peer/channel/signaling resources are gone.
 7. Exercise duplicate, command-id reuse, wrong ply/hash, wrong match ID, and illegal move through the debug driver/Fake protocol suite. The board must not change and the app must not crash.
@@ -80,6 +80,6 @@ limits, thermal/battery behavior, and production Edax native performance.
 
 ## Product decisions outside emulator acceptance
 
-- Decide the permanent applicationId, repository rename, launcher icon/final visual brand, TURN provider, and Play publication/signing.
-- Publish the final Privacy Policy URL and the external web account-deletion request URL required by Google Play; the in-app request and trusted server-side deletion processor are implemented.
+- The permanent applicationId is `com.shinpstudio.chanriva`; launcher icon resources and the `ちゃんりば` label are implemented. Remaining decisions are repository rename, TURN provider, and Play publication/signing.
+- Privacy Policy (`https://chanriva.shinp-studio.com/privacy`) and external web account deletion (`https://chanriva.shinp-studio.com/account-deletion`) are deployed. Repeat their runtime checks with the signed release / Play-generated APK before publication.
 - Decide crash/ANR monitoring and staged rollout policy without placing credentials in the repository.
