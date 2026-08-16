@@ -4,3 +4,7 @@ interface AccountDeletionRepository {
     /** Queues a server-side deletion/anonymization request; Android never receives service-role authority. */
     suspend fun requestDeletion(): String
 }
+
+interface CurrentRatingRepository {
+    suspend fun getCurrentRating(): Int
+}

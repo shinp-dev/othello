@@ -62,6 +62,7 @@ import com.example.othello.match.LocalMatchViewState
 import com.example.othello.match.OnlineMatchController
 import com.example.othello.match.OnlineMatchViewState
 import com.example.othello.matchmaking.MatchmakingStatus
+import com.example.othello.profile.CurrentRatingRepository
 import com.example.othello.records.GameRecord
 import com.example.othello.review.ReviewInput
 import kotlinx.coroutines.launch
@@ -269,6 +270,7 @@ private fun OthelloApp(
                 state = matchmakingState,
                 configurationError = componentResult.exceptionOrNull()?.message,
                 session = session,
+                currentRatingRepository = component?.currentRatingRepository,
                 loginError = loginError,
                 authNotice = authNotice,
                 authNoticeIsError = authNoticeIsError,
@@ -503,6 +505,7 @@ private fun HomeScreen(
     state: com.example.othello.matchmaking.MatchmakingViewState?,
     configurationError: String?,
     session: UserSession?,
+    currentRatingRepository: CurrentRatingRepository?,
     loginError: String?,
     authNotice: String?,
     authNoticeIsError: Boolean,
@@ -521,6 +524,18 @@ private fun HomeScreen(
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var currentRating by remember(session?.userId) { mutableStateOf<Int?>(null) }
+    var currentRatingLoading by remember(session?.userId) { mutableStateOf(false) }
+    LaunchedEffect(session?.userId, currentRatingRepository) {
+        if (session == null || currentRatingRepository == null) {
+            currentRating = null
+            currentRatingLoading = false
+        } else {
+            currentRatingLoading = true
+            currentRating = runCatching { currentRatingRepository.getCurrentRating() }.getOrNull()
+            currentRatingLoading = false
+        }
+    }
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
@@ -561,6 +576,13 @@ private fun HomeScreen(
             }
         } else {
             Text("ログイン済み")
+            Text(
+                "現在のレート ${when {
+                    currentRatingLoading -> "取得中…"
+                    currentRating != null -> currentRating.toString()
+                    else -> "---"
+                }}",
+            )
             OutlinedButton(onClick = onSignOut) { Text("ログアウト") }
         }
         Button(

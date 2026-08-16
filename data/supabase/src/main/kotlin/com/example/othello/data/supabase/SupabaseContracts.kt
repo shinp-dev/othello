@@ -13,6 +13,7 @@ import com.example.othello.matchmaking.MatchAssignment
 import com.example.othello.matchmaking.MatchmakingRepository
 import com.example.othello.network.CURRENT_PROTOCOL_VERSION
 import com.example.othello.profile.AccountDeletionRepository
+import com.example.othello.profile.CurrentRatingRepository
 import com.example.othello.records.FinishReason
 import com.example.othello.records.GameRecord
 import com.example.othello.records.GameRecordRepository
@@ -328,6 +329,10 @@ internal class SupabaseAccountDeletionRepository(private val client: SupabaseCli
     override suspend fun requestDeletion(): String = client.postgrest.rpc("request_account_deletion").decodeAs()
 }
 
+internal class SupabaseCurrentRatingRepository(private val client: SupabaseClient) : CurrentRatingRepository {
+    override suspend fun getCurrentRating(): Int = client.from("ratings").select().decodeSingle<RatingRow>().currentRating
+}
+
 @Serializable
 data class SignalingEnvelope(
     val matchId: String,
@@ -604,6 +609,7 @@ class SupabaseComponent private constructor(
     val matchmakingRepository: MatchmakingRepository,
     val onlineMatchRepository: OnlineMatchRepository,
     val accountDeletionRepository: AccountDeletionRepository,
+    val currentRatingRepository: CurrentRatingRepository,
     val gameRecordRepository: GameRecordRepository,
     val researchParticipationRepository: ResearchParticipationRepository,
     val researchPositionRepository: ResearchPositionRepository,
@@ -621,6 +627,7 @@ class SupabaseComponent private constructor(
             matchmakingRepository = SupabaseMatchmakingRepository(client, scope),
             onlineMatchRepository = SupabaseOnlineMatchRepository(client),
             accountDeletionRepository = SupabaseAccountDeletionRepository(client),
+            currentRatingRepository = SupabaseCurrentRatingRepository(client),
             gameRecordRepository = SupabaseGameRecordRepository(client),
             researchParticipationRepository = SupabaseResearchParticipationRepository(client),
             researchPositionRepository = SupabaseResearchPositionRepository(client),
