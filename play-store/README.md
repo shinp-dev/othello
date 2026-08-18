@@ -47,3 +47,9 @@ Play Console、developer account、署名鍵、外部サービス管理画面に
 - [data-safety.md](data-safety.md)
 - [listing-ja.md](listing-ja.md)
 - [app-access.md](app-access.md)
+
+## 申請素材
+
+アップロード用に整形したアイコン、Feature graphic、スクリーンショットはリポジトリ直下の [`store-assets/upload-ready`](../store-assets/upload-ready) にまとめています。素材の選定理由と未採用素材は [`store-assets/README.md`](../store-assets/README.md) を確認してください。
+
+署名済みAABは [`release-artifacts`](../release-artifacts) に置きますが、秘密鍵・AABともにGitへcommitしません。
