@@ -33,6 +33,8 @@ test("renders privacy policy with the same deletion URL", async () => {
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /アカウント削除ページ/);
+  assert.match(html, /13歳以上の利用者を対象/);
+  assert.match(html, /shinpstudio@gmail\.com/);
   assert.doesNotMatch(html, /ブラウザ単独の削除リクエスト受付は現在準備中/);
 });
 
