@@ -14,9 +14,9 @@
 
 Google公式要件に合わせ、アイコンは512×512、Feature graphicは1024×500、スクリーンショットは最小辺の2倍以内に整形しています。いずれも実装済み画面を元にしています。
 
-## 今回アップロードしないもの
+## オンライン対局スクリーンショット
 
-`screenshots/screen-online-match.png` は元画像として保持していますが、画面内に `matchId`、ICE／Peer／DataChannel接続診断、対局状態の内部表示が残っているため、Store screenshotには使用しません。公開用には、デバッグ診断を表示しないrelease画面を再撮影してください。
+`screenshots/screen-online-match.png` はmatchIdとICE／Peer／DataChannel接続診断を除去した最新版です。`upload-ready/phone-screenshot-04-online-match-1080x2160.png` にPlay用サイズへ整形したものを置いています。
 
 Feature graphicには「COMING SOON」の表記が残っています。現行機能として誤解を招かないかをOWNERが確認してから使用してください。
 
