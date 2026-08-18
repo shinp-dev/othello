@@ -351,7 +351,11 @@ private fun formatResearchPercent(value: Double): String =
     String.format(Locale.ROOT, "%.1f%%", value.coerceIn(0.0, 1.0) * 100.0)
 
 @Composable
-internal fun AccountDeletionScreen(repository: AccountDeletionRepository, onBack: () -> Unit) {
+internal fun AccountDeletionScreen(
+    repository: AccountDeletionRepository,
+    onBack: () -> Unit,
+    onRequested: () -> Unit,
+) {
     val scope = rememberCoroutineScope()
     var confirmed by remember { mutableStateOf(false) }
     var requested by remember { mutableStateOf(false) }
@@ -359,14 +363,14 @@ internal fun AccountDeletionScreen(repository: AccountDeletionRepository, onBack
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         ScreenHeader("アカウントを削除", onBack)
         Text("削除リクエスト後、信頼されたサーバー処理が認証情報・アカウント管理用の内部データ・レーティングを削除します。対戦相手の棋譜は匿名化して保持される場合があります。")
-        Text("進行中の対局がある場合は受け付けません。処理完了までログインできる場合があります。", style = MaterialTheme.typography.bodySmall)
+        Text("進行中の対局がある場合は受け付けません。受付後は安全のためログアウトし、処理完了まで再ログインできません。", style = MaterialTheme.typography.bodySmall)
         when {
             requested -> Text("削除リクエストを受け付けました", color = ChanrivaColors.accent)
             !confirmed -> OutlinedButton(onClick = { confirmed = true }) { Text("削除手続きへ進む") }
             else -> Button(onClick = {
                 scope.launch {
                     runCatching { repository.requestDeletion() }
-                        .onSuccess { requested = true; error = null }
+                        .onSuccess { requested = true; error = null; onRequested() }
                         .onFailure { error = it.message ?: "削除リクエストを送信できませんでした" }
                 }
             }) { Text("削除リクエストを送信") }

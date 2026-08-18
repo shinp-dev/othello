@@ -139,9 +139,12 @@ private fun OthelloApp(
     }
     LaunchedEffect(component) {
         runCatching { component?.authGateway?.currentSession() }
-            .onSuccess { session = it }
+            .onSuccess {
+                session = it
+                if (it != null) runCatching { component?.authGateway?.touchLastActive() }
+            }
             .onFailure {
-                loginError = it.message ?: "セッション確認に失敗しました"
+                loginError = authErrorMessage(AuthOperation.SESSION, it)
                 authNoticeIsError = true
             }
     }
@@ -234,6 +237,14 @@ private fun OthelloApp(
             )
             destination == AppDestination.ACCOUNT_DELETION && component != null -> AccountDeletionScreen(
                 component.accountDeletionRepository, onBack = { destination = AppDestination.HOME },
+                onRequested = {
+                    scope.launch {
+                        runCatching { component.authGateway.signOut() }
+                        matchmaking?.reset()
+                        session = null
+                        destination = AppDestination.HOME
+                    }
+                },
             )
             destination == AppDestination.SETTINGS -> SettingsScreen(
                 onBack = { destination = AppDestination.HOME },
@@ -282,11 +293,12 @@ private fun OthelloApp(
                         runCatching { auth.signIn(email, password) }
                             .onSuccess {
                                 session = it
+                                runCatching { auth.touchLastActive() }
                                 loginError = null
                                 authNotice = null
                             }
                             .onFailure {
-                                loginError = it.message ?: "ログインに失敗しました"
+                                loginError = authErrorMessage(AuthOperation.LOGIN, it)
                                 authNoticeIsError = true
                             }
                     }
@@ -300,6 +312,7 @@ private fun OthelloApp(
                                 when (result) {
                                     is SignUpResult.SignedIn -> {
                                         session = result.session
+                                        runCatching { auth.touchLastActive() }
                                         authNotice = "アカウントを作成しました"
                                         authNoticeIsError = false
                                     }
@@ -310,7 +323,22 @@ private fun OthelloApp(
                                 }
                             }
                             .onFailure {
-                                authNotice = it.message ?: "アカウント作成に失敗しました"
+                                authNotice = authErrorMessage(AuthOperation.SIGN_UP, it)
+                                authNoticeIsError = true
+                            }
+                    }
+                },
+                onPasswordReset = { email ->
+                    val auth = component?.authGateway ?: return@HomeScreen
+                    scope.launch {
+                        runCatching { auth.requestPasswordReset(email) }
+                            .onSuccess {
+                                authNotice = "再設定メールを送信しました。登録済みの場合はメールをご確認ください。"
+                                authNoticeIsError = false
+                                loginError = null
+                            }
+                            .onFailure {
+                                authNotice = "再設定メールを送信できませんでした。しばらく時間をおいてお試しください。"
                                 authNoticeIsError = true
                             }
                     }
@@ -320,7 +348,7 @@ private fun OthelloApp(
                         runCatching { component?.authGateway?.signOut() }
                             .onSuccess { session = null; loginError = null; authNotice = null }
                             .onFailure {
-                                loginError = it.message ?: "ログアウトに失敗しました"
+                                loginError = authErrorMessage(AuthOperation.SIGN_OUT, it)
                                 authNoticeIsError = true
                             }
                     }
@@ -512,6 +540,7 @@ private fun HomeScreen(
     failedLocalRecordSaves: List<LocalRecordSaveState>,
     onLogin: (String, String) -> Unit,
     onSignUp: (String, String) -> Unit,
+    onPasswordReset: (String) -> Unit,
     onSignOut: () -> Unit,
     onOnlineStart: () -> Unit,
     onCancel: () -> Unit,
@@ -567,6 +596,11 @@ private fun HomeScreen(
                     modifier = Modifier.weight(1f),
                 ) { Text("アカウント作成") }
             }
+            OutlinedButton(
+                onClick = { onPasswordReset(email) },
+                enabled = email.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("パスワードを忘れた場合") }
             if (loginError != null) Text(loginError, color = MaterialTheme.colorScheme.error)
             if (authNotice != null) {
                 Text(

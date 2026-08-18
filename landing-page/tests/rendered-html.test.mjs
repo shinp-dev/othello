@@ -46,6 +46,26 @@ test("renders the email confirmation completion page without an app redirect", a
   assert.doesNotMatch(html, /intent:|android-app:|market:\/\//i);
 });
 
+test("renders the web deletion email confirmation page without an app redirect", async () => {
+  const response = await render("/account-deletion/confirm");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /削除リクエストの確認/);
+  assert.match(html, /メール内の確認リンク/);
+  assert.doesNotMatch(html, /intent:|android-app:|market:\/\//i);
+});
+
+test("renders the password reset page without asking for the old password", async () => {
+  const response = await render("/reset-password");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /パスワード再設定/);
+  assert.match(html, /以前のパスワードを表示・復元することはありません/);
+  assert.match(html, /新しいパスワード/);
+  assert.doesNotMatch(html, /旧パスワード.*入力|現在のパスワード.*入力/);
+  assert.doesNotMatch(html, /intent:|android-app:|market:\/\//i);
+});
+
 test("keeps the deletion API same-origin and fail-closed without its runtime secret", async () => {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("api-test", `${process.pid}-${Date.now()}`);
@@ -69,6 +89,87 @@ test("keeps the deletion API same-origin and fail-closed without its runtime sec
     body: JSON.stringify({ email: "someone@example.com", password: "not-a-real-password" }),
   }), env, ctx);
   assert.equal(missingSecretResponse.status, 503);
+
+  const emailStartResponse = await worker.fetch(new Request("http://localhost/api/account-deletion/email/start", {
+    method: "POST",
+    headers: { "content-type": "application/json", Origin: "https://chanriva.shinp-studio.com" },
+    body: JSON.stringify({ email: "someone@example.com" }),
+  }), env, ctx);
+  assert.equal(emailStartResponse.status, 503);
+
+  const emailConfirmResponse = await worker.fetch(new Request("http://localhost/api/account-deletion/email/confirm", {
+    method: "POST",
+    headers: { "content-type": "application/json", Origin: "https://chanriva.shinp-studio.com" },
+    body: JSON.stringify({ access_token: "not-a-real-token" }),
+  }), env, ctx);
+  assert.equal(emailConfirmResponse.status, 503);
+});
+
+test("keeps the password reset API same-origin and fail-closed without its runtime secret", async () => {
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("password-api-test", `${process.pid}-${Date.now()}`);
+  const { default: worker } = await import(workerUrl.href);
+  const env = { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } };
+  const ctx = { waitUntil() {}, passThroughOnException() {} };
+
+  const getResponse = await worker.fetch(new Request("http://localhost/api/password-reset/complete"), env, ctx);
+  assert.equal(getResponse.status, 405);
+
+  const crossOriginResponse = await worker.fetch(new Request("http://localhost/api/password-reset/complete", {
+    method: "POST",
+    headers: { "content-type": "application/json", Origin: "https://attacker.example" },
+    body: JSON.stringify({ access_token: "not-a-real-token", password: "not-a-real-password" }),
+  }), env, ctx);
+  assert.equal(crossOriginResponse.status, 403);
+
+  const missingSecretResponse = await worker.fetch(new Request("http://localhost/api/password-reset/complete", {
+    method: "POST",
+    headers: { "content-type": "application/json", Origin: "https://chanriva.shinp-studio.com" },
+    body: JSON.stringify({ access_token: "not-a-real-token", password: "not-a-real-password" }),
+  }), env, ctx);
+  assert.equal(missingSecretResponse.status, 503);
+});
+
+test("keeps passwordless deletion generic and reuses the authenticated deletion RPC", async t => {
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("email-deletion-test", `${process.pid}-${Date.now()}`);
+  const { default: worker } = await import(workerUrl.href);
+  const env = {
+    ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_ANON_KEY: "test-anon-key",
+  };
+  const ctx = { waitUntil() {}, passThroughOnException() {} };
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), body: String(init.body ?? ""), headers: init.headers ?? {} });
+    if (String(url).endsWith("/auth/v1/otp")) return new Response("not found", { status: 400 });
+    return Response.json({});
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  const start = await worker.fetch(new Request("http://localhost/api/account-deletion/email/start", {
+    method: "POST",
+    headers: { "content-type": "application/json", Origin: "https://chanriva.shinp-studio.com" },
+    body: JSON.stringify({ email: "unknown@example.com" }),
+  }), env, ctx);
+  assert.equal(start.status, 200);
+  assert.match(await start.text(), /登録済みの場合は確認メールを送信しました/);
+  assert.match(calls[0].body, /"create_user":false/);
+  assert.ok(calls[0].body.includes("account-deletion/confirm"));
+
+  calls.length = 0;
+  const confirm = await worker.fetch(new Request("http://localhost/api/account-deletion/email/confirm", {
+    method: "POST",
+    headers: { "content-type": "application/json", Origin: "https://chanriva.shinp-studio.com" },
+    body: JSON.stringify({ access_token: "a".repeat(32) }),
+  }), env, ctx);
+  assert.equal(confirm.status, 200);
+  const confirmBody = await confirm.text();
+  assert.doesNotMatch(confirmBody, /a{32}/);
+  assert.equal(calls[0].url, `${env.SUPABASE_URL}/rest/v1/rpc/request_account_deletion`);
+  assert.equal(calls[0].body, "{}");
 });
 
 test("server-renders the Chanriva landing page", async () => {

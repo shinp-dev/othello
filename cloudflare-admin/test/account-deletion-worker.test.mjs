@@ -45,3 +45,32 @@ test("retired verification admin endpoints are absent", async () => {
   }), env);
   assert.equal(response.status, 404);
 });
+
+test("scheduled maintenance queues expired accounts before processing", async t => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method ?? "GET" });
+    if (String(url).includes("queue_expired_account_deletions")) return Response.json(1);
+    if (String(url).includes("account_deletion_requests?")) return Response.json([{ user_id: userId }]);
+    if (String(url).includes("/prepare_account_deletion")) return Response.json("PROCESSING");
+    if (String(url).includes("/unlink_research_subject")) return Response.json("UNLINKED");
+    if (String(url).includes("/auth/v1/admin/users/")) return Response.json({});
+    if (String(url).includes("/complete_account_deletion")) return Response.json("COMPLETED");
+    return Response.json({ error: "unexpected request" }, { status: 500 });
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  let scheduledWork;
+  worker.scheduled({}, env, { waitUntil(promise) { scheduledWork = promise; } });
+  await scheduledWork;
+
+  assert.deepEqual(calls.map(call => call.url), [
+    `${env.SUPABASE_URL}/rest/v1/rpc/queue_expired_account_deletions`,
+    `${env.SUPABASE_URL}/rest/v1/account_deletion_requests?status=in.(REQUESTED,PROCESSING)&select=user_id&order=requested_at.asc&limit=50`,
+    `${env.SUPABASE_URL}/rest/v1/rpc/prepare_account_deletion`,
+    `${env.SUPABASE_URL}/rest/v1/rpc/unlink_research_subject`,
+    `${env.SUPABASE_URL}/auth/v1/admin/users/${userId}`,
+    `${env.SUPABASE_URL}/rest/v1/rpc/complete_account_deletion`,
+  ]);
+});

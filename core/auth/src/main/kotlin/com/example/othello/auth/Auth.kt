@@ -11,6 +11,8 @@ interface AuthGateway {
     suspend fun currentSession(): UserSession?
     suspend fun signIn(email: String, password: String): UserSession
     suspend fun signUp(email: String, password: String): SignUpResult
+    suspend fun requestPasswordReset(email: String)
+    suspend fun touchLastActive()
     suspend fun signIn(): UserSession
     suspend fun signOut()
 }

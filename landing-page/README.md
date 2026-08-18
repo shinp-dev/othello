@@ -7,10 +7,21 @@
 - `/`: 製品LP
 - `/privacy`: プライバシーポリシー
 - `/account-deletion`: アプリを利用できないユーザー向けのWebアカウント削除受付
+- `/account-deletion/confirm`: Supabase Authの確認リンクからWeb削除リクエストを開始するページ
 - `/signup-complete`: Supabase Authのメール確認完了案内
+- `/reset-password`: Supabase Authの再設定リンクから新しいパスワードを設定するページ
 - `/api/account-deletion/start`: 同一originの削除受付API。既存Supabase Email/Password Authで本人確認し、Androidと同じ`request_account_deletion()` RPCを呼ぶ
+- `/api/account-deletion/email/start`: パスワードを使えないユーザーへSupabase Authの確認リンクを送るAPI。新規アカウントは作らない
+- `/api/account-deletion/email/confirm`: 確認リンクのaccess tokenでAndroidと同じ`request_account_deletion()` RPCを呼ぶAPI
+- `/api/password-reset/complete`: 再設定リンクのaccess tokenでSupabase Authのパスワードを更新する同一origin API
 
 Web削除APIはservice-role keyを持ちません。パスワードやaccess tokenを保存・ログ出力せず、実削除は`cloudflare-admin`の信頼済みWorkerが行います。`SUPABASE_ANON_KEY`はCloudflare runtime設定から渡し、tracked fileへ値を記録しません。
+
+パスワード再設定はSupabase Auth標準のメールリカバリを使用します。旧パスワードは表示・保存・復元せず、再設定完了時だけ新しいパスワードをAuthへ送信します。Supabase DashboardのAuth URL Configurationには、`https://chanriva.shinp-studio.com/reset-password`と`https://chanriva.shinp-studio.com/account-deletion/confirm`をRedirect URLとして登録してください。後者はメールリンク削除受付用です。
+
+アカウントライフサイクルは、未確認登録を7日、確認済みで最終利用から365日経過したアカウントを削除処理の対象にします。どちらも`cloudflare-admin`の既存削除パイプラインへキューし、Web Workerから直接Authや個人データを削除しません。
+
+`/account-deletion/confirm`のメールリンク受付と、未確認登録・休眠アカウントの自動削除は、リポジトリ上の実装とmigrationが正本です。`202608180027_account_lifecycle.sql`は本番適用済みです。確認メール用Supabase Redirect URL登録、管理WorkerのCron実行確認、メールリンクE2Eが残っています。既存のメールアドレス＋パスワードによるWeb削除受付は別経路です。
 
 ## 開発・検証
 

@@ -27,11 +27,15 @@
 
 ## Account deletion
 
+- Web削除の追加経路: パスワードを使えない場合は登録メールへ確認リンクを送り、`https://chanriva.shinp-studio.com/account-deletion/confirm`で同じ`request_account_deletion()` RPCを呼び出す。LP本番反映とmigration適用は完了。Supabase Redirect URL登録とメール送信E2EはOWNER ACTION REQUIRED。
+- アカウントライフサイクル: 未確認登録は7日、確認済みで最終利用から365日経過したアカウントを同じ削除パイプラインへキューするmigrationは本番適用済み。管理WorkerのCron実行確認は未完了。予告メールは送信しない。
+
 - IN-APP: 実装済み。認証済みAndroidユーザーが既存の `request_account_deletion()` を呼び出す。
-- EXTERNAL WEB: 実装済み。`https://chanriva.shinp-studio.com/account-deletion` のフォームが既存Supabase Email/Password Authで本人確認し、同じ `request_account_deletion()` を呼び出す。アプリの再インストールや起動は要求しない。
+- EXTERNAL WEB（Email/Password）: 本番確認済み。`https://chanriva.shinp-studio.com/account-deletion` のフォームが既存Supabase Email/Password Authで本人確認し、同じ `request_account_deletion()` を呼び出す。アプリの再インストールや起動は要求しない。
+- EXTERNAL WEB（確認メールリンク）: 実装・LP本番反映済み。メールアドレスだけで削除せず、登録メールの確認リンクから本人確認し、同じ削除受付経路へ進む。Supabase Redirect URL登録とE2Eは未完了。
 - 実削除: 受付RPCの後、既存の信頼済み `cloudflare-admin` Workerがprivate dataとAuth identityを処理し、Research identityをunlinkする。初回公開版に証明画像機能はなく、Web側に削除ロジックを複製していない。
 - Play Console Account deletion URL: `https://chanriva.shinp-studio.com/account-deletion`
-- 本番稼働確認済み（2026-08-14）。`chanriva` Workerへ必要なsecretを設定し、既存Cloudflare環境へdeploy済み。OWNERが実機からWeb削除を開始し、約4分54秒後に管理Workerが `COMPLETED` へ到達した。
+- Email/Password経路は本番稼働確認済み（2026-08-14）。`chanriva` Workerへ必要なsecretを設定し、既存Cloudflare環境へdeploy済み。OWNERが実機からWeb削除を開始し、約4分54秒後に管理Workerが `COMPLETED` へ到達した。確認メールリンク経路は別実装であり、本番反映前である。
 - 旧構成の本番後監査では、対象Auth identityの削除、レーティング・本人の棋譜参照の0件化、共有棋譜3件の保持を確認した。その後、未公開の資格情報・証明Storage・表示名機能は物理削除した。
 - cleanup後はResearch参加済みの使い捨てテストアカウントで、対局capture、削除完了、account link unlink、accepted contributionと統計値の保持、削除済みaccountへ戻る識別子がResearch境界に残らないことをE2E確認済み。
 

@@ -29,12 +29,15 @@
 
 ## Play Console
 
+- [ ] Account deletion追加経路（確認メールリンク）のSupabase Redirect URL登録・メール送信E2EをOWNER ACTION REQUIREDとして完了する（LP本番deploy済み）
+- [ ] 未確認登録7日・確認済み休眠365日の自動削除について、管理WorkerのCron実行を本番確認する（migrationは適用済み）
+
 - [ ] `com.shinpstudio.chanriva`のpackage nameをPlay Consoleで登録・所有確認
 - [ ] developer identity verification完了を確認
 - [ ] developer account種別を確定。ResearchがHuman Subjects Research appに該当する場合はOrganization account要件を確認
 - [ ] Data Safetyを入力（[data-safety.md](data-safety.md)）
 - [ ] Privacy Policy URL: `https://chanriva.shinp-studio.com/privacy`
-- [x] Account deletion URL: `https://chanriva.shinp-studio.com/account-deletion`。LPに既存Authで本人確認するWeb受付を実装
+- [x] Existing Email/Password account deletion URL: `https://chanriva.shinp-studio.com/account-deletion`。LPに既存Authで本人確認するWeb受付を実装
 - [x] `chanriva` Workerへ必要なsecretを設定し、既存Cloudflare本番環境へdeploy。HTTPS表示と実受付を確認
 - [x] OWNER実機E2E: Web本人確認から管理Workerの `COMPLETED` まで約4分54秒。Auth identity、個人DB参照、証明Storageの削除と共有棋譜の匿名化保持を管理画面で確認
 - [x] Research参加済みの使い捨てテストアカウントで、capture、account link unlink、accepted contribution／統計値保持、削除済みaccountへの逆参照不可をE2E確認
@@ -60,7 +63,7 @@
 
 - [x] upload keyによるsigned AAB生成とcertificate fingerprint一致を検証（Play提出直前に最終AABを再生成する）
 - [x] release contents監査で本番endpointのみを参照
-- [x] Privacy Policyと現在の公開プロフィール／rating／削除／Research仕様の一致
+- [x] Privacy Policyと本番DBの公開プロフィール／rating／削除／Research仕様の一致（027のライフサイクルmigrationと更新Privacy Policyの本番反映を確認）
 - [x] 本番にデプロイ済みであることを確認したWeb account deletion request受付
 - [ ] 16 KiB native alignmentとPlay Console bundle inspection
 - [ ] 主要機能のrelease smoke / physical device確認

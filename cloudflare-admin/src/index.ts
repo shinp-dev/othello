@@ -22,10 +22,20 @@ export default {
 };
 
 async function runScheduledMaintenance(env: Env): Promise<void> {
-  const results = await Promise.allSettled([processPendingAccountDeletions(env)]);
+  const results = await Promise.allSettled([
+    queueExpiredAccountDeletions(env).then(() => processPendingAccountDeletions(env)),
+  ]);
   results.forEach((result, index) => {
     if (result.status === "rejected") console.error(`scheduled maintenance task ${index} failed`);
   });
+}
+
+async function queueExpiredAccountDeletions(env: Env): Promise<void> {
+  const response = await supabase(env, "/rest/v1/rpc/queue_expired_account_deletions", {
+    method: "POST",
+    body: "{}",
+  });
+  if (!response.ok) throw new Error(`expired account deletion queue failed: ${response.status}`);
 }
 
 function supabase(env: Env, path: string, init: RequestInit = {}): Promise<Response> {

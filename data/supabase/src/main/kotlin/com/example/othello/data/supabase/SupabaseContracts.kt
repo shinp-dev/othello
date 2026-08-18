@@ -56,6 +56,7 @@ import kotlinx.serialization.Serializable
 import java.time.Instant
 
 private const val EMAIL_CONFIRMATION_REDIRECT_URL = "https://chanriva.shinp-studio.com/signup-complete"
+private const val PASSWORD_RESET_REDIRECT_URL = "https://chanriva.shinp-studio.com/reset-password"
 
 data class SupabaseConfig(val url: String, val anonKey: String) {
     fun validate(): Result<SupabaseConfig> = if (url.isBlank() || anonKey.isBlank()) {
@@ -278,6 +279,15 @@ internal class SupabaseAuthGateway(private val client: SupabaseClient) : AuthGat
         }
         return currentSession()?.let(SignUpResult::SignedIn)
             ?: SignUpResult.EmailConfirmationRequired
+    }
+
+    override suspend fun requestPasswordReset(email: String) {
+        require(email.isNotBlank()) { "email is required" }
+        client.auth.resetPasswordForEmail(email, redirectUrl = PASSWORD_RESET_REDIRECT_URL)
+    }
+
+    override suspend fun touchLastActive() {
+        client.postgrest.rpc("touch_last_active")
     }
 
     override suspend fun signIn(): UserSession = currentSession()
