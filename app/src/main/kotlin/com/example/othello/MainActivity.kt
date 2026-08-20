@@ -65,6 +65,7 @@ import com.example.othello.matchmaking.MatchmakingStatus
 import com.example.othello.profile.CurrentRatingRepository
 import com.example.othello.records.GameRecord
 import com.example.othello.review.ReviewInput
+import com.example.othello.review.ReviewSession
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -114,6 +115,10 @@ private fun OthelloApp(
     var localHumanDisc by remember { mutableStateOf(Disc.BLACK) }
     var destination by remember { mutableStateOf(AppDestination.HOME) }
     var selectedReviewInput by remember { mutableStateOf<ReviewInput?>(null) }
+    val selectedReviewSession = remember(selectedReviewInput?.id) {
+        selectedReviewInput?.let(::ReviewSession)
+    }
+    var analysisSettingsBackDestination by remember { mutableStateOf(AppDestination.SETTINGS) }
     val scope = rememberCoroutineScope()
     val componentResult = sessionOwner.componentResult
     val component = sessionOwner.component
@@ -196,8 +201,8 @@ private fun OthelloApp(
             p2pCoordinator != null -> requestOnlineLeave()
             destination == AppDestination.REVIEW -> destination = AppDestination.RECORDS
             destination == AppDestination.LOCAL_AI_SETUP -> destination = AppDestination.HOME
-            destination == AppDestination.ANALYSIS_SETTINGS ||
-                destination == AppDestination.RESEARCH_SETTINGS ||
+            destination == AppDestination.ANALYSIS_SETTINGS -> destination = analysisSettingsBackDestination
+            destination == AppDestination.RESEARCH_SETTINGS ||
                 destination == AppDestination.ABOUT -> destination = AppDestination.SETTINGS
             destination == AppDestination.OSS_LICENSES -> destination = AppDestination.ABOUT
             else -> destination = AppDestination.HOME
@@ -226,14 +231,19 @@ private fun OthelloApp(
                 onBack = { destination = AppDestination.HOME },
                 onReview = { selectedReviewInput = it; destination = AppDestination.REVIEW },
             )
-            destination == AppDestination.REVIEW && selectedReviewInput != null -> ReviewScreenV2(
+            destination == AppDestination.REVIEW && selectedReviewInput != null && selectedReviewSession != null -> ReviewScreenV2(
                 input = requireNotNull(selectedReviewInput),
+                review = selectedReviewSession,
                 dataManager = analysisDataManager,
                 engine = analysisEngine,
                 localStore = localRecordStore,
                 researchParticipationRepository = component?.researchParticipationRepository,
                 researchPositionRepository = component?.researchPositionRepository,
                 onBack = { destination = AppDestination.RECORDS },
+                onOpenAnalysis = {
+                    analysisSettingsBackDestination = AppDestination.REVIEW
+                    destination = AppDestination.ANALYSIS_SETTINGS
+                },
             )
             destination == AppDestination.ACCOUNT_DELETION && component != null -> AccountDeletionScreen(
                 component.accountDeletionRepository, onBack = { destination = AppDestination.HOME },
@@ -248,7 +258,10 @@ private fun OthelloApp(
             )
             destination == AppDestination.SETTINGS -> SettingsScreen(
                 onBack = { destination = AppDestination.HOME },
-                onAnalysis = { destination = AppDestination.ANALYSIS_SETTINGS },
+                onAnalysis = {
+                    analysisSettingsBackDestination = AppDestination.SETTINGS
+                    destination = AppDestination.ANALYSIS_SETTINGS
+                },
                 onResearch = if (session != null && component != null) {
                     { destination = AppDestination.RESEARCH_SETTINGS }
                 } else null,
@@ -257,13 +270,17 @@ private fun OthelloApp(
             destination == AppDestination.ANALYSIS_SETTINGS -> AnalysisSettingsScreen(
                 manager = analysisDataManager,
                 onDataChanged = analysisEngine::clearCache,
-                onBack = { destination = AppDestination.SETTINGS },
+                onBack = { destination = analysisSettingsBackDestination },
             )
             destination == AppDestination.LOCAL_AI_SETUP -> LocalAiSetupScreen(
                 dataManager = analysisDataManager,
                 selectedDisc = localHumanDisc,
                 onDiscSelected = { localHumanDisc = it },
                 onBack = { destination = AppDestination.HOME },
+                onOpenAnalysis = {
+                    analysisSettingsBackDestination = AppDestination.LOCAL_AI_SETUP
+                    destination = AppDestination.ANALYSIS_SETTINGS
+                },
                 onStart = { localMatchMode = LocalMatchMode.AI; localMatch = true; destination = AppDestination.HOME },
             )
             destination == AppDestination.RESEARCH_SETTINGS && session != null && component != null -> ResearchSettingsScreen(
@@ -785,6 +802,7 @@ private fun LocalAiSetupScreen(
     selectedDisc: Disc,
     onDiscSelected: (Disc) -> Unit,
     onBack: () -> Unit,
+    onOpenAnalysis: () -> Unit,
     onStart: () -> Unit,
 ) {
     val status = remember { dataManager.status() }
@@ -811,6 +829,11 @@ private fun LocalAiSetupScreen(
                 },
                 color = MaterialTheme.colorScheme.error,
             )
+            if (!status.enabled || status.evaluationData == null) {
+                OutlinedButton(onClick = onOpenAnalysis, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (status.evaluationData == null) "評価データを設定する" else "解析設定を開く")
+                }
+            }
         }
         Button(onClick = onStart, enabled = ready, modifier = Modifier.fillMaxWidth()) { Text("対局開始") }
     }

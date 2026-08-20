@@ -612,14 +612,15 @@ internal fun RecordsScreenV2(
 @Composable
 internal fun ReviewScreenV2(
     input: ReviewInput,
+    review: ReviewSession,
     dataManager: EdaxDataManager,
     engine: ProductionAnalysisEngine,
     localStore: LocalGameRecordStore,
     researchParticipationRepository: ResearchParticipationRepository?,
     researchPositionRepository: ResearchPositionRepository?,
     onBack: () -> Unit,
+    onOpenAnalysis: () -> Unit,
 ) {
-    val review = remember(input.id) { ReviewSession(input) }
     val guard = remember(input.id) { AnalysisRequestGuard() }
     val scope = rememberCoroutineScope()
     var revision by remember { mutableIntStateOf(0) }
@@ -633,19 +634,21 @@ internal fun ReviewScreenV2(
     val status = remember(revision, analysisRun) { dataManager.status() }
     val settings = remember(revision, analysisRun) { dataManager.analysisSettings() }
     val positionKey = state.stateHash()
+    val analysisIssue = when {
+        !status.nativeAvailable -> "Edaxを利用できません"
+        !status.enabled -> "設定でEdax解析がOFFです"
+        status.evaluationData == null -> "評価データを設定してください"
+        else -> null
+    }
 
-    LaunchedEffect(positionKey, requested, analysisRun, status.enabled, status.level, status.evaluationData?.sha256, status.openingBook?.sha256) {
+    LaunchedEffect(positionKey, requested, analysisRun, analysisIssue, status.level, status.evaluationData?.sha256, status.openingBook?.sha256) {
         engine.cancel()
         val token = guard.begin(positionKey)
         running = false
         result = null
         if (!requested) return@LaunchedEffect
-        if (!status.enabled || !status.nativeAvailable || status.evaluationData == null) {
-            message = when {
-                !status.enabled -> "設定でEdax解析がOFFです"
-                !status.nativeAvailable -> "Edaxを利用できません"
-                else -> "評価データを設定してください"
-            }
+        if (analysisIssue != null) {
+            message = analysisIssue
             return@LaunchedEffect
         }
         running = true
@@ -702,7 +705,19 @@ internal fun ReviewScreenV2(
                 }, modifier = Modifier.weight(1f)) { Text("変化をローカル棋譜に保存") }
             }
         }
-        Button(onClick = { requested = !running; analysisRun++; }, enabled = status.nativeAvailable, modifier = Modifier.fillMaxWidth()) { Text(if (running) "解析をキャンセル" else "全合法手を解析") }
+        analysisIssue?.let { issue ->
+            Text(issue, color = MaterialTheme.colorScheme.error)
+            if (status.nativeAvailable || status.evaluationData == null) {
+                OutlinedButton(onClick = onOpenAnalysis, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (status.evaluationData == null) "評価データを設定する" else "解析設定を開く")
+                }
+            }
+        }
+        Button(
+            onClick = { requested = !running; analysisRun++ },
+            enabled = status.nativeAvailable && analysisIssue == null,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(if (running) "解析をキャンセル" else "全合法手を解析") }
         Text(message)
         saveMessage?.let { Text(it, color = ChanrivaColors.accent) }
         result?.evaluations.orEmpty().forEach { evaluation -> Text("${evaluation.move.column + 1},${evaluation.move.row + 1} ${formatEvaluation(evaluation.score.value)}", style = MaterialTheme.typography.bodySmall) }

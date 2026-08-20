@@ -182,7 +182,10 @@ internal fun AnalysisSettingsScreen(
                     OutlinedButton(
                         onClick = {
                             runCatching { uriHandler.openUri(EDAX_RELEASES_URL) }
-                                .onFailure { message = "Edax公式リリースを開けませんでした。ブラウザを確認してください。" }
+                                .onFailure {
+                                    message = "Edax公式リリースを開けませんでした。ブラウザを確認してください。"
+                                    messageIsError = true
+                                }
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("Edax公式リリースを開く") }
