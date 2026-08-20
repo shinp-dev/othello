@@ -12,7 +12,7 @@
 | GameRecord / rating | Yes | `No`回答候補。Supabaseはサービス提供者。対局相手への共有記録・成立時rating表示は、ユーザーが開始したオンライン対局に伴うアプリ内表示としてOWNER確認 | Records、rating、review | Onlineではrequired。localは端末のみ | user_game_records/rating/private historyを削除。共有GameRecordは条件により保持 |
 | 研究参加・着手・局面 | 明示同意時のみYes | `No`回答候補。運営者が同意に基づき研究処理を行う。個人を直接識別しない集計へ利用 | Research | Optional opt-in | OFF後は新規captureと閲覧停止。accepted contributionはaccount unlink後も研究・再集計目的で保持する場合あり |
 | 連盟段級位・証明画像 | No（初回公開版） | No | N/A | N/A | Android UI、DB table/RPC、管理Worker経路を削除。旧Storage bucketも正式なStorage操作で削除 |
-| Edax評価データ・book | 端末内のみ | No | Local review | Optional import | アプリ内で削除。アプリには同梱・自動配布しない |
+| Edax評価データ・book | 端末内のみ | No | Local review | Optional import / official download | アプリ内で削除。APK/AABには同梱しない |
 | device / network / server logs | アプリコードで独自収集する実装なし。ただし基盤サービスの接続ログは可能性あり | Supabase/Cloudflare/WebRTC provider | security / operations | Service-dependent | 具体的な項目・期間はprovider設定をOWNER確認 |
 | analytics / crash reports | No（SDK dependency/codeなし） | No | N/A | N/A | third-party analytics/crash SDKは現在なし |
 

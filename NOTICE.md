@@ -32,6 +32,8 @@ their own copyright and license notices:
 - supabase-kt — MIT License
 - webrtc-sdk Android distribution — BSD 3-Clause License
 - OkHttp and transitive runtime dependencies — their published license terms
+- Apache Commons Compress 1.28.0 — Apache License 2.0
+- XZ for Java 1.10 — 0BSD License
 
 Apache-2.0, MIT and BSD-3-Clause components can be distributed in a GPLv3
 combined work while their notices and license terms remain applicable. The

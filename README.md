@@ -94,7 +94,7 @@ select public.cleanup_terminal_matches();
 
 対局後Reviewの解析エンジンには[Edax 4.6](https://github.com/abulmo/edax-reversi)を使用します。upstream commitは`14f048c05ddfa385b6bf954a9c2905bbe677e9d3`へ固定し、`Kotlin -> analysis:api -> analysis:edax -> JNI -> native Edax`で統合しています。Android app全体はGNU GPL version 3で配布します。ライセンス全文は[`LICENSE`](LICENSE)、著作権・第三者dependency表示は[`NOTICE.md`](NOTICE.md)、固定ソース・patch・再構築手順は[`third_party/edax/UPSTREAM.md`](third_party/edax/UPSTREAM.md)と[`docs/EDAX_BUILD.md`](docs/EDAX_BUILD.md)を参照してください。
 
-Edaxの評価データ（`eval.dat`等）とOpening Bookは、権利をEdax本体と分離して扱い、APK/AABにもrepositoryにも同梱しません。ユーザーが正当に取得・所有するファイルを、`設定 -> 解析`からStorage Access Frameworkで選び、アプリprivate storageへコピーします。評価データ未設定時は偽の値を表示しません。Bookは任意で、未設定またはbook miss時は通常のEdax探索を使います。
+Edaxの評価データ（`eval.dat`等）とOpening Bookは、権利をEdax本体と分離して扱い、APK/AABにもrepositoryにも同梱しません。評価データは`設定 -> 解析`から、Edax公式GitHub Releasesのv4.4 `eval.7z`から`eval.dat`だけを自動設定するか、ユーザーが正当に取得・所有するファイルをStorage Access Frameworkで選んで、アプリprivate storageへコピーできます。ダウンロード・展開・検証に成功するまで既存データは置き換えません。評価データ未設定時は偽の値を表示しません。Bookは任意で、未設定またはbook miss時は通常のEdax探索を使います。詳しい導線は`https://chanriva.shinp-studio.com/edax`を使用します。
 
 Reviewでは実戦開始局面、任意ply、最終局面、保存前variation局面を解析でき、現在手番の全合法手へ予測終局石差を盤面上表示します。完全読みの`exact`、深さ依存の`heuristic`、import済みBook由来の`book`を区別します。解析は明示操作時だけ単一background workerで実行し、ply変更・variation変更・画面離脱・新規解析でcancel/stale-result破棄を行います。
 

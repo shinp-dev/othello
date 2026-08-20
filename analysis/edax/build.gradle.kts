@@ -27,6 +27,10 @@ android {
 
 dependencies {
     implementation(project(":analysis:api"))
+    // Pure-Java 7z reader; no native ABI or large bundled 7-Zip runtime is needed.
+    implementation("org.apache.commons:commons-compress:1.28.0")
+    // Required by Commons Compress for LZMA/LZMA2 streams used by Edax's archive.
+    implementation("org.tukaani:xz:1.10")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     testImplementation(project(":core:game"))
     testImplementation(kotlin("test"))

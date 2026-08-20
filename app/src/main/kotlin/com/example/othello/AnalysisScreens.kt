@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import com.example.othello.analysis.edax.EdaxDataManager
+import com.example.othello.analysis.edax.EdaxReleaseConstants
 import com.example.othello.analysis.edax.ImportedAnalysisFile
 import com.example.othello.designsystem.ChanrivaColors
 import com.example.othello.designsystem.ChanrivaSpacing
@@ -74,17 +75,35 @@ internal fun AnalysisSettingsScreen(
     var status by remember(manager) { mutableStateOf(manager.status()) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var messageIsError by remember { mutableStateOf(false) }
+    var busyMessage by remember { mutableStateOf("検証・コピー中…") }
     var showSetupGuide by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
 
     fun refresh() { status = manager.status(); onDataChanged() }
     fun importEvaluation(uri: android.net.Uri) {
         busy = true
+        busyMessage = "検証・コピー中…"
         scope.launch {
             runCatching { manager.importEvaluationData(uri) }
-                .onSuccess { message = "評価データをインポートしました"; refresh() }
+                .onSuccess { message = "評価データをインポートしました"; messageIsError = false; refresh() }
                 .onFailure {
                     message = "このデータを評価データとして読み込めませんでした。Edax互換ファイルか確認してください。"
+                    messageIsError = true
+                }
+            busy = false
+        }
+    }
+    fun downloadOfficialEvaluation() {
+        busy = true
+        busyMessage = "公式データをダウンロード・展開・検証中…"
+        message = null
+        scope.launch {
+            runCatching { manager.downloadOfficialEvaluationData() }
+                .onSuccess { message = "Edax公式 v4.4 の評価データを設定しました"; messageIsError = false; refresh() }
+                .onFailure { failure ->
+                    message = "公式評価データを設定できませんでした。通信状態を確認して、もう一度お試しください。(${failure.message ?: "原因不明"})"
+                    messageIsError = true
                 }
             busy = false
         }
@@ -113,7 +132,7 @@ internal fun AnalysisSettingsScreen(
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
     ) {
         SettingsHeader("解析", onBack)
-        Text("解析エンジン: Edax 4.6")
+        Text("解析エンジン: Edax ${EdaxReleaseConstants.ENGINE_VERSION}")
         Text("Edax状態: ${if (status.nativeAvailable) "利用可能" else "利用不可"}")
         status.nativeVersion?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
@@ -152,9 +171,14 @@ internal fun AnalysisSettingsScreen(
                 ) {
                     Text("評価データ", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "Edaxが中盤局面を評価するために必要なデータです。Edax公式リリースから評価データ配布物を取得・解凍し、取り出したeval.datを「評価データをインポート」から選択してください。",
+                        "Edaxが中盤局面を評価するために必要なデータです。公式データを自動設定するか、手元のeval.datを選択してインポートできます。",
                         style = MaterialTheme.typography.bodySmall,
                     )
+                    Button(
+                        onClick = ::downloadOfficialEvaluation,
+                        enabled = status.nativeAvailable && !busy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("公式の評価データ v${EdaxReleaseConstants.EVALUATION_DATA_VERSION}を自動設定（推奨）") }
                     OutlinedButton(
                         onClick = {
                             runCatching { uriHandler.openUri(EDAX_RELEASES_URL) }
@@ -162,13 +186,20 @@ internal fun AnalysisSettingsScreen(
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("Edax公式リリースを開く") }
+                    OutlinedButton(
+                        onClick = {
+                            runCatching { uriHandler.openUri(EDAX_GUIDE_URL) }
+                                .onFailure { message = "Edax説明ページを開けませんでした。ブラウザを確認してください。"; messageIsError = true }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Edax評価データの説明を見る") }
                     Text("オープニングブック（任意）", style = MaterialTheme.typography.titleSmall)
                     Text(
                         "序盤の候補手を利用するためのEdax互換データです。未設定でも通常探索で解析できます。利用する場合は、配布条件を確認できる入手元から取得したファイル、またはご自身が所有する対応ファイルを「オープニングブックをインポート」から選択してください。",
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Text(
-                        "再度インポートすると、現在のデータを検証済みの新しいデータへ置き換えます。アプリからの自動ダウンロードやデータ配布は行いません。",
+                        "再度設定・インポートすると、検証済みの新しいデータへ置き換えます。ダウンロード・展開・検証に失敗した場合、現在のデータは保持されます。",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -202,8 +233,8 @@ internal fun AnalysisSettingsScreen(
 
         Text("ファイルはStorage Access Frameworkから選び、アプリprivate storageへコピーします。広範なストレージ権限は使用しません。")
         Text("評価データと第三者オープニングブックはアプリに同梱されていません。正当に取得・所有しているEdax互換ファイルだけを選択してください。", style = MaterialTheme.typography.bodySmall)
-        if (busy) Text("検証・コピー中…")
-        message?.let { Text(it, color = if (it.contains("ません")) MaterialTheme.colorScheme.error else ChanrivaColors.accent) }
+        if (busy) Text(busyMessage)
+        message?.let { Text(it, color = if (messageIsError) MaterialTheme.colorScheme.error else ChanrivaColors.accent) }
     }
 }
 
@@ -287,3 +318,4 @@ internal fun formatAnalysisFileSize(sizeBytes: Long): String = when {
 }
 
 private const val EDAX_RELEASES_URL = "https://github.com/abulmo/edax-reversi/releases"
+private const val EDAX_GUIDE_URL = "https://chanriva.shinp-studio.com/edax"
