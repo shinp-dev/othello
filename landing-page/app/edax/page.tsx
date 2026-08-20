@@ -19,7 +19,7 @@ export default function EdaxPage() {
 
         <h2>使用するEdax</h2>
         <p>
-          ちゃんりばは解析エンジンとしてEdax 4.6を使用します。評価データは、Edax公式READMEの案内に従い、公式GitHub Releasesのv4.4 の <code>eval.7z</code>を使用します。
+          ちゃんりばは解析エンジンとしてEdax 4.6を使用します。評価データは、Edax公式READMEの案内に従い、公式GitHub Releasesのv4.4の<code>eval.7z</code>を使用します。
         </p>
         <p>
           <a href="https://github.com/abulmo/edax-reversi/releases/tag/v4.4" rel="noreferrer">Edax公式v4.4リリースを見る</a>
