@@ -93,6 +93,7 @@ private enum class AppDestination {
     REVIEW,
     ACCOUNT_DELETION,
     SETTINGS,
+    MATCH_SETTINGS,
     ANALYSIS_SETTINGS,
     LOCAL_AI_SETUP,
     RESEARCH_SETTINGS,
@@ -206,6 +207,7 @@ private fun OthelloApp(
             p2pCoordinator != null -> requestOnlineLeave()
             destination == AppDestination.REVIEW -> destination = AppDestination.RECORDS
             destination == AppDestination.LOCAL_AI_SETUP -> destination = AppDestination.HOME
+            destination == AppDestination.MATCH_SETTINGS -> destination = AppDestination.SETTINGS
             destination == AppDestination.ANALYSIS_SETTINGS -> destination = analysisSettingsBackDestination
             destination == AppDestination.RESEARCH_SETTINGS ||
                 destination == AppDestination.ABOUT -> destination = AppDestination.SETTINGS
@@ -263,6 +265,7 @@ private fun OthelloApp(
             )
             destination == AppDestination.SETTINGS -> SettingsScreen(
                 onBack = { destination = AppDestination.HOME },
+                onMatchSettings = { destination = AppDestination.MATCH_SETTINGS },
                 onAnalysis = {
                     analysisSettingsBackDestination = AppDestination.SETTINGS
                     destination = AppDestination.ANALYSIS_SETTINGS
@@ -271,6 +274,9 @@ private fun OthelloApp(
                     { destination = AppDestination.RESEARCH_SETTINGS }
                 } else null,
                 onAbout = { destination = AppDestination.ABOUT },
+            )
+            destination == AppDestination.MATCH_SETTINGS -> MatchSettingsScreen(
+                onBack = { destination = AppDestination.SETTINGS },
                 audioSettings = audioSettings,
             )
             destination == AppDestination.ANALYSIS_SETTINGS -> AnalysisSettingsScreen(

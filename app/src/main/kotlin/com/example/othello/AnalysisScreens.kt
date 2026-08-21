@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
@@ -55,9 +57,30 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun SettingsScreen(
     onBack: () -> Unit,
+    onMatchSettings: () -> Unit,
     onAnalysis: () -> Unit,
     onResearch: (() -> Unit)?,
     onAbout: () -> Unit,
+) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
+        verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
+    ) {
+        SettingsHeader("設定", onBack)
+        SettingsNavigationRow("対局時設定", onMatchSettings)
+        SettingsNavigationRow("AI解析設定", onAnalysis)
+        SettingsNavigationRow("研究参加", onResearch)
+        if (onResearch == null) {
+            Text("研究参加の設定にはログインが必要です", style = MaterialTheme.typography.bodySmall)
+        }
+        SettingsNavigationRow("このアプリについて", onAbout)
+        BuildIdentityText()
+    }
+}
+
+@Composable
+internal fun MatchSettingsScreen(
+    onBack: () -> Unit,
     audioSettings: AudioSettingsStore,
 ) {
     var timeWarningEnabled by remember { mutableStateOf(audioSettings.timeWarningEnabled) }
@@ -103,10 +126,10 @@ internal fun SettingsScreen(
     }
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
+        verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
     ) {
-        SettingsHeader("設定", onBack)
+        SettingsHeader("対局時設定", onBack)
         Text("対局中の音", style = MaterialTheme.typography.titleMedium)
         SettingSwitchRow(
             title = "時間警告音",
@@ -158,17 +181,24 @@ internal fun SettingsScreen(
         if (audioPreviewError) {
             Text("音を再生できませんでした", color = MaterialTheme.colorScheme.error)
         }
-        Button(onClick = onAnalysis, modifier = Modifier.fillMaxWidth()) { Text("解析") }
-        OutlinedButton(
-            onClick = { onResearch?.invoke() },
-            enabled = onResearch != null,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("研究参加") }
-        if (onResearch == null) {
-            Text("研究参加の設定にはログインが必要です", style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable
+private fun SettingsNavigationRow(title: String, onClick: (() -> Unit)?) {
+    Column {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(enabled = onClick != null) { onClick?.invoke() }
+                .padding(vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text("›", style = MaterialTheme.typography.titleLarge, color = ChanrivaColors.accent)
         }
-        OutlinedButton(onClick = onAbout, modifier = Modifier.fillMaxWidth()) { Text("このアプリについて") }
-        BuildIdentityText()
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
 
@@ -275,7 +305,7 @@ internal fun AnalysisSettingsScreen(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
     ) {
-        SettingsHeader("解析", onBack, enabled = !busy)
+        SettingsHeader("AI解析設定", onBack, enabled = !busy)
         Text("解析エンジン: Edax ${EdaxReleaseConstants.ENGINE_VERSION}")
         Text("Edax状態: ${if (status.nativeAvailable) "利用可能" else "利用不可"}")
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
