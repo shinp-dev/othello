@@ -48,7 +48,7 @@ interface GameRecordRepository {
     suspend fun get(matchId: String): GameRecord
 }
 
-enum class LocalRecordType { LOCAL_HUMAN, LOCAL_AI, RESEARCH_LINE }
+enum class LocalRecordType { LOCAL_HUMAN, LOCAL_AI, RESEARCH_LINE, ONLINE_SAVED }
 
 /** A device-only record. It never enters the Server GameRecord repository. */
 data class LocalGameRecord(
@@ -59,11 +59,15 @@ data class LocalGameRecord(
     val result: MatchResult? = null,
     val finishReason: FinishReason? = null,
     val playerDisc: Disc? = null,
+    val sourceMatchId: String? = null,
 ) {
     init {
         require(localId.isNotBlank())
         require(moves.size <= 120)
         require((result == null) == (finishReason == null)) { "result and finishReason must be provided together" }
+        require(type != LocalRecordType.ONLINE_SAVED || !sourceMatchId.isNullOrBlank()) {
+            "online-saved records require sourceMatchId"
+        }
         replay(moves)
     }
 
@@ -95,6 +99,7 @@ private data class LocalGameRecordDto(
     val result: String? = null,
     @SerialName("finish_reason") val finishReason: String? = null,
     @SerialName("player_disc") val playerDisc: String? = null,
+    @SerialName("source_match_id") val sourceMatchId: String? = null,
 )
 
 /** Stable, dependency-free-on-Android representation for the private local store. */
@@ -110,6 +115,7 @@ object LocalGameRecordJson {
             result = record.result?.name,
             finishReason = record.finishReason?.name,
             playerDisc = record.playerDisc?.name,
+            sourceMatchId = record.sourceMatchId,
         ),
     )
 
@@ -123,6 +129,7 @@ object LocalGameRecordJson {
             result = dto.result?.let(MatchResult::valueOf),
             finishReason = dto.finishReason?.let(FinishReason::valueOf),
             playerDisc = dto.playerDisc?.let(Disc::valueOf),
+            sourceMatchId = dto.sourceMatchId,
         )
     }
 
@@ -145,6 +152,23 @@ object LocalGameRecordJson {
             }
         return LocalGameRecordDecodeResult(records, corruptLines)
     }
+}
+
+/** Creates an idempotent, device-only copy without writing anything to the server repository. */
+fun GameRecord.toLocalCopy(userId: String): LocalGameRecord {
+    require(matchId.isNotBlank()) { "online record requires matchId" }
+    val playerIndex = players.indexOf(userId)
+    require(playerIndex >= 0) { "user is not a player in this record" }
+    return LocalGameRecord(
+        localId = "online:$matchId",
+        moves = moves,
+        createdAtEpochMillis = finishedAtEpochMillis,
+        type = LocalRecordType.ONLINE_SAVED,
+        result = result,
+        finishReason = finishReason,
+        playerDisc = if (playerIndex == 0) Disc.BLACK else Disc.WHITE,
+        sourceMatchId = matchId,
+    )
 }
 
 data class LocalGameRecordDecodeResult(

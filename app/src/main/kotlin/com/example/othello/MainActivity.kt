@@ -28,8 +28,10 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -42,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -56,6 +59,9 @@ import com.example.othello.analysis.edax.EdaxDataManager
 import com.example.othello.analysis.edax.ProductionAnalysisEngine
 import com.example.othello.designsystem.OthelloTheme
 import com.example.othello.designsystem.ChanrivaColors
+import com.example.othello.designsystem.ChanrivaDangerButton
+import com.example.othello.designsystem.ChanrivaNavigationRow
+import com.example.othello.designsystem.ChanrivaScreenHeader
 import com.example.othello.designsystem.ChanrivaSpacing
 import com.example.othello.game.Disc
 import com.example.othello.game.Position
@@ -87,20 +93,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class AppDestination {
-    HOME,
-    RECORDS,
-    REVIEW,
-    ACCOUNT_DELETION,
-    SETTINGS,
-    MATCH_SETTINGS,
-    ANALYSIS_SETTINGS,
-    LOCAL_AI_SETUP,
-    RESEARCH_SETTINGS,
-    ABOUT,
-    OSS_LICENSES,
-}
-
 @Composable
 private fun OthelloApp(
     debugAutoPlay: Boolean,
@@ -109,6 +101,7 @@ private fun OthelloApp(
     sessionOwner: OnlineSessionViewModel = viewModel(),
 ) {
     val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
     val application = context.applicationContext as OthelloApplication
     val audioSettings = remember { AudioSettingsStore(context) }
     val analysisDataManager = remember { EdaxDataManager(context) }
@@ -119,12 +112,14 @@ private fun OthelloApp(
     var localMatch by remember { mutableStateOf(false) }
     var localMatchMode by remember { mutableStateOf(LocalMatchMode.HUMAN) }
     var localHumanDisc by remember { mutableStateOf(Disc.BLACK) }
-    var destination by remember { mutableStateOf(AppDestination.HOME) }
+    var destination by remember { mutableStateOf(AppDestination.PLAY) }
     var selectedReviewInput by remember { mutableStateOf<ReviewInput?>(null) }
     val selectedReviewSession = remember(selectedReviewInput?.id) {
         selectedReviewInput?.let(::ReviewSession)
     }
     var analysisSettingsBackDestination by remember { mutableStateOf(AppDestination.SETTINGS) }
+    var reviewBackDestination by remember { mutableStateOf(AppDestination.STUDY) }
+    var researchSettingsBackDestination by remember { mutableStateOf(AppDestination.SETTINGS) }
     val scope = rememberCoroutineScope()
     val componentResult = sessionOwner.componentResult
     val component = sessionOwner.component
@@ -161,7 +156,7 @@ private fun OthelloApp(
     }
     LaunchedEffect(session) {
         if (session == null) {
-            destination = AppDestination.HOME
+            destination = AppDestination.PLAY
             selectedReviewInput = null
         }
     }
@@ -201,112 +196,157 @@ private fun OthelloApp(
             leaveOnlineMatch()
         }
     }
-    BackHandler(enabled = localMatch || p2pCoordinator != null || destination != AppDestination.HOME) {
+    val parentDestination = backDestination(
+        destination,
+        reviewBackDestination,
+        analysisSettingsBackDestination,
+        researchSettingsBackDestination,
+    )
+    BackHandler(enabled = localMatch || p2pCoordinator != null || parentDestination != null) {
         when {
-            localMatch -> { localMatch = false; destination = AppDestination.HOME }
+            localMatch -> { localMatch = false; destination = AppDestination.PLAY }
             p2pCoordinator != null -> requestOnlineLeave()
-            destination == AppDestination.REVIEW -> destination = AppDestination.RECORDS
-            destination == AppDestination.LOCAL_AI_SETUP -> destination = AppDestination.HOME
-            destination == AppDestination.MATCH_SETTINGS -> destination = AppDestination.SETTINGS
-            destination == AppDestination.ANALYSIS_SETTINGS -> destination = analysisSettingsBackDestination
-            destination == AppDestination.RESEARCH_SETTINGS ||
-                destination == AppDestination.ABOUT -> destination = AppDestination.SETTINGS
-            destination == AppDestination.OSS_LICENSES -> destination = AppDestination.ABOUT
-            else -> destination = AppDestination.HOME
+            parentDestination != null -> destination = parentDestination
         }
     }
     Surface(Modifier.fillMaxSize().statusBarsPadding()) {
-        when {
-            localMatch -> LocalMatchScreen(
-                mode = localMatchMode,
-                humanDisc = localHumanDisc,
-                dataManager = analysisDataManager,
-                engine = analysisEngine,
-                persistence = localRecordPersistence,
-                onBack = { localMatch = false; destination = AppDestination.HOME },
-            )
-            p2pCoordinator != null -> OnlineMatchScreen(
-                coordinator = requireNotNull(p2pCoordinator),
-                scope = scope,
-                showDiagnostics = showDiagnostics,
-                onBack = ::requestOnlineLeave,
-            )
-            destination == AppDestination.RECORDS -> RecordsScreenV2(
-                userId = session?.userId,
-                repository = component?.gameRecordRepository,
-                localStore = localRecordStore,
-                onBack = { destination = AppDestination.HOME },
-                onReview = { selectedReviewInput = it; destination = AppDestination.REVIEW },
-            )
-            destination == AppDestination.REVIEW && selectedReviewInput != null && selectedReviewSession != null -> ReviewScreenV2(
-                input = requireNotNull(selectedReviewInput),
-                review = selectedReviewSession,
-                dataManager = analysisDataManager,
-                engine = analysisEngine,
-                localStore = localRecordStore,
-                researchParticipationRepository = component?.researchParticipationRepository,
-                researchPositionRepository = component?.researchPositionRepository,
-                onBack = { destination = AppDestination.RECORDS },
-                onOpenAnalysis = {
-                    analysisSettingsBackDestination = AppDestination.REVIEW
-                    destination = AppDestination.ANALYSIS_SETTINGS
-                },
-            )
-            destination == AppDestination.ACCOUNT_DELETION && component != null -> AccountDeletionScreen(
-                component.accountDeletionRepository, onBack = { destination = AppDestination.HOME },
-                onRequested = {
-                    scope.launch {
-                        runCatching { component.authGateway.signOut() }
-                        matchmaking?.reset()
-                        session = null
-                        destination = AppDestination.HOME
-                    }
-                },
-            )
-            destination == AppDestination.SETTINGS -> SettingsScreen(
-                onBack = { destination = AppDestination.HOME },
-                onMatchSettings = { destination = AppDestination.MATCH_SETTINGS },
-                onAnalysis = {
-                    analysisSettingsBackDestination = AppDestination.SETTINGS
-                    destination = AppDestination.ANALYSIS_SETTINGS
-                },
-                onResearch = if (session != null && component != null) {
-                    { destination = AppDestination.RESEARCH_SETTINGS }
-                } else null,
-                onAbout = { destination = AppDestination.ABOUT },
-            )
-            destination == AppDestination.MATCH_SETTINGS -> MatchSettingsScreen(
-                onBack = { destination = AppDestination.SETTINGS },
-                audioSettings = audioSettings,
-            )
-            destination == AppDestination.ANALYSIS_SETTINGS -> AnalysisSettingsScreen(
-                manager = analysisDataManager,
-                onDataChanged = analysisEngine::clearCache,
-                onBack = { destination = analysisSettingsBackDestination },
-            )
-            destination == AppDestination.LOCAL_AI_SETUP -> LocalAiSetupScreen(
-                dataManager = analysisDataManager,
-                selectedDisc = localHumanDisc,
-                onDiscSelected = { localHumanDisc = it },
-                onBack = { destination = AppDestination.HOME },
-                onOpenAnalysis = {
-                    analysisSettingsBackDestination = AppDestination.LOCAL_AI_SETUP
-                    destination = AppDestination.ANALYSIS_SETTINGS
-                },
-                onStart = { localMatchMode = LocalMatchMode.AI; localMatch = true; destination = AppDestination.HOME },
-            )
-            destination == AppDestination.RESEARCH_SETTINGS && session != null && component != null -> ResearchSettingsScreen(
-                repository = component.researchParticipationRepository,
-                onBack = { destination = AppDestination.SETTINGS },
-            )
-            destination == AppDestination.ABOUT -> AboutScreen(
-                onBack = { destination = AppDestination.SETTINGS },
-                onLicenses = { destination = AppDestination.OSS_LICENSES },
-            )
-            destination == AppDestination.OSS_LICENSES -> OpenSourceLicensesScreen(
-                onBack = { destination = AppDestination.ABOUT },
-            )
-            else -> HomeScreen(
+        val showBottomNavigation = !localMatch && p2pCoordinator == null && destination.isTopLevel()
+        Scaffold(
+            bottomBar = {
+                if (showBottomNavigation) {
+                    ChanrivaBottomNavigation(selected = destination, onSelect = { destination = it })
+                }
+            },
+        ) { contentPadding ->
+            Box(Modifier.fillMaxSize().padding(contentPadding)) {
+                when {
+                    localMatch -> LocalMatchScreen(
+                        mode = localMatchMode,
+                        humanDisc = localHumanDisc,
+                        dataManager = analysisDataManager,
+                        engine = analysisEngine,
+                        persistence = localRecordPersistence,
+                        onBack = { localMatch = false; destination = AppDestination.PLAY },
+                    )
+                    p2pCoordinator != null -> OnlineMatchScreen(
+                        coordinator = requireNotNull(p2pCoordinator),
+                        scope = scope,
+                        showDiagnostics = showDiagnostics,
+                        onBack = ::requestOnlineLeave,
+                    )
+                    destination == AppDestination.STUDY -> StudyScreen(
+                        onOnlineRecords = { destination = AppDestination.ONLINE_RECORDS },
+                        onOfflineRecords = { destination = AppDestination.OFFLINE_RECORDS },
+                    )
+                    destination == AppDestination.ONLINE_RECORDS -> OnlineRecordsScreen(
+                        userId = session?.userId,
+                        repository = component?.gameRecordRepository,
+                        localStore = localRecordStore,
+                        onBack = { destination = AppDestination.STUDY },
+                        onReview = {
+                            selectedReviewInput = it
+                            reviewBackDestination = AppDestination.ONLINE_RECORDS
+                            destination = AppDestination.REVIEW
+                        },
+                    )
+                    destination == AppDestination.OFFLINE_RECORDS -> OfflineRecordsScreen(
+                        localStore = localRecordStore,
+                        onBack = { destination = AppDestination.STUDY },
+                        onReview = {
+                            selectedReviewInput = it
+                            reviewBackDestination = AppDestination.OFFLINE_RECORDS
+                            destination = AppDestination.REVIEW
+                        },
+                    )
+                    destination == AppDestination.REVIEW && selectedReviewInput != null && selectedReviewSession != null -> ReviewScreenV2(
+                        input = requireNotNull(selectedReviewInput),
+                        review = selectedReviewSession,
+                        dataManager = analysisDataManager,
+                        engine = analysisEngine,
+                        localStore = localRecordStore,
+                        researchParticipationRepository = component?.researchParticipationRepository,
+                        researchPositionRepository = component?.researchPositionRepository,
+                        onBack = { destination = reviewBackDestination },
+                        onOpenAnalysis = {
+                            analysisSettingsBackDestination = AppDestination.REVIEW
+                            destination = AppDestination.ANALYSIS_SETTINGS
+                        },
+                    )
+                    destination == AppDestination.ACCOUNT_DELETION && component != null -> AccountDeletionScreen(
+                        component.accountDeletionRepository,
+                        onBack = { destination = AppDestination.MORE },
+                        onRequested = {
+                            scope.launch {
+                                runCatching { component.authGateway.signOut() }
+                                matchmaking?.reset()
+                                session = null
+                                destination = AppDestination.PLAY
+                            }
+                        },
+                    )
+                    destination == AppDestination.SETTINGS -> SettingsScreen(
+                        onMatchSettings = { destination = AppDestination.MATCH_SETTINGS },
+                        onAnalysis = {
+                            analysisSettingsBackDestination = AppDestination.SETTINGS
+                            destination = AppDestination.ANALYSIS_SETTINGS
+                        },
+                        onResearch = if (session != null && component != null) {
+                            {
+                                researchSettingsBackDestination = AppDestination.SETTINGS
+                                destination = AppDestination.RESEARCH_SETTINGS
+                            }
+                        } else null,
+                    )
+                    destination == AppDestination.MATCH_SETTINGS -> MatchSettingsScreen(
+                        onBack = { destination = AppDestination.SETTINGS },
+                        audioSettings = audioSettings,
+                    )
+                    destination == AppDestination.ANALYSIS_SETTINGS -> AnalysisSettingsScreen(
+                        manager = analysisDataManager,
+                        onDataChanged = analysisEngine::clearCache,
+                        onBack = { destination = analysisSettingsBackDestination },
+                    )
+                    destination == AppDestination.LOCAL_AI_SETUP -> LocalAiSetupScreen(
+                        dataManager = analysisDataManager,
+                        selectedDisc = localHumanDisc,
+                        onDiscSelected = { localHumanDisc = it },
+                        onBack = { destination = AppDestination.PLAY },
+                        onOpenAnalysis = {
+                            analysisSettingsBackDestination = AppDestination.LOCAL_AI_SETUP
+                            destination = AppDestination.ANALYSIS_SETTINGS
+                        },
+                        onStart = { localMatchMode = LocalMatchMode.AI; localMatch = true; destination = AppDestination.PLAY },
+                    )
+                    destination == AppDestination.RESEARCH_SETTINGS && session != null && component != null -> ResearchSettingsScreen(
+                        repository = component.researchParticipationRepository,
+                        onBack = { destination = researchSettingsBackDestination },
+                    )
+                    destination == AppDestination.MORE -> MoreScreen(
+                        canDeleteAccount = session != null && component != null,
+                        onResearchInfo = { destination = AppDestination.RESEARCH_INFO },
+                        onPrivacy = { uriHandler.openUri("https://chanriva.shinp-studio.com/privacy") },
+                        onAccountDeletion = if (session != null && component != null) {
+                            { destination = AppDestination.ACCOUNT_DELETION }
+                        } else null,
+                        onAbout = { destination = AppDestination.ABOUT },
+                    )
+                    destination == AppDestination.RESEARCH_INFO -> ResearchInfoScreen(
+                        onBack = { destination = AppDestination.MORE },
+                        onResearchSettings = if (session != null && component != null) {
+                            {
+                                researchSettingsBackDestination = AppDestination.RESEARCH_INFO
+                                destination = AppDestination.RESEARCH_SETTINGS
+                            }
+                        } else null,
+                    )
+                    destination == AppDestination.ABOUT -> AboutScreen(
+                        onBack = { destination = AppDestination.MORE },
+                        onLicenses = { destination = AppDestination.OSS_LICENSES },
+                    )
+                    destination == AppDestination.OSS_LICENSES -> OpenSourceLicensesScreen(
+                        onBack = { destination = AppDestination.ABOUT },
+                    )
+                    else -> PlayScreen(
                 state = matchmakingState,
                 configurationError = componentResult.exceptionOrNull()?.message,
                 session = session,
@@ -317,7 +357,7 @@ private fun OthelloApp(
                 failedLocalRecordSaves = localRecordSaveStates.values
                     .filter { it.status == LocalRecordSaveStatus.FAILED },
                 onLogin = { email, password ->
-                    val auth = component?.authGateway ?: return@HomeScreen
+                    val auth = component?.authGateway ?: return@PlayScreen
                     scope.launch {
                         runCatching { auth.signIn(email, password) }
                             .onSuccess {
@@ -333,7 +373,7 @@ private fun OthelloApp(
                     }
                 },
                 onSignUp = { email, password ->
-                    val auth = component?.authGateway ?: return@HomeScreen
+                    val auth = component?.authGateway ?: return@PlayScreen
                     scope.launch {
                         runCatching { auth.signUp(email, password) }
                             .onSuccess { result ->
@@ -358,7 +398,7 @@ private fun OthelloApp(
                     }
                 },
                 onPasswordReset = { email ->
-                    val auth = component?.authGateway ?: return@HomeScreen
+                    val auth = component?.authGateway ?: return@PlayScreen
                     scope.launch {
                         runCatching { auth.requestPasswordReset(email) }
                             .onSuccess {
@@ -387,10 +427,9 @@ private fun OthelloApp(
                 onLocalHumanStart = { localMatchMode = LocalMatchMode.HUMAN; localHumanDisc = Disc.BLACK; localMatch = true },
                 onLocalAiStart = { destination = AppDestination.LOCAL_AI_SETUP },
                 onRetryLocalRecordSave = localRecordPersistence::retry,
-                onRecords = { destination = AppDestination.RECORDS },
-                onAccountDeletion = { destination = AppDestination.ACCOUNT_DELETION },
-                onSettings = { destination = AppDestination.SETTINGS },
-            )
+                    )
+                }
+            }
         }
     }
     if (confirmOnlineLeave) {
@@ -399,7 +438,7 @@ private fun OthelloApp(
             title = { Text("オンライン対局を終了しますか？") },
             text = { Text("対局中に戻ると切断負けとして結果を送信します。") },
             confirmButton = {
-                Button(onClick = ::leaveOnlineMatch) { Text("終了する") }
+                ChanrivaDangerButton(onClick = ::leaveOnlineMatch) { Text("終了する") }
             },
             dismissButton = {
                 OutlinedButton(onClick = { confirmOnlineLeave = false }) { Text("対局を続ける") }
@@ -546,7 +585,7 @@ private fun OnlineMatchScreen(
             title = { Text("投了しますか？") },
             text = { Text("投了すると、この対局は負けとして確定処理へ進みます。") },
             confirmButton = {
-                Button(onClick = {
+                ChanrivaDangerButton(onClick = {
                     confirmResign = false
                     scope.launch { controller.resign() }
                 }) { Text("投了する") }
@@ -618,7 +657,7 @@ private fun OnlineOthelloBoard(
 }
 
 @Composable
-private fun HomeScreen(
+private fun PlayScreen(
     state: com.example.othello.matchmaking.MatchmakingViewState?,
     configurationError: String?,
     session: UserSession?,
@@ -636,9 +675,6 @@ private fun HomeScreen(
     onLocalHumanStart: () -> Unit,
     onLocalAiStart: () -> Unit,
     onRetryLocalRecordSave: (String) -> Unit,
-    onRecords: () -> Unit,
-    onAccountDeletion: () -> Unit,
-    onSettings: () -> Unit,
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -659,9 +695,11 @@ private fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
         horizontalAlignment = Alignment.Start,
     ) {
-        Text("ちゃんりば", style = MaterialTheme.typography.displaySmall, color = ChanrivaColors.accent)
-        Text("ちゃんと残る、ちゃんと振り返れるリバーシ", style = MaterialTheme.typography.titleMedium)
+        ChanrivaScreenHeader("対局")
+        Text("ちゃんりば", style = MaterialTheme.typography.headlineSmall, color = ChanrivaColors.accent)
+        Text("ちゃんと残る、ちゃんと振り返れるリバーシ", color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (session == null) {
+            Text("オンライン対局", style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("メールアドレス") }, singleLine = true)
             OutlinedTextField(
                 value = password,
@@ -670,51 +708,60 @@ private fun HomeScreen(
                 visualTransformation = PasswordVisualTransformation(),
                 singleLine = true,
             )
-            Row(
+            Button(
+                onClick = { onLogin(email, password) },
+                enabled = email.isNotBlank() && password.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Button(
-                    onClick = { onLogin(email, password) },
-                    enabled = email.isNotBlank() && password.isNotBlank(),
-                    modifier = Modifier.weight(1f),
-                ) { Text("ログイン") }
-                OutlinedButton(
+            ) { Text("ログイン") }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                TextButton(
                     onClick = { onSignUp(email, password) },
                     enabled = email.isNotBlank() && password.length >= 8,
-                    modifier = Modifier.weight(1f),
                 ) { Text("アカウント作成") }
+                TextButton(onClick = { onPasswordReset(email) }, enabled = email.isNotBlank()) {
+                    Text("パスワードを忘れた場合")
+                }
             }
-            OutlinedButton(
-                onClick = { onPasswordReset(email) },
-                enabled = email.isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("パスワードを忘れた場合") }
             if (loginError != null) Text(loginError, color = MaterialTheme.colorScheme.error)
             if (authNotice != null) {
                 Text(
                     authNotice,
-                    color = if (authNoticeIsError) MaterialTheme.colorScheme.error else ChanrivaColors.accent,
+                    color = if (authNoticeIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                 )
             }
         } else {
-            Text("ログイン済み")
-            Text(
-                "現在のレート ${when {
-                    currentRatingLoading -> "取得中…"
-                    currentRating != null -> currentRating.toString()
-                    else -> "---"
-                }}",
-            )
-            OutlinedButton(onClick = onSignOut) { Text("ログアウト") }
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.fillMaxWidth().padding(ChanrivaSpacing.card), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("ログイン済み", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "現在のレート ${when {
+                            currentRatingLoading -> "取得中…"
+                            currentRating != null -> currentRating.toString()
+                            else -> "---"
+                        }}",
+                    )
+                    OutlinedButton(onClick = onSignOut) { Text("ログアウト") }
+                }
+            }
+            Text("オンライン対局", style = MaterialTheme.typography.titleMedium)
+            Button(
+                onClick = onOnlineStart,
+                enabled = state?.status !in setOf(MatchmakingStatus.WAITING, MatchmakingStatus.SIGNALING),
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("対局する") }
+            when (state?.status) {
+                MatchmakingStatus.WAITING -> {
+                    Text("対戦相手を待っています")
+                    OutlinedButton(onClick = onCancel) { Text("キャンセル") }
+                }
+                MatchmakingStatus.SIGNALING -> Text("対戦相手が見つかりました。P2P接続を開始します")
+                MatchmakingStatus.FAILED -> Text(state.error ?: "マッチングに失敗しました", color = MaterialTheme.colorScheme.error)
+                else -> Unit
+            }
         }
-        Button(
-            onClick = onOnlineStart,
-            enabled = session != null && state?.status !in setOf(MatchmakingStatus.WAITING, MatchmakingStatus.SIGNALING),
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("対局する") }
-        OutlinedButton(onClick = onLocalHumanStart, modifier = Modifier.fillMaxWidth()) { Text("ふたりで対局") }
-        OutlinedButton(onClick = onLocalAiStart, modifier = Modifier.fillMaxWidth()) { Text("AIと対局") }
+        Text("端末で対局", style = MaterialTheme.typography.titleMedium)
+        ChanrivaNavigationRow("ふたりで対局", onLocalHumanStart)
+        ChanrivaNavigationRow("AIと対局", onLocalAiStart)
         if (failedLocalRecordSaves.isNotEmpty()) {
             Card(Modifier.fillMaxWidth()) {
                 Column(
@@ -733,25 +780,6 @@ private fun HomeScreen(
                     }
                 }
             }
-        }
-        if (session != null) {
-            OutlinedButton(onClick = onAccountDeletion, modifier = Modifier.fillMaxWidth()) { Text("アカウントを削除") }
-        }
-        OutlinedButton(onClick = onRecords, modifier = Modifier.fillMaxWidth()) { Text("棋譜・レビュー") }
-        Text(
-            "研究データは、同じ局面について十分な対局データが集まっている場合のみ表示されます。参加条件を満たしていても、データ数が少ない局面では表示されないことがあります。",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodySmall,
-        )
-        OutlinedButton(onClick = onSettings, modifier = Modifier.fillMaxWidth()) { Text("設定") }
-        when (state?.status) {
-            MatchmakingStatus.WAITING -> {
-                Text("対戦相手を待っています")
-                OutlinedButton(onClick = onCancel) { Text("キャンセル") }
-            }
-            MatchmakingStatus.SIGNALING -> Text("対戦相手が見つかりました。P2P接続を開始します")
-            MatchmakingStatus.FAILED -> Text(state.error ?: "マッチングに失敗しました", color = MaterialTheme.colorScheme.error)
-            else -> Unit
         }
         if (configurationError != null) Text(configurationError, color = MaterialTheme.colorScheme.error)
     }
@@ -861,7 +889,7 @@ private fun LocalMatchScreen(
             title = { Text("投了しますか？") },
             text = { Text("この対局を投了としてローカル棋譜に保存します。") },
             confirmButton = {
-                Button(onClick = { confirmResign = false; controller.resign(if (mode == LocalMatchMode.AI) humanDisc else viewState.game.currentPlayer) }) { Text("投了する") }
+                ChanrivaDangerButton(onClick = { confirmResign = false; controller.resign(if (mode == LocalMatchMode.AI) humanDisc else viewState.game.currentPlayer) }) { Text("投了する") }
             },
             dismissButton = { OutlinedButton(onClick = { confirmResign = false }) { Text("続ける") } },
         )

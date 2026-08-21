@@ -3,6 +3,7 @@ package com.example.othello
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.Column
 
 @Composable
 internal fun BuildIdentityText() {
@@ -11,9 +12,16 @@ internal fun BuildIdentityText() {
     } else {
         BuildConfig.CHANRIVA_GIT_SHA + if (BuildConfig.CHANRIVA_GIT_DIRTY) "-dirty" else ""
     }
-    Text(
-        text = "Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) Build $build",
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        style = MaterialTheme.typography.bodySmall,
-    )
+    Column {
+        Text(
+            text = "Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Text(
+            text = "Build $build",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
 }

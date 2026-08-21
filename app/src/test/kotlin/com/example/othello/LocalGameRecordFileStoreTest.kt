@@ -3,6 +3,10 @@ package com.example.othello
 import com.example.othello.game.Position
 import com.example.othello.records.LocalGameRecord
 import com.example.othello.records.LocalRecordType
+import com.example.othello.records.FinishReason
+import com.example.othello.records.GameRecord
+import com.example.othello.records.MatchResult
+import com.example.othello.records.toLocalCopy
 import java.io.File
 import java.nio.file.Files
 import org.junit.Test
@@ -79,6 +83,34 @@ class LocalGameRecordFileStoreTest {
             assertFailsWith<Exception> { store.delete(first.localId) }
             assertEquals(listOf(first), store.list())
             tempPath.deleteRecursively()
+        } finally {
+            root.deleteRecursively()
+        }
+        Unit
+    }
+
+    @Test
+    fun onlineCopySavesLocallyAndRepeatedSaveDoesNotDuplicate() = runBlocking {
+        val root = Files.createTempDirectory("online-local-record-store").toFile()
+        try {
+            val store = JsonFileLocalGameRecordStore(File(root, "local-game-records.jsonl"))
+            val online = GameRecord(
+                matchId = "server-match",
+                players = listOf("me", "opponent"),
+                moves = listOf(Position(2, 3)),
+                result = MatchResult.BLACK_WIN,
+                startedAtEpochMillis = 1,
+                finishedAtEpochMillis = 2,
+                timeControl = "300000",
+                finishReason = FinishReason.NORMAL,
+            )
+            val copy = online.toLocalCopy("me")
+
+            store.save(copy)
+            store.save(online.toLocalCopy("me"))
+
+            assertEquals(listOf(copy), store.list())
+            assertEquals("server-match", store.list().single().sourceMatchId)
         } finally {
             root.deleteRecursively()
         }

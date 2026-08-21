@@ -4,6 +4,7 @@ import com.example.othello.game.Disc
 import com.example.othello.game.Position
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class LocalGameRecordTest {
@@ -33,6 +34,55 @@ class LocalGameRecordTest {
         assertEquals(listOf(record), decoded.records)
         assertEquals(1, decoded.corruptLines.size)
         assertTrue(decoded.hasCorruption)
+    }
+
+    @Test
+    fun legacyJsonWithoutOnlineSourceMetadataStillDecodes() {
+        val legacy = """{"local_id":"legacy","moves":"d3","created_at":42,"type":"LOCAL_AI","result":null,"finish_reason":null,"player_disc":null}"""
+
+        val decoded = LocalGameRecordJson.decode(legacy)
+
+        assertEquals("legacy", decoded.localId)
+        assertEquals(LocalRecordType.LOCAL_AI, decoded.type)
+        assertEquals("d3", decoded.canonicalMoves)
+        assertNull(decoded.sourceMatchId)
+    }
+
+    @Test
+    fun allPreexistingRecordTypesKeepTheirJsonIdentity() {
+        val types = listOf(LocalRecordType.LOCAL_HUMAN, LocalRecordType.LOCAL_AI, LocalRecordType.RESEARCH_LINE)
+
+        types.forEach { type ->
+            val record = LocalGameRecord("legacy-${type.name}", listOf(Position(2, 3)), 7, type)
+            assertEquals(record, LocalGameRecordJson.decode(LocalGameRecordJson.encode(record)))
+        }
+    }
+
+    @Test
+    fun onlineRecordCreatesIdempotentDeviceOnlyCopyAndRoundTrips() {
+        val online = GameRecord(
+            matchId = "match-42",
+            players = listOf("black-user", "white-user"),
+            moves = listOf(Position(2, 3), Position(2, 2)),
+            result = MatchResult.WHITE_WIN,
+            startedAtEpochMillis = 10,
+            finishedAtEpochMillis = 20,
+            timeControl = "300000",
+            finishReason = FinishReason.RESIGNATION,
+        )
+
+        val first = online.toLocalCopy("white-user")
+        val second = online.toLocalCopy("white-user")
+        val decoded = LocalGameRecordJson.decode(LocalGameRecordJson.encode(first))
+
+        assertEquals(first, second)
+        assertEquals(first, decoded)
+        assertEquals("online:match-42", decoded.localId)
+        assertEquals(LocalRecordType.ONLINE_SAVED, decoded.type)
+        assertEquals("match-42", decoded.sourceMatchId)
+        assertEquals(Disc.WHITE, decoded.playerDisc)
+        assertEquals(online.result, decoded.result)
+        assertEquals(online.finishReason, decoded.finishReason)
     }
 
     @Test

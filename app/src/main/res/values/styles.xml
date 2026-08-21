@@ -1,3 +1,7 @@
 <resources>
-    <style name="Theme.Othello" parent="android:style/Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Othello" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@color/chanriva_background</item>
+        <item name="android:navigationBarColor">@color/chanriva_surface_elevated</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
 </resources>

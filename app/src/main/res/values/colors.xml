@@ -1,3 +1,5 @@
 <resources>
     <color name="ic_launcher_background">#080910</color>
+    <color name="chanriva_background">#090B10</color>
+    <color name="chanriva_surface_elevated">#11161E</color>
 </resources>

@@ -24,6 +24,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -41,6 +43,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.example.othello.analysis.api.AnalysisResult
 import com.example.othello.designsystem.ChanrivaColors
+import com.example.othello.designsystem.ChanrivaDangerButton
+import com.example.othello.designsystem.ChanrivaScreenHeader
 import com.example.othello.designsystem.ChanrivaSpacing
 import com.example.othello.analysis.edax.EdaxDataManager
 import com.example.othello.analysis.edax.ProductionAnalysisEngine
@@ -60,6 +64,7 @@ import com.example.othello.records.LocalGameRecord
 import com.example.othello.records.LocalGameRecordReadResult
 import com.example.othello.records.LocalGameRecordStore
 import com.example.othello.records.LocalRecordType
+import com.example.othello.records.toLocalCopy
 import com.example.othello.research.ResearchMove
 import com.example.othello.research.ResearchMoveKind
 import com.example.othello.research.ResearchParticipationRepository
@@ -200,14 +205,14 @@ internal fun ReviewScreen(
             enabled = !review.isInVariation,
         )
         if (!review.isInVariation) {
-            Button(onClick = { review.beginVariation(); revision++ }, modifier = Modifier.fillMaxWidth()) { Text("この局面から変化を開始") }
+            OutlinedButton(onClick = { review.beginVariation(); revision++ }, modifier = Modifier.fillMaxWidth()) { Text("この局面から変化を開始") }
         } else {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { review.cancelVariation(); revision++ }, modifier = Modifier.weight(1f)) { Text("変化を取消") }
-                Button(onClick = { review.saveVariationAndReturn(); revision++ }, modifier = Modifier.weight(1f)) { Text("保存して実戦へ") }
+                OutlinedButton(onClick = { review.saveVariationAndReturn(); revision++ }, modifier = Modifier.weight(1f)) { Text("保存して実戦へ") }
             }
         }
-        Button(
+        OutlinedButton(
             onClick = {
                 if (analysisRunning) {
                     analysisRequested = false
@@ -365,9 +370,9 @@ internal fun AccountDeletionScreen(
         Text("削除リクエスト後、信頼されたサーバー処理が認証情報・アカウント管理用の内部データ・レーティングを削除します。対戦相手の棋譜は匿名化して保持される場合があります。")
         Text("進行中の対局がある場合は受け付けません。受付後は安全のためログアウトし、処理完了まで再ログインできません。", style = MaterialTheme.typography.bodySmall)
         when {
-            requested -> Text("削除リクエストを受け付けました", color = ChanrivaColors.accent)
+            requested -> Text("削除リクエストを受け付けました")
             !confirmed -> OutlinedButton(onClick = { confirmed = true }) { Text("削除手続きへ進む") }
-            else -> Button(onClick = {
+            else -> ChanrivaDangerButton(onClick = {
                 scope.launch {
                     runCatching { repository.requestDeletion() }
                         .onSuccess { requested = true; error = null; onRequested() }
@@ -381,15 +386,7 @@ internal fun AccountDeletionScreen(
 
 @Composable
 private fun ScreenHeader(title: String, onBack: () -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        OutlinedButton(onClick = onBack) { Text("戻る") }
-        Spacer(Modifier.weight(1f))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(width = 2.dp, height = 22.dp).background(ChanrivaColors.accent))
-            Spacer(Modifier.size(ChanrivaSpacing.control))
-            Text(title, style = MaterialTheme.typography.titleLarge)
-        }
-    }
+    ChanrivaScreenHeader(title, onBack)
 }
 
 @Composable
@@ -476,113 +473,143 @@ private fun formatDate(epochMillis: Long): String = DateTimeFormatter.ofPattern(
     .withZone(ZoneId.systemDefault())
     .format(Instant.ofEpochMilli(epochMillis))
 
-private enum class RecordTabV2 { LOCAL, SERVER }
-
 @Composable
-internal fun RecordsScreenV2(
+internal fun OnlineRecordsScreen(
     userId: String?,
     repository: GameRecordRepository?,
     localStore: LocalGameRecordStore,
     onBack: () -> Unit,
     onReview: (ReviewInput) -> Unit,
 ) {
-    var tab by remember { mutableStateOf(RecordTabV2.LOCAL) }
-    var localRecords by remember { mutableStateOf<List<LocalGameRecord>?>(null) }
-    var serverRecords by remember { mutableStateOf<List<GameRecord>?>(null) }
+    var records by remember { mutableStateOf<List<GameRecord>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    var localReadWarning by remember { mutableStateOf<String?>(null) }
-    var deleteTarget by remember { mutableStateOf<LocalGameRecord?>(null) }
     val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
 
-    fun reloadLocal() {
-        scope.launch {
-            runCatching { localStore.listResult(50) }
-                .onSuccess { result: LocalGameRecordReadResult ->
-                    localRecords = result.records
-                    localReadWarning = result.corruptLineCount.takeIf { it > 0 }?.let {
-                        if (result.recoveryCompleted) {
-                            "一部のローカル棋譜を読み込めませんでした（${it}件を隔離しました）"
-                        } else {
-                            "一部のローカル棋譜を読み込めませんでした（${it}件の復旧待ち）"
-                        }
-                    }
-                    error = null
-                }
-                .onFailure { error = it.message ?: "ローカル棋譜を読み込めませんでした" }
-        }
-    }
     LaunchedEffect(userId, repository) {
-        reloadLocal()
         if (userId != null && repository != null) {
             runCatching { repository.recent(userId, 50) }
-                .onSuccess { serverRecords = it }
+                .onSuccess { records = it; error = null }
                 .onFailure { error = it.message ?: "オンライン棋譜を読み込めませんでした" }
         }
     }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ScreenHeader("棋譜", onBack)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { tab = RecordTabV2.LOCAL }, modifier = Modifier.weight(1f)) { Text(if (tab == RecordTabV2.LOCAL) "✓ ローカル" else "ローカル") }
-            OutlinedButton(onClick = { tab = RecordTabV2.SERVER }, enabled = userId != null && repository != null, modifier = Modifier.weight(1f)) { Text(if (tab == RecordTabV2.SERVER) "✓ オンライン" else "オンライン") }
-        }
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        localReadWarning?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        when (tab) {
-            RecordTabV2.LOCAL -> when {
-                localRecords == null -> Text("読み込み中…")
-                localRecords.orEmpty().isEmpty() -> Text("ローカル棋譜はありません")
-                else -> localRecords.orEmpty().forEach { record ->
-                    Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("${record.type.displayLabel()} / ${record.result?.userLabel() ?: "研究棋譜"}")
-                            Text("${formatDate(record.createdAtEpochMillis)} / ${record.moves.size}手")
-                            Text(record.canonicalMoves, style = MaterialTheme.typography.bodySmall)
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(
-                                    onClick = {
-                                        onReview(
-                                            ReviewInput(
-                                                id = record.localId,
-                                                moves = record.moves,
-                                                title = "ローカル棋譜",
-                                                result = record.result,
-                                                finishReason = record.finishReason,
-                                                finishedAtEpochMillis = record.createdAtEpochMillis,
-                                            ),
-                                        )
-                                    },
-                                ) { Text("棋譜を開く") }
-                                OutlinedButton(onClick = { deleteTarget = record }) { Text("削除") }
-                            }
-                        }
-                    }
-                }
-            }
-            RecordTabV2.SERVER -> when {
+    Box(Modifier.fillMaxSize()) {
+        Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
+            verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
+        ) {
+            ScreenHeader("オンライン棋譜", onBack)
+            Text("この画面では最新50局を表示します", style = MaterialTheme.typography.bodySmall)
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            when {
                 userId == null || repository == null -> Text("ログインするとオンライン棋譜を表示できます")
-                serverRecords == null -> Text("読み込み中…")
-                serverRecords.orEmpty().isEmpty() -> Text("オンライン棋譜はありません")
-                else -> serverRecords.orEmpty().forEach { record ->
+                records == null -> Text("読み込み中…")
+                records.orEmpty().isEmpty() -> Text("オンライン棋譜はありません")
+                else -> records.orEmpty().forEach { record ->
                     val localIsBlack = record.players.first() == userId
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("${record.result.labelFor(localIsBlack)} / ${if (localIsBlack) "黒" else "白"}")
                             Text("${record.finishReason.userLabel()} / ${formatDate(record.finishedAtEpochMillis)}")
                             Text("${record.moves.size}手 / ${CanonicalMoves.encode(record.moves)}", style = MaterialTheme.typography.bodySmall)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(
+                                    onClick = {
+                                        onReview(
+                                            ReviewInput(
+                                                id = record.matchId,
+                                                moves = record.moves,
+                                                title = "オンライン棋譜",
+                                                result = record.result,
+                                                finishReason = record.finishReason,
+                                                finishedAtEpochMillis = record.finishedAtEpochMillis,
+                                            ),
+                                        )
+                                    },
+                                ) { Text("棋譜を開く") }
+                                OutlinedButton(
+                                    onClick = {
+                                        scope.launch {
+                                            runCatching { localStore.save(record.toLocalCopy(userId)) }
+                                                .onSuccess { snackbar.showSnackbar("端末に保存しました") }
+                                                .onFailure { snackbar.showSnackbar(it.message ?: "端末に保存できませんでした") }
+                                        }
+                                    },
+                                ) { Text("端末に保存") }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
+    }
+}
+
+@Composable
+internal fun OfflineRecordsScreen(
+    localStore: LocalGameRecordStore,
+    onBack: () -> Unit,
+    onReview: (ReviewInput) -> Unit,
+) {
+    var records by remember { mutableStateOf<List<LocalGameRecord>?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var readWarning by remember { mutableStateOf<String?>(null) }
+    var deleteTarget by remember { mutableStateOf<LocalGameRecord?>(null) }
+    val scope = rememberCoroutineScope()
+
+    fun reload() {
+        scope.launch {
+            runCatching { localStore.listResult(50) }
+                .onSuccess { result: LocalGameRecordReadResult ->
+                    records = result.records
+                    readWarning = result.corruptLineCount.takeIf { it > 0 }?.let {
+                        if (result.recoveryCompleted) {
+                            "一部のオフライン棋譜を読み込めませんでした（${it}件を隔離しました）"
+                        } else {
+                            "一部のオフライン棋譜を読み込めませんでした（${it}件の復旧待ち）"
+                        }
+                    }
+                    error = null
+                }
+                .onFailure { error = it.message ?: "オフライン棋譜を読み込めませんでした" }
+        }
+    }
+
+    LaunchedEffect(localStore) { reload() }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
+        verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
+    ) {
+        ScreenHeader("オフライン棋譜", onBack)
+        Text("この端末に保存した棋譜です", style = MaterialTheme.typography.bodySmall)
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        readWarning?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        when {
+            records == null -> Text("読み込み中…")
+            records.orEmpty().isEmpty() -> Text("オフライン棋譜はありません")
+            else -> records.orEmpty().forEach { record ->
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("${record.type.displayLabel()} / ${record.result?.userLabel() ?: "研究棋譜"}")
+                        Text("${formatDate(record.createdAtEpochMillis)} / ${record.moves.size}手")
+                        Text(record.canonicalMoves, style = MaterialTheme.typography.bodySmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
                                 onClick = {
                                     onReview(
                                         ReviewInput(
-                                            id = record.matchId,
+                                            id = record.localId,
                                             moves = record.moves,
-                                            title = "オンライン棋譜",
+                                            title = record.type.reviewTitle(),
                                             result = record.result,
                                             finishReason = record.finishReason,
-                                            finishedAtEpochMillis = record.finishedAtEpochMillis,
+                                            finishedAtEpochMillis = record.createdAtEpochMillis,
                                         ),
                                     )
                                 },
                             ) { Text("棋譜を開く") }
+                            OutlinedButton(onClick = { deleteTarget = record }) { Text("削除") }
                         }
                     }
                 }
@@ -592,15 +619,15 @@ internal fun RecordsScreenV2(
     deleteTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text("ローカル棋譜を削除しますか？") },
+            title = { Text("オフライン棋譜を削除しますか？") },
             text = { Text("この操作は取り消せません。") },
             confirmButton = {
-                Button(onClick = {
+                ChanrivaDangerButton(onClick = {
                     deleteTarget = null
                     scope.launch {
                         runCatching { localStore.delete(target.localId) }
-                            .onSuccess { reloadLocal() }
-                            .onFailure { error = it.message ?: "ローカル棋譜を削除できませんでした" }
+                            .onSuccess { reload() }
+                            .onFailure { error = it.message ?: "オフライン棋譜を削除できませんでした" }
                     }
                 }) { Text("削除する") }
             },
@@ -690,11 +717,11 @@ internal fun ReviewScreenV2(
         }
         Slider(value = review.cursor.toFloat(), onValueChange = { review.seek(it.toInt()); revision++ }, valueRange = 0f..review.mainLineLastPly.coerceAtLeast(1).toFloat(), steps = (review.mainLineLastPly - 1).coerceAtLeast(0), enabled = !review.isInVariation)
         if (!review.isInVariation) {
-            Button(onClick = { review.beginVariation(); revision++ }, modifier = Modifier.fillMaxWidth()) { Text("この局面から変化を開始") }
+            OutlinedButton(onClick = { review.beginVariation(); revision++ }, modifier = Modifier.fillMaxWidth()) { Text("この局面から変化を開始") }
         } else {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { review.cancelVariation(); revision++ }, modifier = Modifier.weight(1f)) { Text("変化を破棄") }
-                Button(onClick = {
+                OutlinedButton(onClick = {
                     val completeLine = review.saveVariationAndReturn()
                     revision++
                     if (completeLine != null) scope.launch {
@@ -713,13 +740,13 @@ internal fun ReviewScreenV2(
                 }
             }
         }
-        Button(
+        OutlinedButton(
             onClick = { requested = !running; analysisRun++ },
             enabled = status.nativeAvailable && analysisIssue == null,
             modifier = Modifier.fillMaxWidth(),
         ) { Text(if (running) "解析をキャンセル" else "全合法手を解析") }
         Text(message)
-        saveMessage?.let { Text(it, color = ChanrivaColors.accent) }
+        saveMessage?.let { Text(it) }
         result?.evaluations.orEmpty().forEach { evaluation -> Text("${evaluation.move.column + 1},${evaluation.move.row + 1} ${formatEvaluation(evaluation.score.value)}", style = MaterialTheme.typography.bodySmall) }
         if (researchParticipationRepository != null && researchPositionRepository != null) ResearchReviewPanel(state, researchParticipationRepository, researchPositionRepository)
     }
@@ -729,4 +756,10 @@ private fun LocalRecordType.displayLabel(): String = when (this) {
     LocalRecordType.LOCAL_HUMAN -> "対人"
     LocalRecordType.LOCAL_AI -> "AI"
     LocalRecordType.RESEARCH_LINE -> "研究"
+    LocalRecordType.ONLINE_SAVED -> "オンライン対局"
+}
+
+private fun LocalRecordType.reviewTitle(): String = when (this) {
+    LocalRecordType.ONLINE_SAVED -> "オンライン対局（端末保存）"
+    else -> "オフライン棋譜"
 }

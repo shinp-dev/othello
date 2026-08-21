@@ -45,6 +45,8 @@ import com.example.othello.analysis.edax.EdaxDataManager
 import com.example.othello.analysis.edax.EdaxReleaseConstants
 import com.example.othello.analysis.edax.ImportedAnalysisFile
 import com.example.othello.designsystem.ChanrivaColors
+import com.example.othello.designsystem.ChanrivaNavigationRow
+import com.example.othello.designsystem.ChanrivaScreenHeader
 import com.example.othello.designsystem.ChanrivaSpacing
 import java.time.Instant
 import java.time.ZoneId
@@ -56,25 +58,21 @@ import kotlinx.coroutines.withContext
 
 @Composable
 internal fun SettingsScreen(
-    onBack: () -> Unit,
     onMatchSettings: () -> Unit,
     onAnalysis: () -> Unit,
     onResearch: (() -> Unit)?,
-    onAbout: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
     ) {
-        SettingsHeader("設定", onBack)
-        SettingsNavigationRow("対局時設定", onMatchSettings)
-        SettingsNavigationRow("AI解析設定", onAnalysis)
-        SettingsNavigationRow("研究参加", onResearch)
+        ChanrivaScreenHeader("設定")
+        ChanrivaNavigationRow("対局時設定", onMatchSettings)
+        ChanrivaNavigationRow("AI解析設定", onAnalysis)
+        ChanrivaNavigationRow("研究参加", onResearch)
         if (onResearch == null) {
             Text("研究参加の設定にはログインが必要です", style = MaterialTheme.typography.bodySmall)
         }
-        SettingsNavigationRow("このアプリについて", onAbout)
-        BuildIdentityText()
     }
 }
 
@@ -181,24 +179,6 @@ internal fun MatchSettingsScreen(
         if (audioPreviewError) {
             Text("音を再生できませんでした", color = MaterialTheme.colorScheme.error)
         }
-    }
-}
-
-@Composable
-private fun SettingsNavigationRow(title: String, onClick: (() -> Unit)?) {
-    Column {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clickable(enabled = onClick != null) { onClick?.invoke() }
-                .padding(vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text("›", style = MaterialTheme.typography.titleLarge, color = ChanrivaColors.accent)
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
 
@@ -331,7 +311,7 @@ internal fun AnalysisSettingsScreen(
             enabled = status.nativeAvailable && !busy,
             modifier = Modifier.fillMaxWidth(),
         ) { Text("公式の評価データを自動設定（推奨）") }
-        Button(
+        OutlinedButton(
             onClick = { evaluationPicker.launch(arrayOf("application/octet-stream", "*/*")) },
             enabled = status.nativeAvailable && !busy,
             modifier = Modifier.fillMaxWidth(),
@@ -350,7 +330,7 @@ internal fun AnalysisSettingsScreen(
         ) { Text("評価データを削除") }
 
         AnalysisFileStatus("オープニングブック", status.openingBook, required = false)
-        Button(
+        OutlinedButton(
             onClick = { bookPicker.launch(arrayOf("application/octet-stream", "*/*")) },
             enabled = status.nativeAvailable && !busy,
             modifier = Modifier.fillMaxWidth(),
@@ -366,7 +346,7 @@ internal fun AnalysisSettingsScreen(
             Text(busyMessage)
             Text("処理が完了するまで、この画面を閉じずにお待ちください。", style = MaterialTheme.typography.bodySmall)
         }
-        message?.let { Text(it, color = if (messageIsError) MaterialTheme.colorScheme.error else ChanrivaColors.accent) }
+        message?.let { Text(it, color = if (messageIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface) }
     }
 }
 
@@ -374,18 +354,19 @@ internal fun AnalysisSettingsScreen(
 internal fun AboutScreen(onBack: () -> Unit, onLicenses: () -> Unit) {
     val uriHandler = LocalUriHandler.current
 
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
+        verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
+    ) {
         SettingsHeader("このアプリについて", onBack)
-        Text("ちゃんりば")
+        Text("ちゃんりば", style = MaterialTheme.typography.titleMedium, color = ChanrivaColors.accent)
         Text("ちゃんとリバーシ。軽く一局打っても、その一局がちゃんと残り、振り返りが次につながるリバーシアプリです。")
         Text("対局後レビューの解析エンジンとしてEdaxを使用します。Edax公式・公認アプリではありません。")
-        Button(onClick = onLicenses, modifier = Modifier.fillMaxWidth()) { Text("オープンソースライセンス") }
-        OutlinedButton(
-            onClick = { uriHandler.openUri("https://chanriva.shinp-studio.com/privacy") },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("プライバシーポリシー")
-        }
+        Text("ちゃんりばAndroidアプリ: GNU GPLv3", style = MaterialTheme.typography.bodySmall)
+        ChanrivaNavigationRow("ちゃんりば公式サイト", onClick = { uriHandler.openUri(CHANRIVA_SITE_URL) })
+        ChanrivaNavigationRow("ソースコード（GitHub）", onClick = { uriHandler.openUri(CHANRIVA_SOURCE_URL) })
+        ChanrivaNavigationRow("オープンソースライセンス", onLicenses)
+        BuildIdentityText()
     }
 }
 
@@ -429,14 +410,7 @@ private fun AnalysisFileStatus(label: String, file: ImportedAnalysisFile?, requi
 
 @Composable
 internal fun SettingsHeader(title: String, onBack: () -> Unit, enabled: Boolean = true) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-        OutlinedButton(onClick = onBack, enabled = enabled) { Text("戻る") }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(width = 2.dp, height = 22.dp).background(ChanrivaColors.accent))
-            Spacer(Modifier.size(ChanrivaSpacing.control))
-            Text(title, style = MaterialTheme.typography.titleLarge)
-        }
-    }
+    ChanrivaScreenHeader(title, onBack, enabled)
 }
 
 private fun formatImportDate(epochMillis: Long): String = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
@@ -450,3 +424,5 @@ internal fun formatAnalysisFileSize(sizeBytes: Long): String = when {
 }
 
 private const val EDAX_GUIDE_URL = "https://chanriva.shinp-studio.com/edax"
+private const val CHANRIVA_SITE_URL = "https://chanriva.shinp-studio.com/"
+private const val CHANRIVA_SOURCE_URL = "https://github.com/shinp-dev/othello"
