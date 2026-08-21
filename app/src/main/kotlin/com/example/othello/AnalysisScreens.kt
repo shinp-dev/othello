@@ -48,9 +48,48 @@ internal fun SettingsScreen(
     onAnalysis: () -> Unit,
     onResearch: (() -> Unit)?,
     onAbout: () -> Unit,
+    audioSettings: AudioSettingsStore,
 ) {
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    var timeWarningEnabled by remember { mutableStateOf(audioSettings.timeWarningEnabled) }
+    var focusSoundEnabled by remember { mutableStateOf(audioSettings.focusSoundEnabled) }
+    var focusSoundVolume by remember { mutableStateOf(audioSettings.focusSoundVolume) }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         SettingsHeader("設定", onBack)
+        Text("対局中の音", style = MaterialTheme.typography.titleMedium)
+        SettingSwitchRow(
+            title = "時間警告音",
+            checked = timeWarningEnabled,
+            onCheckedChange = {
+                timeWarningEnabled = it
+                audioSettings.timeWarningEnabled = it
+            },
+        )
+        SettingSwitchRow(
+            title = "集中サウンド（ピンクノイズ）",
+            checked = focusSoundEnabled,
+            onCheckedChange = {
+                focusSoundEnabled = it
+                audioSettings.focusSoundEnabled = it
+            },
+        )
+        Text("集中サウンド音量", style = MaterialTheme.typography.bodyMedium)
+        Slider(
+            value = focusSoundVolume,
+            onValueChange = {
+                focusSoundVolume = it
+                audioSettings.focusSoundVolume = it
+            },
+            enabled = focusSoundEnabled,
+            valueRange = 0f..0.5f,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            "音量 ${kotlin.math.round(focusSoundVolume * 100).toInt()}%（端末の音量設定を使用）",
+            style = MaterialTheme.typography.bodySmall,
+        )
         Button(onClick = onAnalysis, modifier = Modifier.fillMaxWidth()) { Text("解析") }
         OutlinedButton(
             onClick = { onResearch?.invoke() },
@@ -61,6 +100,22 @@ internal fun SettingsScreen(
             Text("研究参加の設定にはログインが必要です", style = MaterialTheme.typography.bodySmall)
         }
         OutlinedButton(onClick = onAbout, modifier = Modifier.fillMaxWidth()) { Text("このアプリについて") }
+    }
+}
+
+@Composable
+private fun SettingSwitchRow(
+    title: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(title)
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 

@@ -47,6 +47,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.othello.auth.UserSession
 import com.example.othello.auth.SignUpResult
 import com.example.othello.analysis.edax.EdaxDataManager
@@ -61,6 +64,7 @@ import com.example.othello.match.LocalMatchMode
 import com.example.othello.match.LocalMatchViewState
 import com.example.othello.match.OnlineMatchController
 import com.example.othello.match.OnlineMatchViewState
+import com.example.othello.match.TimeWarningTracker
 import com.example.othello.matchmaking.MatchmakingStatus
 import com.example.othello.profile.CurrentRatingRepository
 import com.example.othello.records.GameRecord
@@ -105,6 +109,7 @@ private fun OthelloApp(
 ) {
     val context = LocalContext.current
     val application = context.applicationContext as OthelloApplication
+    val audioSettings = remember { AudioSettingsStore(context) }
     val analysisDataManager = remember { EdaxDataManager(context) }
     val analysisEngine = remember { ProductionAnalysisEngine() }
     val localRecordStore = application.localGameRecordStore
@@ -266,6 +271,7 @@ private fun OthelloApp(
                     { destination = AppDestination.RESEARCH_SETTINGS }
                 } else null,
                 onAbout = { destination = AppDestination.ABOUT },
+                audioSettings = audioSettings,
             )
             destination == AppDestination.ANALYSIS_SETTINGS -> AnalysisSettingsScreen(
                 manager = analysisDataManager,
@@ -404,6 +410,29 @@ private fun OnlineMatchScreen(
     onBack: () -> Unit,
 ) {
     val controller = coordinator.controller
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val audioSettings = remember { AudioSettingsStore(context) }
+    val audioController = remember { MatchAudioController(context) }
+    val warningTracker = remember(controller) { TimeWarningTracker() }
+    var warningMatchActive by remember(controller) { mutableStateOf(false) }
+    var isResumed by remember(lifecycleOwner) {
+        mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+    }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> isResumed = true
+                Lifecycle.Event.ON_PAUSE -> isResumed = false
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    DisposableEffect(audioController) {
+        onDispose { audioController.close() }
+    }
     var viewState by remember { mutableStateOf<OnlineMatchViewState>(controller.viewState) }
     DisposableEffect(controller) {
         val closeable = controller.observe { viewState = it }
@@ -414,6 +443,43 @@ private fun OnlineMatchScreen(
             controller.refreshClock()
             delay(250)
         }
+    }
+    val localRemainingMillis = when (viewState.localDisc) {
+        com.example.othello.game.Disc.BLACK -> viewState.blackRemainingMillis
+        com.example.othello.game.Disc.WHITE -> viewState.whiteRemainingMillis
+        com.example.othello.game.Disc.EMPTY -> 0L
+    }
+    LaunchedEffect(
+        controller,
+        viewState.matchState.status,
+        localRemainingMillis,
+        audioSettings.timeWarningEnabled,
+    ) {
+        if (viewState.matchState.status != com.example.othello.match.MatchStatus.PLAYING) {
+            warningTracker.reset(localRemainingMillis)
+            warningMatchActive = false
+            audioController.stopAll()
+            return@LaunchedEffect
+        }
+        if (!warningMatchActive) {
+            warningTracker.reset(localRemainingMillis)
+            warningMatchActive = true
+            return@LaunchedEffect
+        }
+        val warnings = warningTracker.onRemainingChanged(localRemainingMillis)
+        if (audioSettings.timeWarningEnabled) audioController.playTimeWarnings(warnings)
+    }
+    LaunchedEffect(
+        viewState.matchState.status,
+        audioSettings.focusSoundEnabled,
+        audioSettings.focusSoundVolume,
+        isResumed,
+    ) {
+        audioController.setPinkNoisePlaying(
+            playing = viewState.matchState.status == com.example.othello.match.MatchStatus.PLAYING &&
+                audioSettings.focusSoundEnabled && isResumed,
+            volume = audioSettings.focusSoundVolume,
+        )
     }
     var confirmResign by remember { mutableStateOf(false) }
     val diagnostics = if (showDiagnostics) coordinator.diagnostics() else null
