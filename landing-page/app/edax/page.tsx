@@ -37,7 +37,7 @@ export default function EdaxPage() {
 
         <h2>手動インポート</h2>
         <p>
-          手元にある正当なEdax互換の<code>eval.dat</code>を、アプリの解析設定にある「評価データをインポート」から選択することもできます。
+          手元にある正当なEdax互換の<code>eval.dat</code>を、アプリの解析設定にある「手元の eval.dat を選ぶ」から選択することもできます。
         </p>
 
         <h2>配布について</h2>
