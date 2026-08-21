@@ -1,5 +1,6 @@
 package com.example.othello
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
@@ -47,6 +49,8 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 internal fun SettingsScreen(
@@ -230,10 +234,14 @@ internal fun AnalysisSettingsScreen(
     }
     fun downloadOfficialEvaluation() {
         busy = true
-        busyMessage = "公式データをダウンロード・展開・検証中…"
+        busyMessage = "公式データの準備を開始中…"
         message = null
         scope.launch {
-            runCatching { manager.downloadOfficialEvaluationData() }
+            runCatching {
+                manager.downloadOfficialEvaluationData { phase ->
+                    withContext(Dispatchers.Main.immediate) { busyMessage = phase }
+                }
+            }
                 .onSuccess { message = "Edax公式 v4.4 の評価データを設定しました"; messageIsError = false; refresh() }
                 .onFailure { failure ->
                     message = "公式評価データを設定できませんでした。通信状態を確認して、もう一度お試しください。(${failure.message ?: "原因不明"})"
@@ -261,11 +269,13 @@ internal fun AnalysisSettingsScreen(
         uri?.let(::importBook)
     }
 
+    BackHandler(enabled = busy) { }
+
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
     ) {
-        SettingsHeader("解析", onBack)
+        SettingsHeader("解析", onBack, enabled = !busy)
         Text("解析エンジン: Edax ${EdaxReleaseConstants.ENGINE_VERSION}")
         Text("Edax状態: ${if (status.nativeAvailable) "利用可能" else "利用不可"}")
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
@@ -321,7 +331,11 @@ internal fun AnalysisSettingsScreen(
             modifier = Modifier.fillMaxWidth(),
         ) { Text("オープニングブックを削除") }
 
-        if (busy) Text(busyMessage)
+        if (busy) {
+            CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+            Text(busyMessage)
+            Text("処理が完了するまで、この画面を閉じずにお待ちください。", style = MaterialTheme.typography.bodySmall)
+        }
         message?.let { Text(it, color = if (messageIsError) MaterialTheme.colorScheme.error else ChanrivaColors.accent) }
     }
 }
@@ -384,9 +398,9 @@ private fun AnalysisFileStatus(label: String, file: ImportedAnalysisFile?, requi
 }
 
 @Composable
-internal fun SettingsHeader(title: String, onBack: () -> Unit) {
+internal fun SettingsHeader(title: String, onBack: () -> Unit, enabled: Boolean = true) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-        OutlinedButton(onClick = onBack) { Text("戻る") }
+        OutlinedButton(onClick = onBack, enabled = enabled) { Text("戻る") }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(width = 2.dp, height = 22.dp).background(ChanrivaColors.accent))
             Spacer(Modifier.size(ChanrivaSpacing.control))

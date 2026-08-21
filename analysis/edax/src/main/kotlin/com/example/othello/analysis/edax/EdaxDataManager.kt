@@ -85,15 +85,20 @@ class EdaxDataManager(context: Context) {
         import(uri, EVAL_PREFIX, EVAL_MAX_BYTES, "dat", NativeEdax::validateEvaluationData)
 
     /** Downloads only the official v4.4 archive and installs its eval.dat after validation. */
-    suspend fun downloadOfficialEvaluationData(): ImportedAnalysisFile = withContext(Dispatchers.IO) {
+    suspend fun downloadOfficialEvaluationData(
+        onPhase: suspend (String) -> Unit = {},
+    ): ImportedAnalysisFile = withContext(Dispatchers.IO) {
         require(NativeEdax.available) { "Edax native libraryを利用できません" }
         val archive = File.createTempFile(".evaluation-official-", ".7z", storageDirectory)
         var extracted: File? = null
         try {
             val extractedFile = File.createTempFile(".evaluation-official-", ".dat", storageDirectory)
             extracted = extractedFile
+            onPhase("公式データをダウンロード中…")
             OfficialEvalDownloader.download(archive)
+            onPhase("評価データを展開中…")
             EdaxEvalArchiveExtractor.extract(archive, extractedFile, EVAL_MAX_BYTES)
+            onPhase("評価データを検証・保存中…")
             installValidatedFile(
                 source = extractedFile,
                 prefix = EVAL_PREFIX,
