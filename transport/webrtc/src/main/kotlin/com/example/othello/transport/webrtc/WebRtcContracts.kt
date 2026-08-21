@@ -1,15 +1,15 @@
 package com.example.othello.transport.webrtc
 
 import android.content.Context
-import com.example.othello.network.MatchTransport
 import com.example.othello.network.FinishCommand
 import com.example.othello.network.FinishCommandJson
+import com.example.othello.network.MatchTransport
 import com.example.othello.network.MoveCommand
 import com.example.othello.network.MoveCommandJson
-import com.example.othello.network.TransportState
 import com.example.othello.network.TransportDiagnostics
+import com.example.othello.network.TransportState
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withTimeoutOrNull
+import org.webrtc.AddIceObserver
 import org.webrtc.DataChannel
 import org.webrtc.IceCandidate
 import org.webrtc.MediaConstraints
@@ -29,8 +29,24 @@ data class IceServerConfig(val urls: List<String>, val username: String? = null,
 
 data class SessionDescriptionPayload(val type: String, val sdp: String)
 
+data class IceCandidatePayload(
+    val candidate: String,
+    val sdpMid: String?,
+    val sdpMLineIndex: Int,
+)
+
+interface WebRtcSignalingTransport : MatchTransport {
+    suspend fun createOffer(): SessionDescriptionPayload
+    suspend fun createAnswer(): SessionDescriptionPayload
+    suspend fun setRemoteDescription(description: SessionDescriptionPayload)
+    suspend fun addRemoteIceCandidate(candidate: IceCandidatePayload)
+    fun observeLocalIceCandidates(onCandidate: (IceCandidatePayload) -> Unit): AutoCloseable
+    suspend fun awaitDataChannelOpen()
+    fun provideOffererDataChannel()
+}
+
 interface WebRtcTransportFactory {
-    fun create(matchId: String, iceServers: List<IceServerConfig>): MatchTransport
+    fun create(matchId: String, iceServers: List<IceServerConfig>): WebRtcSignalingTransport
 }
 
 object DefaultIceServers {
@@ -47,7 +63,7 @@ class AndroidWebRtcTransport(
     context: Context,
     private val matchId: String,
     iceServers: List<IceServerConfig> = DefaultIceServers.publicStun,
-) : MatchTransport {
+) : WebRtcSignalingTransport {
     private val stateListeners = CopyOnWriteArraySet<(TransportState) -> Unit>()
     private val commandListeners = CopyOnWriteArraySet<(MoveCommand) -> Unit>()
     private val finishListeners = CopyOnWriteArraySet<(FinishCommand) -> Unit>()
@@ -59,7 +75,7 @@ class AndroidWebRtcTransport(
     private var peerConnectionState = "NEW"
     private var dataChannelState = "NEW"
     private val dataChannelOpen = kotlinx.coroutines.CompletableDeferred<Unit>()
-    private val iceGatheringComplete = kotlinx.coroutines.CompletableDeferred<Unit>()
+    private val localIceCandidateListeners = CopyOnWriteArraySet<(IceCandidatePayload) -> Unit>()
     private val closed = AtomicBoolean(false)
 
     init {
@@ -89,11 +105,11 @@ class AndroidWebRtcTransport(
         updateState(TransportState.CONNECTING)
     }
 
-    suspend fun createOffer(): SessionDescriptionPayload = createLocalDescription(SessionDescription.Type.OFFER)
+    override suspend fun createOffer(): SessionDescriptionPayload = createLocalDescription(SessionDescription.Type.OFFER)
 
-    suspend fun createAnswer(): SessionDescriptionPayload = createLocalDescription(SessionDescription.Type.ANSWER)
+    override suspend fun createAnswer(): SessionDescriptionPayload = createLocalDescription(SessionDescription.Type.ANSWER)
 
-    suspend fun setRemoteDescription(description: SessionDescriptionPayload) {
+    override suspend fun setRemoteDescription(description: SessionDescriptionPayload) {
         val type = when (description.type.uppercase()) {
             "OFFER" -> SessionDescription.Type.OFFER
             "ANSWER" -> SessionDescription.Type.ANSWER
@@ -109,9 +125,35 @@ class AndroidWebRtcTransport(
         }
     }
 
-    suspend fun awaitDataChannelOpen() { dataChannelOpen.await() }
+    override suspend fun addRemoteIceCandidate(candidate: IceCandidatePayload) {
+        check(!closed.get()) { "WebRTC transport is closed" }
+        suspendCancellableCoroutine<Unit> { continuation ->
+            peerConnection.addIceCandidate(
+                IceCandidate(candidate.sdpMid, candidate.sdpMLineIndex, candidate.candidate),
+                object : AddIceObserver {
+                    override fun onAddSuccess() {
+                        if (continuation.isActive) continuation.resume(Unit)
+                    }
 
-    fun provideOffererDataChannel() {
+                    override fun onAddFailure(error: String) {
+                        if (continuation.isActive) {
+                            continuation.resumeWithException(IllegalStateException(error))
+                        }
+                    }
+                },
+            )
+        }
+    }
+
+    override fun observeLocalIceCandidates(onCandidate: (IceCandidatePayload) -> Unit): AutoCloseable {
+        if (closed.get()) return AutoCloseable { }
+        localIceCandidateListeners += onCandidate
+        return AutoCloseable { localIceCandidateListeners -= onCandidate }
+    }
+
+    override suspend fun awaitDataChannelOpen() { dataChannelOpen.await() }
+
+    override fun provideOffererDataChannel() {
         check(!closed.get()) { "WebRTC transport is closed" }
         if (dataChannel == null) dataChannel = peerConnection.createDataChannel("othello", DataChannel.Init()).also { attach(it) }
     }
@@ -152,7 +194,7 @@ class AndroidWebRtcTransport(
         updateState(TransportState.CLOSING)
         val cancellation = CancellationException("WebRTC transport closed")
         dataChannelOpen.completeExceptionally(cancellation)
-        iceGatheringComplete.completeExceptionally(cancellation)
+        localIceCandidateListeners.clear()
         dataChannel?.unregisterObserver()
         dataChannel?.close()
         dataChannel?.dispose()
@@ -191,13 +233,8 @@ class AndroidWebRtcTransport(
                 override fun onCreateFailure(error: String) = Unit
             }, description)
         }
-        if (!iceGatheringComplete.isCompleted) {
-            // Signaling is intentionally non-trickle. An unreachable STUN server
-            // must not prevent a usable host-candidate SDP from being published.
-            withTimeoutOrNull(ICE_GATHERING_TIMEOUT_MILLIS) { iceGatheringComplete.await() }
-        }
-        val gathered = peerConnection.localDescription ?: description
-        return SessionDescriptionPayload(gathered.type.canonicalForm(), gathered.description)
+        val localDescription = peerConnection.localDescription ?: description
+        return SessionDescriptionPayload(localDescription.type.canonicalForm(), localDescription.description)
     }
 
     private fun attach(channel: DataChannel) {
@@ -240,12 +277,13 @@ class AndroidWebRtcTransport(
     }
 
     private inner class Observer : PeerConnection.Observer {
-        override fun onIceCandidate(candidate: IceCandidate) = Unit
-        override fun onIceCandidatesRemoved(candidates: Array<IceCandidate>) = Unit
-        override fun onIceGatheringChange(newState: PeerConnection.IceGatheringState) {
+        override fun onIceCandidate(candidate: IceCandidate) {
             if (closed.get()) return
-            if (newState == PeerConnection.IceGatheringState.COMPLETE) iceGatheringComplete.complete(Unit)
+            val payload = IceCandidatePayload(candidate.sdp, candidate.sdpMid, candidate.sdpMLineIndex)
+            localIceCandidateListeners.forEach { it(payload) }
         }
+        override fun onIceCandidatesRemoved(candidates: Array<IceCandidate>) = Unit
+        override fun onIceGatheringChange(newState: PeerConnection.IceGatheringState) = Unit
         override fun onDataChannel(channel: DataChannel) {
             if (closed.get() || dataChannel != null) {
                 channel.close()
@@ -278,7 +316,6 @@ class AndroidWebRtcTransport(
 
     private companion object {
         const val MAX_PAYLOAD_BYTES = 32 * 1024
-        const val ICE_GATHERING_TIMEOUT_MILLIS = 10_000L
         val factoryInitialized = AtomicBoolean(false)
     }
 }

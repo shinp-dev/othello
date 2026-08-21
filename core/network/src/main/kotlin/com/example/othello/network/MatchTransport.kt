@@ -28,7 +28,7 @@ data class MoveCommand(
     val move: Position,
     val commandId: String,
     val previousStateHash: String,
-    val protocolVersion: Int = CURRENT_PROTOCOL_VERSION,
+    val protocolVersion: Int = CURRENT_GAME_PROTOCOL_VERSION,
     val clockSnapshot: ClockSnapshot? = null,
 )
 
@@ -42,11 +42,12 @@ data class FinishCommand(
     val stateHash: String,
     val loserDisc: Disc,
     val reason: FinishSignalReason,
-    val protocolVersion: Int = CURRENT_PROTOCOL_VERSION,
+    val protocolVersion: Int = CURRENT_GAME_PROTOCOL_VERSION,
     val clockSnapshot: ClockSnapshot? = null,
 )
 
-const val CURRENT_PROTOCOL_VERSION: Int = 1
+/** Version of commands exchanged over the established DataChannel. */
+const val CURRENT_GAME_PROTOCOL_VERSION: Int = 1
 
 enum class TransportState { NEW, CONNECTING, OPEN, CLOSING, CLOSED, FAILED }
 
@@ -90,7 +91,7 @@ class FinishCommandValidator(private val matchId: String, private val remoteDisc
     private val commandFingerprints = mutableMapOf<String, String>()
 
     fun validate(state: GameState, command: FinishCommand): FinishCommandValidation {
-        if (command.protocolVersion != CURRENT_PROTOCOL_VERSION) {
+        if (command.protocolVersion != CURRENT_GAME_PROTOCOL_VERSION) {
             return FinishCommandValidation.Rejected(ProtocolViolation.PROTOCOL_VERSION_MISMATCH)
         }
         if (command.matchId != matchId) return FinishCommandValidation.Rejected(ProtocolViolation.MATCH_MISMATCH)
@@ -126,7 +127,7 @@ class MoveCommandValidator(private val matchId: String, private val remoteDisc: 
     private val commandFingerprints = mutableMapOf<String, String>()
 
     fun validate(state: GameState, command: MoveCommand): CommandValidation {
-        if (command.protocolVersion != CURRENT_PROTOCOL_VERSION) {
+        if (command.protocolVersion != CURRENT_GAME_PROTOCOL_VERSION) {
             return CommandValidation.Rejected(ProtocolViolation.PROTOCOL_VERSION_MISMATCH)
         }
         if (command.matchId != matchId) return CommandValidation.Rejected(ProtocolViolation.MATCH_MISMATCH)

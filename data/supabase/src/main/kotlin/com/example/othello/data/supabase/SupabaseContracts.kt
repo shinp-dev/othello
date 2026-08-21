@@ -11,7 +11,6 @@ import com.example.othello.matchmaking.AssignedDisc
 import com.example.othello.matchmaking.EnqueueResult
 import com.example.othello.matchmaking.MatchAssignment
 import com.example.othello.matchmaking.MatchmakingRepository
-import com.example.othello.network.CURRENT_PROTOCOL_VERSION
 import com.example.othello.profile.AccountDeletionRepository
 import com.example.othello.profile.CurrentRatingRepository
 import com.example.othello.records.FinishReason
@@ -53,6 +52,13 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import java.time.Instant
 
 private const val EMAIL_CONFIRMATION_REDIRECT_URL = "https://chanriva.shinp-studio.com/signup-complete"
@@ -343,13 +349,33 @@ internal class SupabaseCurrentRatingRepository(private val client: SupabaseClien
     override suspend fun getCurrentRating(): Int = client.from("ratings").select().decodeSingle<RatingRow>().currentRating
 }
 
-@Serializable
+const val CURRENT_SIGNALING_PROTOCOL_VERSION: Int = 2
+
+sealed interface SignalingPayload {
+    val signalType: String
+
+    data class Offer(val sdp: String) : SignalingPayload {
+        override val signalType: String = "OFFER"
+    }
+
+    data class Answer(val sdp: String) : SignalingPayload {
+        override val signalType: String = "ANSWER"
+    }
+
+    data class IceCandidate(
+        val candidate: String,
+        val sdpMid: String?,
+        val sdpMLineIndex: Int,
+    ) : SignalingPayload {
+        override val signalType: String = "ICE_CANDIDATE"
+    }
+}
+
 data class SignalingEnvelope(
     val matchId: String,
     val senderUserId: String,
-    val type: String,
-    val sdp: String,
-    val protocolVersion: Int = CURRENT_PROTOCOL_VERSION,
+    val payload: SignalingPayload,
+    val protocolVersion: Int = CURRENT_SIGNALING_PROTOCOL_VERSION,
 )
 
 @Serializable
@@ -358,10 +384,16 @@ private data class SignalingRow(
     @SerialName("match_id") val matchId: String,
     @SerialName("sender_id") val senderUserId: String,
     @SerialName("signal_type") val type: String,
-    val sdp: String,
+    val payload: JsonObject,
     @SerialName("protocol_version") val protocolVersion: Int,
 ) {
-    fun toEnvelope() = SignalingEnvelope(matchId, senderUserId, type, sdp, protocolVersion)
+    fun toEnvelope(): SignalingEnvelope? = SignalingContract.decode(
+        matchId = matchId,
+        senderUserId = senderUserId,
+        type = type,
+        payload = payload,
+        protocolVersion = protocolVersion,
+    ).getOrNull()
 }
 
 @Serializable
@@ -369,9 +401,62 @@ private data class SignalingInsert(
     @SerialName("match_id") val matchId: String,
     @SerialName("sender_id") val senderUserId: String,
     @SerialName("signal_type") val type: String,
-    val sdp: String,
+    val payload: JsonObject,
     @SerialName("protocol_version") val protocolVersion: Int,
 )
+
+internal object SignalingContract {
+    fun validate(envelope: SignalingEnvelope) {
+        require(envelope.protocolVersion == CURRENT_SIGNALING_PROTOCOL_VERSION)
+        require(envelope.matchId.isNotBlank() && envelope.senderUserId.isNotBlank())
+        when (val payload = envelope.payload) {
+            is SignalingPayload.Offer -> require(payload.sdp.length in 1..MAX_SDP_LENGTH)
+            is SignalingPayload.Answer -> require(payload.sdp.length in 1..MAX_SDP_LENGTH)
+            is SignalingPayload.IceCandidate -> {
+                require(payload.candidate.length in 1..MAX_CANDIDATE_LENGTH)
+                require(payload.sdpMid == null || payload.sdpMid.length <= MAX_SDP_MID_LENGTH)
+                require(payload.sdpMLineIndex >= 0)
+            }
+        }
+    }
+
+    fun encode(payload: SignalingPayload): JsonObject = when (payload) {
+        is SignalingPayload.Offer -> buildJsonObject { put("sdp", JsonPrimitive(payload.sdp)) }
+        is SignalingPayload.Answer -> buildJsonObject { put("sdp", JsonPrimitive(payload.sdp)) }
+        is SignalingPayload.IceCandidate -> buildJsonObject {
+            put("candidate", JsonPrimitive(payload.candidate))
+            put("sdpMid", payload.sdpMid?.let(::JsonPrimitive) ?: JsonNull)
+            put("sdpMLineIndex", JsonPrimitive(payload.sdpMLineIndex))
+        }
+    }
+
+    fun decode(
+        matchId: String,
+        senderUserId: String,
+        type: String,
+        payload: JsonObject,
+        protocolVersion: Int,
+    ): Result<SignalingEnvelope> = runCatching {
+        val decodedPayload = when (type) {
+            "OFFER" -> SignalingPayload.Offer(requireNotNull(payload.string("sdp")))
+            "ANSWER" -> SignalingPayload.Answer(requireNotNull(payload.string("sdp")))
+            "ICE_CANDIDATE" -> SignalingPayload.IceCandidate(
+                candidate = requireNotNull(payload.string("candidate")),
+                sdpMid = requireNotNull(payload["sdpMid"]) { "sdpMid is missing" }
+                    .let { if (it is JsonNull) null else it.jsonPrimitive.contentOrNull },
+                sdpMLineIndex = requireNotNull(payload["sdpMLineIndex"]?.jsonPrimitive?.intOrNull),
+            )
+            else -> error("unsupported signaling type")
+        }
+        SignalingEnvelope(matchId, senderUserId, decodedPayload, protocolVersion).also(::validate)
+    }
+
+    private fun JsonObject.string(name: String): String? = this[name]?.jsonPrimitive?.contentOrNull
+
+    private const val MAX_SDP_LENGTH = 16_384
+    private const val MAX_CANDIDATE_LENGTH = 4_096
+    private const val MAX_SDP_MID_LENGTH = 256
+}
 
 interface SupabaseSignalingDataSource {
     suspend fun publish(envelope: SignalingEnvelope)
@@ -391,9 +476,15 @@ internal class SupabaseRealtimeSignalingDataSource(
     private val jobs = mutableMapOf<String, Job>()
 
     override suspend fun publish(envelope: SignalingEnvelope) {
-        validate(envelope)
+        SignalingContract.validate(envelope)
         client.from("match_signaling").insert(
-            SignalingInsert(envelope.matchId, envelope.senderUserId, envelope.type, envelope.sdp, envelope.protocolVersion),
+            SignalingInsert(
+                envelope.matchId,
+                envelope.senderUserId,
+                envelope.payload.signalType,
+                SignalingContract.encode(envelope.payload),
+                envelope.protocolVersion,
+            ),
         )
     }
 
@@ -404,13 +495,12 @@ internal class SupabaseRealtimeSignalingDataSource(
     ): AutoCloseable {
         jobs.remove(matchId)?.cancel()
         val job = scope.launch {
-            val delivered = mutableSetOf<String>()
+            val delivered = mutableSetOf<SignalingEnvelope>()
             val deliveryMutex = Mutex()
             suspend fun deliver(envelope: SignalingEnvelope) {
                 if (envelope.matchId != matchId) return
-                try { validate(envelope) } catch (_: IllegalArgumentException) { return }
-                val key = "${envelope.senderUserId}|${envelope.type}|${envelope.sdp}|${envelope.protocolVersion}"
-                if (deliveryMutex.withLock { delivered.add(key) }) onEnvelope(envelope)
+                try { SignalingContract.validate(envelope) } catch (_: IllegalArgumentException) { return }
+                if (deliveryMutex.withLock { delivered.add(envelope) }) onEnvelope(envelope)
             }
             // selectAsFlow can miss a row inserted between its initial SELECT and channel join.
             // Brief catch-up reads close that signaling-only race; moves never use this path.
@@ -425,7 +515,7 @@ internal class SupabaseRealtimeSignalingDataSource(
                         true
                     }
                 }.catch { onError(it) }
-                    .collect { rows -> rows.sortedBy(SignalingRow::id).forEach { deliver(it.toEnvelope()) } }
+                    .collect { rows -> rows.sortedBy(SignalingRow::id).mapNotNull(SignalingRow::toEnvelope).forEach { deliver(it) } }
             }
             try {
                 // Keep a finite signaling-only fallback alive even if the realtime flow joins late
@@ -436,7 +526,7 @@ internal class SupabaseRealtimeSignalingDataSource(
                             filter { eq("match_id", matchId) }
                             order("id", Order.ASCENDING)
                         }.decodeList<SignalingRow>()
-                        rows.forEach { deliver(it.toEnvelope()) }
+                        rows.mapNotNull(SignalingRow::toEnvelope).forEach { deliver(it) }
                     } catch (error: CancellationException) {
                         throw error
                     } catch (_: Exception) {
@@ -459,13 +549,6 @@ internal class SupabaseRealtimeSignalingDataSource(
     override fun close() {
         jobs.values.forEach(Job::cancel)
         jobs.clear()
-    }
-
-    private fun validate(envelope: SignalingEnvelope) {
-        require(envelope.protocolVersion == CURRENT_PROTOCOL_VERSION)
-        require(envelope.matchId.isNotBlank() && envelope.senderUserId.isNotBlank())
-        require(envelope.type == "OFFER" || envelope.type == "ANSWER")
-        require(envelope.sdp.length in 1..16_384)
     }
 }
 
