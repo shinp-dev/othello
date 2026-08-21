@@ -1,5 +1,17 @@
 import java.util.zip.ZipFile
 
+fun chanrivaGitOutput(vararg arguments: String): String? = runCatching {
+    val output = providers.exec {
+        commandLine("git", *arguments)
+    }.standardOutput.asText.get().trim()
+    output.takeIf { it.isNotEmpty() }
+}.getOrNull()
+
+val chanrivaGitShortSha = chanrivaGitOutput("rev-parse", "--short=8", "HEAD")
+val chanrivaGitDirty = chanrivaGitShortSha?.let {
+    chanrivaGitOutput("status", "--porcelain")?.isNotEmpty() == true
+}
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -38,6 +50,8 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+        buildConfigField("String", "CHANRIVA_GIT_SHA", "\"${chanrivaGitShortSha ?: "unknown"}\"")
+        buildConfigField("boolean", "CHANRIVA_GIT_DIRTY", (chanrivaGitDirty == true).toString())
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 

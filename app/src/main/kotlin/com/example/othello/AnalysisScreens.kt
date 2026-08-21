@@ -164,6 +164,7 @@ internal fun SettingsScreen(
             Text("研究参加の設定にはログインが必要です", style = MaterialTheme.typography.bodySmall)
         }
         OutlinedButton(onClick = onAbout, modifier = Modifier.fillMaxWidth()) { Text("このアプリについて") }
+        BuildIdentityText()
     }
 }
 
