@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import android.util.Log
 import com.example.othello.match.TimeWarning
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -16,12 +17,19 @@ import kotlin.math.PI
 import kotlin.math.sin
 import kotlin.random.Random
 
+enum class AudioPreview(val durationMillis: Long) {
+    PINK_NOISE(4_000L),
+    ONE_MINUTE_WARNING(WarningToneGenerator.durationMillis(listOf(TimeWarning.ONE_MINUTE))),
+    THIRTY_SECONDS_WARNING(WarningToneGenerator.durationMillis(listOf(TimeWarning.THIRTY_SECONDS))),
+}
+
 /** Owns all match sound playback and its AudioTrack lifecycle. */
 class MatchAudioController(context: Context) : AutoCloseable {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var pinkNoiseTrack: AudioTrack? = null
     private var warningTrack: AudioTrack? = null
     private var warningJob: Job? = null
+    private var previewTrack: AudioTrack? = null
     private var released = false
 
     @Synchronized
@@ -38,7 +46,10 @@ class MatchAudioController(context: Context) : AutoCloseable {
         runCatching {
             track.setVolume(volume.coerceIn(0f, 1f))
             if (track.playState != AudioTrack.PLAYSTATE_PLAYING) track.play()
-        }.onFailure { releasePinkNoiseTrack() }
+        }.onFailure { error ->
+            Log.e(TAG, "Unable to start pink noise", error)
+            releasePinkNoiseTrack()
+        }
     }
 
     fun playTimeWarnings(warnings: List<TimeWarning>) {
@@ -56,7 +67,7 @@ class MatchAudioController(context: Context) : AutoCloseable {
                 runCatching {
                     track.play()
                     delay(WarningToneGenerator.durationMillis(warnings) + 100L)
-                }
+                }.onFailure { error -> Log.e(TAG, "Unable to play warning tone", error) }
                 synchronized(this@MatchAudioController) {
                     if (warningTrack === track) {
                         releaseWarningTrack()
@@ -65,6 +76,55 @@ class MatchAudioController(context: Context) : AutoCloseable {
                 }
             }
         }
+    }
+
+    /** Starts a short settings preview, replacing any previous preview. */
+    @Synchronized
+    fun startPreview(preview: AudioPreview, volume: Float): Boolean {
+        if (released) return false
+        releasePreviewTrack()
+
+        val samples = when (preview) {
+            AudioPreview.PINK_NOISE -> PinkNoiseGenerator.generate(SAMPLE_RATE, PINK_NOISE_SECONDS)
+            AudioPreview.ONE_MINUTE_WARNING -> WarningToneGenerator.generate(listOf(TimeWarning.ONE_MINUTE))
+            AudioPreview.THIRTY_SECONDS_WARNING -> WarningToneGenerator.generate(listOf(TimeWarning.THIRTY_SECONDS))
+        }
+        val contentType = if (preview == AudioPreview.PINK_NOISE) {
+            AudioAttributes.CONTENT_TYPE_MUSIC
+        } else {
+            AudioAttributes.CONTENT_TYPE_SONIFICATION
+        }
+        val track = createStaticTrack(samples, contentType) ?: return false
+        if (preview == AudioPreview.PINK_NOISE) {
+            val loopConfigured = runCatching {
+                track.setLoopPoints(0, samples.size, -1)
+            }.onFailure { error ->
+                Log.e(TAG, "Unable to configure pink noise loop points", error)
+            }.isSuccess
+            if (!loopConfigured) {
+                track.release()
+                return false
+            }
+            runCatching { track.setVolume(volume.coerceIn(0f, 1f)) }
+                .onFailure { error ->
+                    Log.e(TAG, "Unable to set preview volume", error)
+                }
+        }
+        val started = runCatching { track.play() }
+            .onFailure { error -> Log.e(TAG, "Unable to start audio preview", error) }
+            .isSuccess
+        if (!started) {
+            track.release()
+            return false
+        }
+        previewTrack = track
+        return true
+    }
+
+    @Synchronized
+    fun stopPreview() {
+        if (released) return
+        releasePreviewTrack()
     }
 
     @Synchronized
@@ -84,6 +144,7 @@ class MatchAudioController(context: Context) : AutoCloseable {
         warningJob = null
         releasePinkNoiseTrack()
         releaseWarningTrack()
+        releasePreviewTrack()
         scope.cancel()
     }
 
@@ -97,23 +158,28 @@ class MatchAudioController(context: Context) : AutoCloseable {
     }
 
     private fun createStaticTrack(samples: ShortArray, contentType: Int): AudioTrack? {
-        val format = AudioFormat.Builder()
-            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-            .setSampleRate(SAMPLE_RATE)
-            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-            .build()
-        val track = AudioTrack.Builder()
-            .setAudioAttributes(audioAttributesFor(contentType))
-            .setAudioFormat(format)
-            .setTransferMode(AudioTrack.MODE_STATIC)
-            .setBufferSizeInBytes(samples.size * Short.SIZE_BYTES)
-            .build()
+        val track = runCatching {
+            val format = AudioFormat.Builder()
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setSampleRate(SAMPLE_RATE)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                .build()
+            AudioTrack.Builder()
+                .setAudioAttributes(audioAttributesFor(contentType))
+                .setAudioFormat(format)
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .setBufferSizeInBytes(samples.size * Short.SIZE_BYTES)
+                .build()
+        }.onFailure { error -> Log.e(TAG, "Unable to create AudioTrack", error) }
+            .getOrNull() ?: return null
         if (track.state != AudioTrack.STATE_INITIALIZED) {
+            Log.e(TAG, "AudioTrack is not initialized: state=${track.state}")
             track.release()
             return null
         }
         val written = track.write(samples, 0, samples.size)
         if (written != samples.size) {
+            Log.e(TAG, "AudioTrack write failed: expected=${samples.size}, actual=$written")
             track.release()
             return null
         }
@@ -142,7 +208,16 @@ class MatchAudioController(context: Context) : AutoCloseable {
         warningTrack = null
     }
 
+    private fun releasePreviewTrack() {
+        previewTrack?.let { track ->
+            runCatching { track.stop() }
+            track.release()
+        }
+        previewTrack = null
+    }
+
     private companion object {
+        const val TAG = "MatchAudioController"
         const val SAMPLE_RATE = 44_100
         const val PINK_NOISE_SECONDS = 2
     }
