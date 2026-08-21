@@ -11,7 +11,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.sin
@@ -27,9 +29,11 @@ enum class AudioPreview(val durationMillis: Long) {
 class MatchAudioController(context: Context) : AutoCloseable {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var pinkNoiseTrack: AudioTrack? = null
+    private var pinkNoiseJob: Job? = null
     private var warningTrack: AudioTrack? = null
     private var warningJob: Job? = null
     private var previewTrack: AudioTrack? = null
+    private var previewJob: Job? = null
     private var released = false
 
     @Synchronized
@@ -39,16 +43,42 @@ class MatchAudioController(context: Context) : AutoCloseable {
             releasePinkNoiseTrack()
             return
         }
+        if (pinkNoiseTrack != null && pinkNoiseJob?.isActive == true) {
+            runCatching { pinkNoiseTrack?.setVolume(volume.coerceIn(0f, 1f)) }
+                .onFailure { error -> Log.e(TAG, "Unable to update pink noise volume", error) }
+            return
+        }
         val track = pinkNoiseTrack ?: runCatching { createPinkNoiseTrack() }
             .getOrNull()
             ?.also { pinkNoiseTrack = it }
             ?: return
-        runCatching {
+        val started = runCatching {
             track.setVolume(volume.coerceIn(0f, 1f))
-            if (track.playState != AudioTrack.PLAYSTATE_PLAYING) track.play()
+            track.play()
         }.onFailure { error ->
             Log.e(TAG, "Unable to start pink noise", error)
             releasePinkNoiseTrack()
+        }.isSuccess
+        if (started) {
+            val samples = PinkNoiseGenerator.generate(SAMPLE_RATE, PINK_NOISE_SECONDS)
+            pinkNoiseJob = scope.launch {
+                try {
+                    while (isActive && pinkNoiseTrack === track) {
+                        if (!writeSamples(track, samples)) break
+                    }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    Log.e(TAG, "Unable to stream pink noise", error)
+                } finally {
+                    synchronized(this@MatchAudioController) {
+                        if (pinkNoiseTrack === track) {
+                            pinkNoiseJob = null
+                            releasePinkNoiseTrack()
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -59,19 +89,29 @@ class MatchAudioController(context: Context) : AutoCloseable {
             warningJob?.cancel()
             releaseWarningTrack()
             val samples = WarningToneGenerator.generate(warnings)
-            val track = runCatching {
-                createStaticTrack(samples, AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            }.getOrNull() ?: return
+            val track = createStreamingTrack(AudioAttributes.CONTENT_TYPE_SONIFICATION) ?: return
             warningTrack = track
+            val started = runCatching { track.play() }
+                .onFailure { error -> Log.e(TAG, "Unable to play warning tone", error) }
+                .isSuccess
+            if (!started) {
+                releaseWarningTrack()
+                return
+            }
             warningJob = scope.launch {
-                runCatching {
-                    track.play()
+                try {
+                    writeSamples(track, samples)
                     delay(WarningToneGenerator.durationMillis(warnings) + 100L)
-                }.onFailure { error -> Log.e(TAG, "Unable to play warning tone", error) }
-                synchronized(this@MatchAudioController) {
-                    if (warningTrack === track) {
-                        releaseWarningTrack()
-                        warningJob = null
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    Log.e(TAG, "Unable to stream warning tone", error)
+                } finally {
+                    synchronized(this@MatchAudioController) {
+                        if (warningTrack === track) {
+                            warningJob = null
+                            releaseWarningTrack()
+                        }
                     }
                 }
             }
@@ -94,17 +134,8 @@ class MatchAudioController(context: Context) : AutoCloseable {
         } else {
             AudioAttributes.CONTENT_TYPE_SONIFICATION
         }
-        val track = createStaticTrack(samples, contentType) ?: return false
+        val track = createStreamingTrack(contentType) ?: return false
         if (preview == AudioPreview.PINK_NOISE) {
-            val loopConfigured = runCatching {
-                track.setLoopPoints(0, samples.size, -1)
-            }.onFailure { error ->
-                Log.e(TAG, "Unable to configure pink noise loop points", error)
-            }.isSuccess
-            if (!loopConfigured) {
-                track.release()
-                return false
-            }
             runCatching { track.setVolume(volume.coerceIn(0f, 1f)) }
                 .onFailure { error ->
                     Log.e(TAG, "Unable to set preview volume", error)
@@ -118,6 +149,29 @@ class MatchAudioController(context: Context) : AutoCloseable {
             return false
         }
         previewTrack = track
+        previewJob = scope.launch {
+            try {
+                if (preview == AudioPreview.PINK_NOISE) {
+                    while (isActive && previewTrack === track) {
+                        if (!writeSamples(track, samples)) break
+                    }
+                } else {
+                    writeSamples(track, samples)
+                    delay(preview.durationMillis + 100L)
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.e(TAG, "Unable to stream audio preview", error)
+            } finally {
+                synchronized(this@MatchAudioController) {
+                    if (previewTrack === track) {
+                        previewJob = null
+                        releasePreviewTrack()
+                    }
+                }
+            }
+        }
         return true
     }
 
@@ -149,15 +203,21 @@ class MatchAudioController(context: Context) : AutoCloseable {
     }
 
     private fun createPinkNoiseTrack(): AudioTrack {
-        val samples = PinkNoiseGenerator.generate(SAMPLE_RATE, PINK_NOISE_SECONDS)
-        return requireNotNull(createStaticTrack(samples, AudioAttributes.CONTENT_TYPE_MUSIC)) {
+        return requireNotNull(createStreamingTrack(AudioAttributes.CONTENT_TYPE_MUSIC)) {
             "Unable to create pink noise AudioTrack"
-        }.also { track ->
-            track.setLoopPoints(0, samples.size, -1)
         }
     }
 
-    private fun createStaticTrack(samples: ShortArray, contentType: Int): AudioTrack? {
+    private fun createStreamingTrack(contentType: Int): AudioTrack? {
+        val minBufferSize = AudioTrack.getMinBufferSize(
+            SAMPLE_RATE,
+            AudioFormat.CHANNEL_OUT_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+        )
+        if (minBufferSize <= 0) {
+            Log.e(TAG, "AudioTrack returned invalid min buffer size: $minBufferSize")
+            return null
+        }
         val track = runCatching {
             val format = AudioFormat.Builder()
                 .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
@@ -167,8 +227,8 @@ class MatchAudioController(context: Context) : AutoCloseable {
             AudioTrack.Builder()
                 .setAudioAttributes(audioAttributesFor(contentType))
                 .setAudioFormat(format)
-                .setTransferMode(AudioTrack.MODE_STATIC)
-                .setBufferSizeInBytes(samples.size * Short.SIZE_BYTES)
+                .setTransferMode(AudioTrack.MODE_STREAM)
+                .setBufferSizeInBytes(minBufferSize)
                 .build()
         }.onFailure { error -> Log.e(TAG, "Unable to create AudioTrack", error) }
             .getOrNull() ?: return null
@@ -177,13 +237,27 @@ class MatchAudioController(context: Context) : AutoCloseable {
             track.release()
             return null
         }
-        val written = track.write(samples, 0, samples.size)
-        if (written != samples.size) {
-            Log.e(TAG, "AudioTrack write failed: expected=${samples.size}, actual=$written")
-            track.release()
-            return null
-        }
         return track
+    }
+
+    private suspend fun writeSamples(track: AudioTrack, samples: ShortArray): Boolean {
+        var offset = 0
+        while (offset < samples.size) {
+            val written = synchronized(this) {
+                if (released) return false
+                track.write(samples, offset, samples.size - offset, AudioTrack.WRITE_NON_BLOCKING)
+            }
+            if (written <= 0) {
+                if (written == 0) {
+                    delay(5L)
+                    continue
+                }
+                Log.e(TAG, "AudioTrack write failed: offset=$offset, result=$written")
+                return false
+            }
+            offset += written
+        }
+        return true
     }
 
     private fun audioAttributesFor(contentType: Int): AudioAttributes = AudioAttributes.Builder()
@@ -192,9 +266,10 @@ class MatchAudioController(context: Context) : AutoCloseable {
         .build()
 
     private fun releasePinkNoiseTrack() {
+        pinkNoiseJob?.cancel()
+        pinkNoiseJob = null
         pinkNoiseTrack?.let { track ->
             runCatching { track.pause() }
-            runCatching { track.flush() }
             track.release()
         }
         pinkNoiseTrack = null
@@ -209,6 +284,8 @@ class MatchAudioController(context: Context) : AutoCloseable {
     }
 
     private fun releasePreviewTrack() {
+        previewJob?.cancel()
+        previewJob = null
         previewTrack?.let { track ->
             runCatching { track.stop() }
             track.release()
