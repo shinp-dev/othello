@@ -15,8 +15,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -596,34 +594,22 @@ private fun OnlineOthelloBoard(
 ) {
     val canPlay = viewState.matchState.status == com.example.othello.match.MatchStatus.PLAYING &&
         viewState.game.currentPlayer == viewState.localDisc
-    Box(Modifier.fillMaxWidth().aspectRatio(1f).background(ChanrivaColors.board).padding(3.dp)) {
-        Column(Modifier.fillMaxSize()) {
-            repeat(8) { row ->
-                Row(Modifier.fillMaxWidth().weight(1f, fill = true)) {
-                    repeat(8) { column ->
-                    val position = Position(row, column)
-                    val disc = viewState.game.board[position]
-                    val legal = canPlay && position in viewState.game.legalMoves
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .weight(1f, fill = true)
-                            .border(0.5.dp, ChanrivaColors.boardGrid)
-                            .semantics { contentDescription = position.accessibilityLabel(disc, legal) }
-                            .clickable(enabled = legal) { scope.launch { controller.play(position) } },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (disc != Disc.EMPTY) Box(
-                            Modifier
-                                .size(34.dp)
-                                .background(if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc, CircleShape)
-                                .border(1.dp, ChanrivaColors.discOutline, CircleShape),
-                        )
-                        else if (legal) Box(Modifier.size(10.dp).background(ChanrivaColors.legalMove, CircleShape))
-                    }
-                    }
-                }
-            }
+    CoordinateBoard { position, cellModifier ->
+        val disc = viewState.game.board[position]
+        val legal = canPlay && position in viewState.game.legalMoves
+        Box(
+            modifier = cellModifier
+                .semantics { contentDescription = position.accessibilityLabel(disc, legal) }
+                .clickable(enabled = legal) { scope.launch { controller.play(position) } },
+            contentAlignment = Alignment.Center,
+        ) {
+            if (disc != Disc.EMPTY) Box(
+                Modifier
+                    .size(34.dp)
+                    .background(if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc, CircleShape)
+                    .border(1.dp, ChanrivaColors.discOutline, CircleShape),
+            )
+            else if (legal) Box(Modifier.size(10.dp).background(ChanrivaColors.legalMove, CircleShape))
         }
     }
 }
@@ -866,33 +852,20 @@ private fun LocalOthelloBoard(viewState: LocalMatchViewState, controller: LocalM
     val canPlay = !viewState.aiThinking && viewState.finishReason == null &&
         viewState.game.status is com.example.othello.game.GameStatus.InProgress &&
         (viewState.mode == LocalMatchMode.HUMAN || viewState.game.currentPlayer == viewState.humanDisc)
-    Box(Modifier.fillMaxWidth().aspectRatio(1f).background(ChanrivaColors.board).padding(3.dp)) {
-        Column(Modifier.fillMaxSize()) {
-            repeat(8) { row ->
-                Row(Modifier.fillMaxWidth().weight(1f, fill = true)) {
-                    repeat(8) { column ->
-                    val position = Position(row, column)
-                    val disc = viewState.game.board[position]
-                    val legal = canPlay && position in viewState.game.legalMoves
-                    Box(
-                        Modifier
-                            .fillMaxHeight()
-                            .weight(1f, fill = true)
-                            .border(0.5.dp, ChanrivaColors.boardGrid)
-                            .clickable(enabled = legal) { controller.play(position) },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (disc != Disc.EMPTY) Box(
-                            Modifier
-                                .size(34.dp)
-                                .background(if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc, CircleShape)
-                                .border(1.dp, ChanrivaColors.discOutline, CircleShape),
-                        )
-                        else if (legal) Box(Modifier.size(10.dp).background(ChanrivaColors.legalMove, CircleShape))
-                    }
-                    }
-                }
-            }
+    CoordinateBoard { position, cellModifier ->
+        val disc = viewState.game.board[position]
+        val legal = canPlay && position in viewState.game.legalMoves
+        Box(
+            cellModifier.clickable(enabled = legal) { controller.play(position) },
+            contentAlignment = Alignment.Center,
+        ) {
+            if (disc != Disc.EMPTY) Box(
+                Modifier
+                    .size(34.dp)
+                    .background(if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc, CircleShape)
+                    .border(1.dp, ChanrivaColors.discOutline, CircleShape),
+            )
+            else if (legal) Box(Modifier.size(10.dp).background(ChanrivaColors.legalMove, CircleShape))
         }
     }
 }
@@ -914,40 +887,28 @@ private fun ScoreHeader(game: com.example.othello.game.GameState, status: String
 
 @Composable
 private fun OthelloBoard(viewState: LocalMatchViewState, controller: LocalMatchController) {
-    Box(Modifier.fillMaxWidth().aspectRatio(1f).background(ChanrivaColors.board).padding(3.dp)) {
-        Column(Modifier.fillMaxSize()) {
-            repeat(8) { row ->
-                Row(Modifier.fillMaxWidth().weight(1f, fill = true)) {
-                    repeat(8) { column ->
-                    val position = Position(row, column)
-                    val disc = viewState.game.board[position]
-                    val legal = position in viewState.game.legalMoves
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .weight(1f, fill = true)
-                            .border(0.5.dp, ChanrivaColors.boardGrid)
-                            .semantics { contentDescription = position.accessibilityLabel(disc, legal) }
-                            .clickable(enabled = legal) { controller.play(position) },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (disc != Disc.EMPTY) Box(
-                            Modifier
-                                .size(34.dp)
-                                .background(if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc, CircleShape)
-                                .border(1.dp, ChanrivaColors.discOutline, CircleShape),
-                        )
-                        else if (legal) Box(Modifier.size(10.dp).background(ChanrivaColors.legalMove, CircleShape))
-                    }
-                    }
-                }
-            }
+    CoordinateBoard { position, cellModifier ->
+        val disc = viewState.game.board[position]
+        val legal = position in viewState.game.legalMoves
+        Box(
+            modifier = cellModifier
+                .semantics { contentDescription = position.accessibilityLabel(disc, legal) }
+                .clickable(enabled = legal) { controller.play(position) },
+            contentAlignment = Alignment.Center,
+        ) {
+            if (disc != Disc.EMPTY) Box(
+                Modifier
+                    .size(34.dp)
+                    .background(if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc, CircleShape)
+                    .border(1.dp, ChanrivaColors.discOutline, CircleShape),
+            )
+            else if (legal) Box(Modifier.size(10.dp).background(ChanrivaColors.legalMove, CircleShape))
         }
     }
 }
 
 private fun Position.accessibilityLabel(disc: Disc, legal: Boolean): String {
-    val coordinate = "${('A'.code + column).toChar()}${row + 1}"
+    val coordinate = coordinateLabel()
     val state = when (disc) {
         Disc.BLACK -> "黒石"
         Disc.WHITE -> "白石"

@@ -8,10 +8,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -238,7 +236,7 @@ internal fun ReviewScreen(
         if (analysisResult?.available == true) {
             Text("値は現在手番から見た予測終局石差です。exactは完全読み、bookはインポートしたBook値、その他は深さ依存の推定値です。", style = MaterialTheme.typography.bodySmall)
             visibleEvaluations.forEach { evaluation ->
-                val coordinate = "${('A'.code + evaluation.move.column).toChar()}${evaluation.move.row + 1}"
+                val coordinate = evaluation.move.coordinateLabel()
                 Text("$coordinate  ${formatEvaluation(evaluation.score.value)}", style = MaterialTheme.typography.bodySmall)
             }
         }
@@ -339,7 +337,7 @@ private fun ResearchMoveRow(move: ResearchMove, onExplore: (() -> Unit)?) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (move.kind == ResearchMoveKind.OTHER) "その他" else move.coordinate?.uppercase(Locale.ROOT) ?: "手",
+                if (move.kind == ResearchMoveKind.OTHER) "その他" else move.coordinate?.lowercase(Locale.ROOT) ?: "手",
                 modifier = Modifier.weight(1f),
             )
             Text(formatResearchPercent(move.choiceRate))
@@ -399,49 +397,41 @@ private fun ReviewBoard(
     onMove: (Position) -> Unit,
 ) {
     val bestScore = evaluations.maxOfOrNull { it.value.score.value }
-    Box(Modifier.fillMaxWidth().aspectRatio(1f).background(ChanrivaColors.board).padding(3.dp)) {
-        Column(Modifier.fillMaxSize()) {
-            repeat(8) { row ->
-                Row(Modifier.fillMaxWidth().weight(1f, fill = true)) {
-                    repeat(8) { column ->
-                    val position = Position(row, column)
-                    val disc = state.board[position]
-                    val legal = variationEnabled && position in state.legalMoves
-                    val evaluation = evaluations[position]
-                    val isBestMove = evaluation != null && evaluation.score.value == bestScore
-                    Box(
-                        Modifier
-                            .fillMaxHeight()
-                            .weight(1f, fill = true)
-                            .border(if (isBestMove) 1.dp else 0.5.dp, if (isBestMove) ChanrivaColors.evaluation else ChanrivaColors.boardGrid)
-                            .semantics {
-                                contentDescription = buildString {
-                                    append("${('A'.code + column).toChar()}${row + 1}、")
-                                    append(when (disc) {
-                                        Disc.BLACK -> "黒石"
-                                        Disc.WHITE -> "白石"
-                                        Disc.EMPTY -> if (position in state.legalMoves) "合法手" else "空き"
-                                    })
-                                    evaluation?.let { append("、評価 ${formatEvaluation(it.score.value)}") }
-                                }
-                            }
-                            .clickable(enabled = legal) { onMove(position) },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (disc != Disc.EMPTY) Box(
-                            Modifier
-                                .size(34.dp)
-                                .background(if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc, CircleShape)
-                                .border(1.dp, ChanrivaColors.discOutline, CircleShape),
-                        )
-                        else if (evaluation != null) {
-                            val score = evaluation.score
-                            Text(formatEvaluation(score.value), color = if (isBestMove) ChanrivaColors.evaluation else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
-                        } else if (legal) Box(Modifier.size(10.dp).background(ChanrivaColors.legalMove, CircleShape))
-                    }
+    CoordinateBoard { position, cellModifier ->
+        val disc = state.board[position]
+        val legal = variationEnabled && position in state.legalMoves
+        val evaluation = evaluations[position]
+        val isBestMove = evaluation != null && evaluation.score.value == bestScore
+        Box(
+            cellModifier
+                .border(
+                    if (isBestMove) 1.dp else 0.dp,
+                    if (isBestMove) ChanrivaColors.evaluation else androidx.compose.ui.graphics.Color.Transparent,
+                )
+                .semantics {
+                    contentDescription = buildString {
+                        append("${position.coordinateLabel()}、")
+                        append(when (disc) {
+                            Disc.BLACK -> "黒石"
+                            Disc.WHITE -> "白石"
+                            Disc.EMPTY -> if (position in state.legalMoves) "合法手" else "空き"
+                        })
+                        evaluation?.let { append("、評価 ${formatEvaluation(it.score.value)}") }
                     }
                 }
-            }
+                .clickable(enabled = legal) { onMove(position) },
+            contentAlignment = Alignment.Center,
+        ) {
+            if (disc != Disc.EMPTY) Box(
+                Modifier
+                    .size(34.dp)
+                    .background(if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc, CircleShape)
+                    .border(1.dp, ChanrivaColors.discOutline, CircleShape),
+            )
+            else if (evaluation != null) {
+                val score = evaluation.score
+                Text(formatEvaluation(score.value), color = if (isBestMove) ChanrivaColors.evaluation else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+            } else if (legal) Box(Modifier.size(10.dp).background(ChanrivaColors.legalMove, CircleShape))
         }
     }
 }
@@ -756,7 +746,7 @@ internal fun ReviewScreenV2(
         ) { Text(if (running) "解析をキャンセル" else "全合法手を解析") }
         Text(message)
         saveMessage?.let { Text(it) }
-        result?.evaluations.orEmpty().forEach { evaluation -> Text("${evaluation.move.column + 1},${evaluation.move.row + 1} ${formatEvaluation(evaluation.score.value)}", style = MaterialTheme.typography.bodySmall) }
+        result?.evaluations.orEmpty().forEach { evaluation -> Text("${evaluation.move.coordinateLabel()} ${formatEvaluation(evaluation.score.value)}", style = MaterialTheme.typography.bodySmall) }
         if (researchParticipationRepository != null && researchPositionRepository != null) ResearchReviewPanel(state, researchParticipationRepository, researchPositionRepository)
     }
 }
