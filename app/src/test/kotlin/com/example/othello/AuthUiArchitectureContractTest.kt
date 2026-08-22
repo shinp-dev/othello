@@ -74,8 +74,19 @@ class AuthUiArchitectureContractTest {
         assertTrue("onLogout" in accountScreen)
         assertTrue("ログアウト" in accountScreen)
         assertTrue("レート" in accountScreen)
-        assertTrue("昨日" in accountScreen)
-        assertTrue("端末内最高" in accountScreen)
+        assertFalse("\"昨日\"" in accountScreen)
+        assertTrue("前日順位" in accountScreen)
+        assertTrue("※日本時間の前日終了時点のレートをもとに算出" in accountScreen)
+        assertTrue("この端末で確認した最高の前日順位" in accountScreen)
+        assertTrue("※この画面を開いて確認した前日順位のみ記録されます" in accountScreen)
+        assertTrue("recordIfBetter" in accountScreen)
+        assertFalse("recordIfBetter" in mainActivity)
+        val otherAppSources = File("src/main/kotlin/com/example/othello")
+            .walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .filterNot { it.name in setOf("AccountScreen.kt", "RatingAchievementStore.kt") }
+            .joinToString("\n") { it.readText() }
+        assertFalse("recordIfBetter(" in otherAppSources)
         assertFalse("ログインが必要" in topLevelScreens)
         assertFalse("ログインが必要" in analysisScreens)
         assertFalse("ログインするとオンライン棋譜" in betaScreens)

@@ -79,7 +79,7 @@ internal fun AccountScreen(
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact)) {
-            Text("昨日", style = MaterialTheme.typography.titleMedium)
+            Text("前日順位", style = MaterialTheme.typography.titleMedium)
             when {
                 loading -> Text("取得中…", style = MaterialTheme.typography.bodySmall)
                 ratingSummary?.yesterdayRanking != null -> Text(
@@ -87,14 +87,15 @@ internal fun AccountScreen(
                 )
                 else -> Text("順位データはまだありません", style = MaterialTheme.typography.bodySmall)
             }
+            Text("※日本時間の前日終了時点のレートをもとに算出", style = MaterialTheme.typography.bodySmall)
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact)) {
-            Text("端末内最高", style = MaterialTheme.typography.titleMedium)
+            Text("この端末で確認した最高の前日順位", style = MaterialTheme.typography.titleMedium)
             localBest?.let { best ->
                 Text("上位 ${formatTopPercentile(best.topPercentile)}　${formatAchievementDate(best.achievedDate)}")
             } ?: Text("まだ記録がありません", style = MaterialTheme.typography.bodySmall)
-            Text("この記録はこの端末にのみ保存されます", style = MaterialTheme.typography.bodySmall)
+            Text("※この画面を開いて確認した前日順位のみ記録されます", style = MaterialTheme.typography.bodySmall)
         }
 
         ChanrivaNavigationRow("アカウント削除", onAccountDeletion)
