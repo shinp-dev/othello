@@ -14,13 +14,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
@@ -85,7 +88,15 @@ class MainActivity : ComponentActivity() {
         val launchOptions = debugLaunchOptions(intent)
         setContent {
             OthelloTheme {
-                OthelloApp(launchOptions.autoPlay, launchOptions.timeControlMillis, launchOptions.showDiagnostics)
+                Box(Modifier.fillMaxSize()) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .windowInsetsTopHeight(WindowInsets.statusBars)
+                            .background(MaterialTheme.colorScheme.background),
+                    )
+                    OthelloApp(launchOptions.autoPlay, launchOptions.timeControlMillis, launchOptions.showDiagnostics)
+                }
             }
         }
     }
