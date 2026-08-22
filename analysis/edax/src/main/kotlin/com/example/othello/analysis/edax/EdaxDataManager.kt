@@ -5,6 +5,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import com.example.othello.analysis.api.AnalysisAsset
 import com.example.othello.analysis.api.AnalysisSettings
+import com.example.othello.analysis.api.AiMoveSettings
 import com.example.othello.analysis.api.BookSource
 import com.example.othello.analysis.api.EvaluationDataSource
 import java.io.FileInputStream
@@ -61,6 +62,20 @@ class EdaxDataManager(context: Context) {
         val current = commonDataStatus()
         return AnalysisSettings(
             level = level,
+            evaluationData = current.evaluationData?.let {
+                EvaluationDataSource.Imported(AnalysisAsset(it.appPrivatePath, it.sha256))
+            } ?: EvaluationDataSource.None,
+            bookSource = current.openingBook?.let {
+                BookSource.ImportedBook(AnalysisAsset(it.appPrivatePath, it.sha256))
+            } ?: BookSource.None,
+        )
+    }
+
+    fun aiMoveSettings(settings: AiMatchSettings): AiMoveSettings {
+        val current = commonDataStatus()
+        return AiMoveSettings(
+            level = settings.level,
+            moveTimeMs = settings.moveTimeMs,
             evaluationData = current.evaluationData?.let {
                 EvaluationDataSource.Imported(AnalysisAsset(it.appPrivatePath, it.sha256))
             } ?: EvaluationDataSource.None,

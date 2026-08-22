@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.othello.analysis.api.AnalysisAsset
 import com.example.othello.analysis.api.AnalysisSettings
+import com.example.othello.analysis.api.AiMoveSettings
 import com.example.othello.analysis.api.BookSource
 import com.example.othello.analysis.api.EvaluationDataSource
 import com.example.othello.analysis.api.EvaluationKind
@@ -53,6 +54,32 @@ class EdaxNativeInstrumentationTest {
         assertEquals(position.legalMoves, first.evaluations.map { it.move }.toSet())
         assertTrue(first.evaluations.all { it.score.kind == EvaluationKind.EXACT })
         assertEquals(first, second)
+    }
+
+    @Test
+    fun dedicatedAiRootSearchReturnsALegalMoveWithoutBook() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val evaluation = File(context.cacheDir, "synthetic-ai-eval.dat")
+        val book = File(context.cacheDir, "synthetic-ai-empty-book.dat")
+        writeSyntheticEvaluationData(evaluation)
+        writeSyntheticEmptyBook(book)
+        val position = deterministicEndgame(4)
+        val result = ProductionAiMoveEngine().chooseBestMove(
+            position,
+            AiMoveSettings(
+                level = 8,
+                moveTimeMs = 500,
+                evaluationData = EvaluationDataSource.Imported(
+                    AnalysisAsset(evaluation.absolutePath, "synthetic-ai-zero-v1"),
+                ),
+                bookSource = BookSource.ImportedBook(
+                    AnalysisAsset(book.absolutePath, "synthetic-ai-empty-book-v1"),
+                ),
+            ),
+        )
+
+        assertTrue(result.available)
+        assertTrue(result.move in position.legalMoves)
     }
 
     @Test

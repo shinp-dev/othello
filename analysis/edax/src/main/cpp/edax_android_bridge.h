@@ -38,6 +38,13 @@ typedef struct EdaxAndroidResult {
     EdaxAndroidMove moves[33];
 } EdaxAndroidResult;
 
+typedef struct EdaxAndroidBestMoveResult {
+    int status;
+    int square;
+    int from_book;
+    char message[256];
+} EdaxAndroidBestMoveResult;
+
 int edax_android_validate_eval(const char *path, char *message, size_t message_size);
 int edax_android_validate_book(const char *path, char *message, size_t message_size);
 int edax_android_analyze(
@@ -49,6 +56,17 @@ int edax_android_analyze(
     const char *book_path,
     int64_t request_id,
     EdaxAndroidResult *result
+);
+int edax_android_choose_best_move(
+    uint64_t player,
+    uint64_t opponent,
+    int side,
+    int level,
+    int move_time_ms,
+    const char *eval_path,
+    const char *book_path,
+    int64_t request_id,
+    EdaxAndroidBestMoveResult *result
 );
 void edax_android_cancel(int64_t request_id);
 const char *edax_android_version(void);

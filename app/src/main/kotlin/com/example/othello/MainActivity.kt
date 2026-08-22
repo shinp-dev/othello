@@ -57,6 +57,7 @@ import com.example.othello.auth.UserSession
 import com.example.othello.auth.SignUpResult
 import com.example.othello.analysis.edax.EdaxDataManager
 import com.example.othello.analysis.edax.EdaxSettingsStore
+import com.example.othello.analysis.edax.ProductionAiMoveEngine
 import com.example.othello.analysis.edax.ProductionAnalysisEngine
 import com.example.othello.designsystem.OthelloTheme
 import com.example.othello.designsystem.ChanrivaColors
@@ -108,6 +109,7 @@ private fun OthelloApp(
     val analysisDataManager = remember { EdaxDataManager(context) }
     val edaxSettings = remember { EdaxSettingsStore(context) }
     val analysisEngine = remember { ProductionAnalysisEngine() }
+    val aiMoveEngine = remember { ProductionAiMoveEngine() }
     val localRecordStore = application.localGameRecordStore
     val localRecordPersistence = application.localGameRecordPersistence.coordinator
     val localRecordSaveStates by localRecordPersistence.saveStates.collectAsState()
@@ -227,7 +229,7 @@ private fun OthelloApp(
                         humanDisc = localHumanDisc,
                         dataManager = analysisDataManager,
                         settingsStore = edaxSettings,
-                        engine = analysisEngine,
+                        engine = aiMoveEngine,
                         persistence = localRecordPersistence,
                         onBack = { localMatch = false; destination = AppDestination.PLAY },
                     )
@@ -828,7 +830,7 @@ private fun LocalMatchScreen(
     humanDisc: Disc,
     dataManager: EdaxDataManager,
     settingsStore: EdaxSettingsStore,
-    engine: ProductionAnalysisEngine,
+    engine: ProductionAiMoveEngine,
     persistence: LocalGameRecordPersistenceCoordinator,
     onBack: () -> Unit,
 ) {
@@ -850,9 +852,9 @@ private fun LocalMatchScreen(
             !viewState.aiThinking && viewState.completedRecord == null && viewState.game.status is com.example.othello.game.GameStatus.InProgress
         ) {
             runCatching {
-                aiTurnController.play(dataManager.analysisSettings(settingsStore.aiMatchSettings().level))
+                aiTurnController.play(dataManager.aiMoveSettings(settingsStore.aiMatchSettings()))
             }
-                .onFailure { if (it !is CancellationException) saveError = it.message ?: "AI analysis failed" }
+                .onFailure { if (it !is CancellationException) saveError = it.message ?: "AI move failed" }
         }
     }
     DisposableEffect(engine) {

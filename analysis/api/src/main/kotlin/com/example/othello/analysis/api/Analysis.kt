@@ -20,7 +20,7 @@ sealed interface BookSource {
     data class ImportedBook(val asset: AnalysisAsset) : BookSource
 }
 
-/** Edax game level. This is deliberately the only search-strength control exposed by the app. */
+/** Review-analysis settings for evaluating every legal candidate. */
 data class AnalysisSettings(
     val level: Int = 8,
     val evaluationData: EvaluationDataSource = EvaluationDataSource.None,
@@ -52,6 +52,39 @@ data class AnalysisResult(
     val available: Boolean = true,
     val message: String? = null,
 )
+
+data class AiMoveSettings(
+    val level: Int = DEFAULT_LEVEL,
+    val moveTimeMs: Int = DEFAULT_MOVE_TIME_MS,
+    val evaluationData: EvaluationDataSource = EvaluationDataSource.None,
+    val bookSource: BookSource = BookSource.None,
+) {
+    init {
+        require(level in MIN_LEVEL..MAX_LEVEL) { "AI match level must be in 1..8" }
+        require(moveTimeMs in MIN_MOVE_TIME_MS..MAX_MOVE_TIME_MS) { "AI move time is out of range" }
+    }
+
+    companion object {
+        const val DEFAULT_LEVEL = 1
+        const val MIN_LEVEL = 1
+        const val MAX_LEVEL = 8
+        const val DEFAULT_MOVE_TIME_MS = 2_000
+        const val MIN_MOVE_TIME_MS = 500
+        const val MAX_MOVE_TIME_MS = 10_000
+    }
+}
+
+data class AiMoveResult(
+    val move: Position?,
+    val available: Boolean = true,
+    val message: String? = null,
+)
+
+/** Chooses one move for a live AI turn. This is intentionally separate from review analysis. */
+interface AiMoveEngine {
+    suspend fun chooseBestMove(position: GameState, settings: AiMoveSettings): AiMoveResult
+    fun cancel() = Unit
+}
 
 interface AnalysisEngine {
     suspend fun analyze(position: ReviewPosition, settings: AnalysisSettings): AnalysisResult

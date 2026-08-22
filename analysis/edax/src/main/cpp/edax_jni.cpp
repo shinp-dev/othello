@@ -99,6 +99,48 @@ Java_com_example_othello_analysis_edax_NativeEdax_nativeAnalyze(
     return encoded;
 }
 
+extern "C" JNIEXPORT jint JNICALL
+Java_com_example_othello_analysis_edax_NativeEdax_nativeChooseBestMove(
+    JNIEnv *env,
+    jobject,
+    jlong player,
+    jlong opponent,
+    jint side,
+    jint level,
+    jint move_time_ms,
+    jstring eval_path,
+    jstring book_path,
+    jlong request_id
+) {
+    UtfChars eval_chars(env, eval_path);
+    UtfChars book_chars(env, book_path);
+    if (eval_chars.get() == nullptr) {
+        jclass exception = env->FindClass("java/lang/IllegalArgumentException");
+        env->ThrowNew(exception, "Evaluation data path is required");
+        return -1;
+    }
+
+    EdaxAndroidBestMoveResult result = {};
+    int status = edax_android_choose_best_move(
+        static_cast<uint64_t>(player),
+        static_cast<uint64_t>(opponent),
+        side,
+        level,
+        move_time_ms,
+        eval_chars.get(),
+        book_chars.get(),
+        request_id,
+        &result
+    );
+    if (status == EDAX_ANDROID_CANCELLED) return -1;
+    if (status != EDAX_ANDROID_OK) {
+        jclass exception = env->FindClass("java/lang/IllegalStateException");
+        env->ThrowNew(exception, result.message[0] == '\0' ? "Edax AI move failed" : result.message);
+        return -1;
+    }
+    return result.square;
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_com_example_othello_analysis_edax_NativeEdax_nativeCancel(JNIEnv *, jobject, jlong request_id) {
     edax_android_cancel(request_id);

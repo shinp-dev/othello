@@ -24,6 +24,10 @@
 #define EDAX_BOOK_HEADER_BYTES 42LL
 #define EDAX_BOOK_MIN_POSITION_BYTES 42LL
 #define EDAX_BOOK_MAX_BYTES (256LL * 1024LL * 1024LL)
+#define EDAX_AI_MIN_LEVEL 1
+#define EDAX_AI_MAX_LEVEL 8
+#define EDAX_AI_MIN_MOVE_TIME_MS 500
+#define EDAX_AI_MAX_MOVE_TIME_MS 10000
 
 static pthread_mutex_t engine_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t active_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -356,6 +360,157 @@ int edax_android_analyze(
         result->count++;
     }
 
+    if (result->status == EDAX_ANDROID_OK) set_message(result->message, sizeof result->message, "");
+    fatal_jump = NULL;
+    pthread_mutex_unlock(&engine_mutex);
+    return result->status;
+}
+
+static bool select_best_legal_book_move(
+    const Board *root,
+    uint64_t legal,
+    int *best_square
+) {
+    MoveList book_moves;
+    if (!book_loaded || !book_get_moves(&loaded_book, root, &book_moves)) return false;
+
+    int square;
+    int best_score = -SCORE_INF;
+    bool found = false;
+    foreach_bit(square, legal) {
+        Move *book_move;
+        foreach_move(book_move, &book_moves) {
+            if (book_move->x == square) {
+                if (!found || book_move->score > best_score) {
+                    *best_square = square;
+                    best_score = book_move->score;
+                    found = true;
+                }
+                break;
+            }
+        }
+    }
+    return found;
+}
+
+int edax_android_choose_best_move(
+    uint64_t player,
+    uint64_t opponent,
+    int side,
+    int level,
+    int move_time_ms,
+    const char *eval_path,
+    const char *book_path,
+    int64_t request_id,
+    EdaxAndroidBestMoveResult *result
+) {
+    if (result == NULL) return EDAX_ANDROID_INVALID_ARGUMENT;
+    memset(result, 0, sizeof *result);
+    result->square = NOMOVE;
+    if ((player & opponent) != 0 || (player | opponent) == 0 ||
+        (side != BLACK && side != WHITE) ||
+        level < EDAX_AI_MIN_LEVEL || level > EDAX_AI_MAX_LEVEL ||
+        move_time_ms < EDAX_AI_MIN_MOVE_TIME_MS || move_time_ms > EDAX_AI_MAX_MOVE_TIME_MS) {
+        result->status = EDAX_ANDROID_INVALID_ARGUMENT;
+        set_message(result->message, sizeof result->message, "Invalid board, side, AI level, or move time");
+        return result->status;
+    }
+
+    Search * volatile search = NULL;
+    volatile bool search_initialized = false;
+    pthread_mutex_lock(&engine_mutex);
+    if (is_cancelled(request_id)) {
+        result->status = EDAX_ANDROID_CANCELLED;
+        set_message(result->message, sizeof result->message, "AI move cancelled");
+        pthread_mutex_unlock(&engine_mutex);
+        return result->status;
+    }
+
+    jmp_buf jump;
+    fatal_jump = &jump;
+    if (setjmp(jump) != 0) {
+        result->status = EDAX_ANDROID_INTERNAL_ERROR;
+        set_message(result->message, sizeof result->message, fatal_message);
+        if (search != NULL) {
+            clear_active_search((Search *) search);
+            if (search_initialized) search_free((Search *) search);
+            free((Search *) search);
+        }
+        fatal_jump = NULL;
+        pthread_mutex_unlock(&engine_mutex);
+        return result->status;
+    }
+
+    initialize_globals();
+    int status = ensure_eval(eval_path, result->message, sizeof result->message);
+    if (status == EDAX_ANDROID_OK) status = ensure_book(book_path, result->message, sizeof result->message);
+    if (status != EDAX_ANDROID_OK) {
+        result->status = status;
+        goto cleanup;
+    }
+
+    Board root = {player, opponent};
+    uint64_t legal = board_get_moves(&root);
+    if (legal == 0) {
+        result->status = EDAX_ANDROID_INVALID_ARGUMENT;
+        set_message(result->message, sizeof result->message, "AI position has no legal move");
+        goto cleanup;
+    }
+
+    int book_square = NOMOVE;
+    /* Preserve the former Kotlin max-score choice for legal book moves. */
+    if (select_best_legal_book_move(&root, legal, &book_square)) {
+        if (is_cancelled(request_id)) {
+            result->status = EDAX_ANDROID_CANCELLED;
+            set_message(result->message, sizeof result->message, "AI move cancelled");
+        } else {
+            result->square = book_square;
+            result->from_book = 1;
+        }
+        goto cleanup;
+    }
+
+    search = (Search *) calloc(1, sizeof(Search));
+    if (search == NULL) {
+        result->status = EDAX_ANDROID_INTERNAL_ERROR;
+        set_message(result->message, sizeof result->message, "Cannot allocate Edax AI search");
+        goto cleanup;
+    }
+    search_init((Search *) search);
+    search_initialized = true;
+    search_set_board((Search *) search, &root, side);
+    search_set_level((Search *) search, level, ((Search *) search)->n_empties);
+    search_set_move_time((Search *) search, move_time_ms);
+    set_active_search((Search *) search, request_id);
+    if (is_cancelled(request_id)) {
+        result->status = EDAX_ANDROID_CANCELLED;
+        set_message(result->message, sizeof result->message, "AI move cancelled");
+        goto cleanup;
+    }
+
+    search_run((Search *) search);
+    clear_active_search((Search *) search);
+    /* STOP_TIMEOUT is Edax's normal time-management result; only an explicit stop cancels. */
+    if (is_cancelled(request_id) || ((Search *) search)->stop == STOP_ON_DEMAND) {
+        result->status = EDAX_ANDROID_CANCELLED;
+        set_message(result->message, sizeof result->message, "AI move cancelled");
+        goto cleanup;
+    }
+
+    int square = ((Search *) search)->result->move;
+    if (square < A1 || square > H8 || (legal & (UINT64_C(1) << square)) == 0) {
+        result->status = EDAX_ANDROID_INTERNAL_ERROR;
+        set_message(result->message, sizeof result->message, "Edax returned no legal AI move");
+        goto cleanup;
+    }
+    result->square = square;
+
+cleanup:
+    if (search != NULL) {
+        clear_active_search((Search *) search);
+        if (search_initialized) search_free((Search *) search);
+        free((Search *) search);
+    }
     if (result->status == EDAX_ANDROID_OK) set_message(result->message, sizeof result->message, "");
     fatal_jump = NULL;
     pthread_mutex_unlock(&engine_mutex);

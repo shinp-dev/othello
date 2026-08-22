@@ -1,17 +1,16 @@
 package com.example.othello
 
-import com.example.othello.analysis.api.AnalysisEngine
-import com.example.othello.analysis.api.AnalysisSettings
-import com.example.othello.analysis.api.ReviewPosition
+import com.example.othello.analysis.api.AiMoveEngine
+import com.example.othello.analysis.api.AiMoveSettings
 import com.example.othello.match.LocalMatchController
 import kotlinx.coroutines.CancellationException
 
-/** App-layer adapter that reuses the configured Edax analysis for a local AI turn. */
+/** App-layer adapter for the dedicated, whole-turn AI move search. */
 class LocalAiTurnController(
     private val match: LocalMatchController,
-    private val engine: AnalysisEngine,
+    private val engine: AiMoveEngine,
 ) {
-    suspend fun play(settings: AnalysisSettings): Boolean {
+    suspend fun play(settings: AiMoveSettings): Boolean {
         if (match.viewState.mode != com.example.othello.match.LocalMatchMode.AI ||
             match.viewState.game.currentPlayer != match.viewState.aiDisc ||
             match.viewState.completedRecord != null ||
@@ -22,16 +21,12 @@ class LocalAiTurnController(
         }
         match.setAiThinking(true)
         return try {
-            val result = engine.analyze(ReviewPosition(match.viewState.game), settings)
+            val result = engine.chooseBestMove(match.viewState.game, settings)
             if (!result.available) {
-                match.showError(result.message ?: "Edax analysis is unavailable")
+                match.showError(result.message ?: "Edax AI move is unavailable")
                 false
             } else {
-                val move = result.evaluations
-                    .asSequence()
-                    .filter { it.move in match.viewState.game.legalMoves }
-                    .maxByOrNull { it.score.value }
-                    ?.move
+                val move = result.move?.takeIf { it in match.viewState.game.legalMoves }
                 if (move == null) {
                     match.showError("Edax returned no legal move")
                     false
@@ -41,7 +36,7 @@ class LocalAiTurnController(
             match.setAiThinking(false)
             throw cancelled
         } catch (failure: Throwable) {
-            match.showError(failure.message ?: "AI analysis failed")
+            match.showError(failure.message ?: "AI move failed")
             false
         } finally {
             if (match.viewState.aiThinking) match.setAiThinking(false)

@@ -46,7 +46,22 @@ internal interface EdaxGateway {
     fun cancel(requestId: Long)
 }
 
-internal object NativeEdax : EdaxGateway {
+internal interface AiMoveGateway {
+    val available: Boolean
+    fun chooseBestMove(
+        player: Long,
+        opponent: Long,
+        side: Int,
+        level: Int,
+        moveTimeMs: Int,
+        evaluationDataPath: String,
+        bookPath: String?,
+        requestId: Long,
+    ): Int
+    fun cancel(requestId: Long)
+}
+
+internal object NativeEdax : EdaxGateway, AiMoveGateway {
     private val loadResult = runCatching { System.loadLibrary("edax_jni") }
 
     override val available: Boolean get() = loadResult.isSuccess
@@ -85,6 +100,26 @@ internal object NativeEdax : EdaxGateway {
         }
     }
 
+    override fun chooseBestMove(
+        player: Long,
+        opponent: Long,
+        side: Int,
+        level: Int,
+        moveTimeMs: Int,
+        evaluationDataPath: String,
+        bookPath: String?,
+        requestId: Long,
+    ): Int = nativeChooseBestMove(
+        player,
+        opponent,
+        side,
+        level,
+        moveTimeMs,
+        evaluationDataPath,
+        bookPath,
+        requestId,
+    )
+
     override fun cancel(requestId: Long) {
         if (available) nativeCancel(requestId)
     }
@@ -101,6 +136,16 @@ internal object NativeEdax : EdaxGateway {
         bookPath: String?,
         requestId: Long,
     ): IntArray
+    private external fun nativeChooseBestMove(
+        player: Long,
+        opponent: Long,
+        side: Int,
+        level: Int,
+        moveTimeMs: Int,
+        evaluationDataPath: String,
+        bookPath: String?,
+        requestId: Long,
+    ): Int
     private external fun nativeCancel(requestId: Long)
 
     private const val NATIVE_FIELDS = 5
@@ -114,7 +159,6 @@ class ProductionAnalysisEngine private constructor(
     constructor() : this(NativeEdax, { File(it).isFile })
     internal constructor(gateway: EdaxGateway) : this(gateway, { true })
 
-    private val requestSequence = AtomicLong()
     private val activeRequest = AtomicLong(NO_REQUEST)
     private val cacheLock = Any()
     private val cache = object : LinkedHashMap<CacheKey, AnalysisResult>(CACHE_CAPACITY, 0.75f, true) {
@@ -145,13 +189,13 @@ class ProductionAnalysisEngine private constructor(
         )
         synchronized(cacheLock) { cache[key] }?.let { return it }
 
-        val requestId = requestSequence.incrementAndGet()
+        val requestId = EdaxExecution.requestSequence.incrementAndGet()
         activeRequest.getAndSet(requestId).takeIf { it != NO_REQUEST }?.let(gateway::cancel)
         return try {
             val (player, opponent) = state.toEdaxBoard()
             val nativeMoves = suspendCancellableCoroutine { continuation ->
                 continuation.invokeOnCancellation { gateway.cancel(requestId) }
-                ANALYSIS_EXECUTOR.execute {
+                EdaxExecution.executor.execute {
                     runCatching {
                         gateway.analyze(
                         player = player,
@@ -214,18 +258,22 @@ class ProductionAnalysisEngine private constructor(
     private companion object {
         const val CACHE_CAPACITY = 32
         const val NO_REQUEST = -1L
-        val ANALYSIS_EXECUTOR = Executors.newSingleThreadExecutor { runnable ->
-            Thread(runnable, "EdaxAnalysis").apply { isDaemon = true }
-        }
     }
 }
 
-private fun com.example.othello.game.GameState.toEdaxBoard(): Pair<Long, Long> {
+internal object EdaxExecution {
+    val requestSequence = AtomicLong()
+    val executor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "EdaxEngine").apply { isDaemon = true }
+    }
+}
+
+internal fun com.example.othello.game.GameState.toEdaxBoard(): Pair<Long, Long> {
     fun bits(disc: Disc): Long = board.positionsOf(disc).fold(0L) { value, position -> value or (1L shl position.index()) }
     return bits(currentPlayer) to bits(currentPlayer.opponent())
 }
 
-private fun Disc.toEdaxSide(): Int = when (this) {
+internal fun Disc.toEdaxSide(): Int = when (this) {
     Disc.BLACK -> 0
     Disc.WHITE -> 1
     Disc.EMPTY -> error("Empty cannot be the side to move")
