@@ -7,6 +7,7 @@ interface Env {
   DB: D1Database;
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
+  ANDROID_MIN_VERSION_CODE: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -22,6 +23,7 @@ interface ExecutionContext {
 }
 
 const ACCOUNT_DELETION_PATH = "/api/account-deletion/start";
+const APP_CONFIG_PATH = "/api/app-config";
 const ACCOUNT_DELETION_EMAIL_START_PATH = "/api/account-deletion/email/start";
 const ACCOUNT_DELETION_EMAIL_CONFIRM_PATH = "/api/account-deletion/email/confirm";
 const PUBLIC_ORIGIN = "https://chanriva.shinp-studio.com";
@@ -32,6 +34,42 @@ const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1_000;
 const deletionRateLimits = new Map<string, { count: number; resetAt: number }>();
 const emailDeletionRateLimits = new Map<string, { count: number; resetAt: number }>();
 const passwordResetRateLimits = new Map<string, { count: number; resetAt: number }>();
+
+const appConfigHeaders = {
+  "cache-control": "no-store",
+  "content-type": "application/json; charset=utf-8",
+  "referrer-policy": "no-referrer",
+  "x-content-type-options": "nosniff",
+};
+
+function appConfig(request: Request, env: Env): Response {
+  if (request.method !== "GET") {
+    return new Response(JSON.stringify({ error: "method not allowed" }), {
+      status: 405,
+      headers: { ...appConfigHeaders, allow: "GET" },
+    });
+  }
+
+  const configuredValue = env.ANDROID_MIN_VERSION_CODE;
+  if (typeof configuredValue !== "string" || !/^[1-9]\d*$/.test(configuredValue)) {
+    return new Response(JSON.stringify({ error: "service unavailable" }), {
+      status: 503,
+      headers: appConfigHeaders,
+    });
+  }
+  const minimumVersionCode = Number(configuredValue);
+  if (!Number.isSafeInteger(minimumVersionCode)) {
+    return new Response(JSON.stringify({ error: "service unavailable" }), {
+      status: 503,
+      headers: appConfigHeaders,
+    });
+  }
+
+  return new Response(JSON.stringify({ android_min_version_code: minimumVersionCode }), {
+    status: 200,
+    headers: appConfigHeaders,
+  });
+}
 
 const genericDeletionResponse = () => new Response(JSON.stringify({
   message: "確認処理を受け付けました。認証に成功し、進行中の対局がなければ削除リクエストが開始されます。",
@@ -291,6 +329,10 @@ async function completePasswordReset(request: Request, env: Env): Promise<Respon
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+
+    if (url.pathname === APP_CONFIG_PATH) {
+      return appConfig(request, env);
+    }
 
     if (url.pathname === ACCOUNT_DELETION_PATH) {
       return startAccountDeletion(request, env);

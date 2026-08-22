@@ -14,6 +14,7 @@
 - `/api/account-deletion/email/start`: パスワードを使えないユーザーへSupabase Authの確認リンクを送るAPI。新規アカウントは作らない
 - `/api/account-deletion/email/confirm`: 確認リンクのaccess tokenでAndroidと同じ`request_account_deletion()` RPCを呼ぶAPI
 - `/api/password-reset/complete`: 再設定リンクのaccess tokenでSupabase Authのパスワードを更新する同一origin API
+- `/api/app-config`: Android起動ゲート向けの公開read-only設定API。`android_min_version_code`を返し、Supabaseへ問い合わせない
 
 Web削除APIはservice-role keyを持ちません。パスワードやaccess tokenを保存・ログ出力せず、実削除は`cloudflare-admin`の信頼済みWorkerが行います。`SUPABASE_ANON_KEY`はCloudflare runtime設定から渡し、tracked fileへ値を記録しません。
 
@@ -41,6 +42,7 @@ npm.cmd run build
 - Worker name: `chanriva`
 - production domain: `chanriva.shinp-studio.com`
 - tracked config: `wrangler.toml`
+- minimum supported Android version: `wrangler.toml`の非secret変数`ANDROID_MIN_VERSION_CODE`（正の整数）
 - required runtime value: `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`はこのWorkerへ設定しない
 

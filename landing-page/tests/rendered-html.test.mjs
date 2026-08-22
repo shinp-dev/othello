@@ -16,6 +16,54 @@ async function render(path = "/") {
   );
 }
 
+async function loadWorker(testName) {
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set(testName, `${process.pid}-${Date.now()}`);
+  return (await import(workerUrl.href)).default;
+}
+
+const testContext = { waitUntil() {}, passThroughOnException() {} };
+const testAssets = { fetch: async () => new Response("Not found", { status: 404 }) };
+
+test("serves the public Android app config with a strict no-store JSON contract", async () => {
+  const worker = await loadWorker("app-config-test");
+  const response = await worker.fetch(
+    new Request("http://localhost/api/app-config"),
+    { ASSETS: testAssets, ANDROID_MIN_VERSION_CODE: "1" },
+    testContext,
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { android_min_version_code: 1 });
+  assert.match(response.headers.get("content-type") ?? "", /^application\/json\b/i);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+});
+
+test("rejects invalid app config and non-GET methods", async () => {
+  const worker = await loadWorker("invalid-app-config-test");
+  for (const configuredValue of [undefined, "", "0", "-1", "1.5", "not-a-number", "9007199254740992"]) {
+    const response = await worker.fetch(
+      new Request("http://localhost/api/app-config"),
+      { ASSETS: testAssets, ANDROID_MIN_VERSION_CODE: configuredValue },
+      testContext,
+    );
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: "service unavailable" });
+    assert.equal(response.headers.get("cache-control"), "no-store");
+  }
+
+  const postResponse = await worker.fetch(
+    new Request("http://localhost/api/app-config", { method: "POST" }),
+    { ASSETS: testAssets, ANDROID_MIN_VERSION_CODE: "1" },
+    testContext,
+  );
+  assert.equal(postResponse.status, 405);
+  assert.equal(postResponse.headers.get("allow"), "GET");
+  assert.match(postResponse.headers.get("content-type") ?? "", /^application\/json\b/i);
+});
+
 test("renders the external account deletion request flow without app redirect", async () => {
   const response = await render("/account-deletion");
   assert.equal(response.status, 200);

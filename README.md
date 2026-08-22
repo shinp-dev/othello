@@ -1,6 +1,6 @@
 # ちゃんりば（ちゃんとリバーシ）
 
-軽く一局打っても、その一局がちゃんと残り、ちゃんと振り返れて、次につながるAndroid向けリバーシアプリです。Supabase Auth・matchmaking・Realtime signaling・WebRTC DataChannelを使うオンライン対局と、対局後GameRecordをEdaxで解析するレビュー経路を実装しています。本アプリはEdax公式・公認アプリではありません。
+軽く一局打っても、その一局がちゃんと残り、ちゃんと振り返れて、次につながるAndroid向けリバーシアプリです。アプリ全体をログイン必須とし、Supabase Auth・matchmaking・Realtime signaling・WebRTC DataChannelを使うオンライン対局と、対局後GameRecordをEdaxで解析するレビュー経路を実装しています。本アプリはEdax公式・公認アプリではありません。
 
 ## 開発環境
 

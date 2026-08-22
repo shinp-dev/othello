@@ -13,10 +13,19 @@ class AuthUiArchitectureContractTest {
     private val analysisScreens = File("src/main/kotlin/com/example/othello/AnalysisScreens.kt").readText()
     private val betaScreens = File("src/main/kotlin/com/example/othello/BetaScreens.kt").readText()
     private val sessionOwner = File("src/main/kotlin/com/example/othello/OnlineSessionViewModel.kt").readText()
+    private val versionGate = File("src/main/kotlin/com/example/othello/VersionGate.kt").readText()
 
     @Test
     fun authGateWrapsTheAuthenticatedAppAndLoginHasNoBottomNavigation() {
-        assertTrue("AuthGate(sessionOwner)" in mainActivity)
+        val versionRootBody = mainActivity.substringAfter("private fun OthelloApp(")
+            .substringBefore("@Composable\nprivate fun AuthenticatedRoot")
+        val authenticatedRootBody = mainActivity.substringAfter("private fun AuthenticatedRoot(")
+            .substringBefore("@Composable\nprivate fun AuthenticatedApp")
+        assertTrue("VersionGate(versionGateOwner)" in versionRootBody)
+        assertTrue("AuthenticatedRoot(" in versionRootBody)
+        assertFalse("AuthGate(" in versionRootBody)
+        assertTrue("sessionOwner: OnlineSessionViewModel = viewModel()" in authenticatedRootBody)
+        assertTrue("AuthGate(sessionOwner)" in authenticatedRootBody)
         assertTrue("private fun AuthenticatedApp(" in mainActivity)
         assertTrue("session: UserSession" in mainActivity)
         assertFalse("currentSession()" in mainActivity)
@@ -28,6 +37,7 @@ class AuthUiArchitectureContractTest {
         assertTrue("is AuthState.Authenticated -> key(state.session.userId)" in authGateBody)
         assertTrue("authenticatedContent(state.session)" in authGateBody)
         assertFalse("ChanrivaBottomNavigation" in authGate)
+        assertTrue("VersionGateState.Supported -> supportedContent()" in versionGate)
     }
 
     @Test

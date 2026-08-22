@@ -108,6 +108,22 @@ private fun OthelloApp(
     debugAutoPlay: Boolean,
     debugTimeControlMillis: Long?,
     showDiagnostics: Boolean,
+    versionGateOwner: VersionGateViewModel = viewModel(),
+) {
+    VersionGate(versionGateOwner) {
+        AuthenticatedRoot(
+            debugAutoPlay = debugAutoPlay,
+            debugTimeControlMillis = debugTimeControlMillis,
+            showDiagnostics = showDiagnostics,
+        )
+    }
+}
+
+@Composable
+private fun AuthenticatedRoot(
+    debugAutoPlay: Boolean,
+    debugTimeControlMillis: Long?,
+    showDiagnostics: Boolean,
     sessionOwner: OnlineSessionViewModel = viewModel(),
 ) {
     AuthGate(sessionOwner) { session ->

@@ -5,6 +5,8 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 SUPABASE_URL = "https://zgzllmaoyymoeiqtybck.supabase.co"
+# Raise only after the corresponding Android version is available to users.
+ANDROID_MIN_VERSION_CODE = "1"
 # Set with: wrangler secret put SUPABASE_ANON_KEY
 # This is the public Supabase client key used server-side; never use the service-role key here.
 

@@ -2,9 +2,9 @@
 
 ## Scope
 
-This repository implements the Android-first Reversi product ちゃんりば. Local play, Supabase-backed matchmaking/finalization, WebRTC DataChannel play, immutable records, account-deletion processing, and post-game Edax review are implemented behind explicit domain boundaries.
+This repository implements the Android-first Reversi product ちゃんりば. Authenticated local play, Supabase-backed matchmaking/finalization, WebRTC DataChannel play, immutable records, account-deletion processing, and post-game Edax review are implemented behind explicit domain boundaries.
 
-A user can start a local game without Supabase credentials. Network features require Auth and are never faked as authoritative local state.
+The entire Android app, including local play, requires a signed-in user. Authentication is an application-entry requirement; local game rules and device-local records remain independent of Supabase data access after entry.
 
 ## Modules
 
@@ -38,6 +38,24 @@ feature:match -X-> feature:profile
 ```
 
 `core:game` has no Android dependency. `feature:match` only consumes `GameState` and transport ports. A build-time boundary check fails if match source references `analysis`. Supabase SDK types are private to `:data:supabase`; `SupabaseModule` exposes only application-owned ports. WebRTC SDK types are private to `:transport:webrtc`; callers receive `MatchTransport`, payloads, and primitive diagnostics.
+
+## Application HTTP boundary and startup gates
+
+Android and Web clients' application-owned, outward-facing HTTP APIs are placed in the public-facing Cloudflare Worker by default. This Worker owns application configuration, Web account APIs, and other client-facing HTTP endpoints. Keeping APIs of the same kind in one boundary makes implementation location, operations, investigation, security boundaries, and responsibility explicit.
+
+Supabase owns Auth, PostgreSQL, RLS, RPC, and Realtime. Unless there is a specific architectural reason, application HTTP APIs must not be scattered across Supabase Edge Functions or other Supabase surfaces. The minimum supported Android version therefore comes from the public Cloudflare `GET /api/app-config` endpoint, backed by a non-secret Worker variable, and does not query Supabase.
+
+`cloudflare-admin` is a separate trusted administrative boundary. It handles service-role access, `ADMIN_TOKEN`, and trusted maintenance/admin processing. General client-facing APIs must not be placed there, and the public-facing Worker must not be treated as the trusted admin Worker.
+
+Android process startup uses these gates in order:
+
+```text
+VersionGate
+  -> Supported: AuthGate
+       -> Authenticated: AuthenticatedApp
+```
+
+`VersionGate` answers only whether `BuildConfig.VERSION_CODE` is supported. It fails closed while configuration is checking, unavailable, or invalid. `OnlineSessionViewModel`, the Supabase component, and the Auth/session lifecycle are first created after `VersionGate` reaches `Supported`. `AuthGate` then decides whether the current session may enter the app, and `AuthenticatedApp` remains the signed-in product surface.
 
 ## Ownership
 
