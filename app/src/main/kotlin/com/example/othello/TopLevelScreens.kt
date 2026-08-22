@@ -43,11 +43,13 @@ internal fun StudyScreen(
 
 @Composable
 internal fun MoreScreen(
-    canDeleteAccount: Boolean,
     onResearchInfo: () -> Unit,
     onPrivacy: () -> Unit,
-    onAccountDeletion: (() -> Unit)?,
+    onAccountDeletion: () -> Unit,
     onAbout: () -> Unit,
+    logoutInProgress: Boolean,
+    logoutError: String?,
+    onLogout: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
@@ -57,17 +59,18 @@ internal fun MoreScreen(
         ChanrivaNavigationRow("研究データについて", onResearchInfo)
         ChanrivaNavigationRow("プライバシーポリシー", onPrivacy)
         ChanrivaNavigationRow("アカウント削除", onAccountDeletion)
-        if (!canDeleteAccount) {
-            Text("アカウント削除にはログインが必要です", style = MaterialTheme.typography.bodySmall)
-        }
         ChanrivaNavigationRow("このアプリについて", onAbout)
+        OutlinedButton(onClick = onLogout, enabled = !logoutInProgress, modifier = Modifier.fillMaxWidth()) {
+            Text(if (logoutInProgress) "ログアウト中…" else "ログアウト")
+        }
+        logoutError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }
 }
 
 @Composable
 internal fun ResearchInfoScreen(
     onBack: () -> Unit,
-    onResearchSettings: (() -> Unit)?,
+    onResearchSettings: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
@@ -78,12 +81,8 @@ internal fun ResearchInfoScreen(
         Text(RESEARCH_PUBLICATION_PRIVACY_COPY, style = MaterialTheme.typography.bodySmall)
         Text("研究参加時の同意内容", style = MaterialTheme.typography.titleMedium)
         ResearchConsent.statements.forEach { statement -> Text("・$statement") }
-        if (onResearchSettings != null) {
-            OutlinedButton(onClick = onResearchSettings, modifier = Modifier.fillMaxWidth()) {
-                Text("研究参加設定を開く")
-            }
-        } else {
-            Text("研究参加設定にはログインが必要です", style = MaterialTheme.typography.bodySmall)
+        OutlinedButton(onClick = onResearchSettings, modifier = Modifier.fillMaxWidth()) {
+            Text("研究参加設定を開く")
         }
     }
 }

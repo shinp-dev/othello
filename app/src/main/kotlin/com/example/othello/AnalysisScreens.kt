@@ -65,7 +65,7 @@ internal fun SettingsScreen(
     onMatchSettings: () -> Unit,
     onReviewSettings: () -> Unit,
     onCommonSettings: () -> Unit,
-    onResearch: (() -> Unit)?,
+    onResearch: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
@@ -76,9 +76,6 @@ internal fun SettingsScreen(
         ChanrivaNavigationRow("検討設定", onReviewSettings)
         ChanrivaNavigationRow("共通設定", onCommonSettings)
         ChanrivaNavigationRow("研究参加", onResearch)
-        if (onResearch == null) {
-            Text("研究参加の設定にはログインが必要です", style = MaterialTheme.typography.bodySmall)
-        }
     }
 }
 

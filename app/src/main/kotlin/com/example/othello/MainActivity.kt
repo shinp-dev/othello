@@ -27,11 +27,9 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -48,13 +46,11 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.othello.auth.UserSession
-import com.example.othello.auth.SignUpResult
 import com.example.othello.analysis.edax.EdaxDataManager
 import com.example.othello.analysis.edax.EdaxSettingsStore
 import com.example.othello.analysis.edax.ProductionAiMoveEngine
@@ -102,6 +98,25 @@ private fun OthelloApp(
     showDiagnostics: Boolean,
     sessionOwner: OnlineSessionViewModel = viewModel(),
 ) {
+    AuthGate(sessionOwner) { session ->
+        AuthenticatedApp(
+            debugAutoPlay = debugAutoPlay,
+            debugTimeControlMillis = debugTimeControlMillis,
+            showDiagnostics = showDiagnostics,
+            sessionOwner = sessionOwner,
+            session = session,
+        )
+    }
+}
+
+@Composable
+private fun AuthenticatedApp(
+    debugAutoPlay: Boolean,
+    debugTimeControlMillis: Long?,
+    showDiagnostics: Boolean,
+    sessionOwner: OnlineSessionViewModel,
+    session: UserSession,
+) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val application = context.applicationContext as OthelloApplication
@@ -125,57 +140,35 @@ private fun OthelloApp(
     var reviewBackDestination by remember { mutableStateOf(AppDestination.STUDY) }
     var researchSettingsBackDestination by remember { mutableStateOf(AppDestination.SETTINGS) }
     val scope = rememberCoroutineScope()
-    val componentResult = sessionOwner.componentResult
-    val component = sessionOwner.component
-    var session by remember { mutableStateOf<UserSession?>(null) }
-    var loginError by remember { mutableStateOf<String?>(null) }
-    var authNotice by remember { mutableStateOf<String?>(null) }
-    var authNoticeIsError by remember { mutableStateOf(false) }
-    val matchmaking = sessionOwner.matchmaking
-    var matchmakingState by remember { mutableStateOf(matchmaking?.state) }
+    val component = requireNotNull(sessionOwner.component) { "Authenticated app requires Supabase component" }
+    val matchmaking = requireNotNull(sessionOwner.matchmaking) { "Authenticated app requires matchmaking controller" }
+    var matchmakingState by remember { mutableStateOf(matchmaking.state) }
     var p2pCoordinator by remember(sessionOwner) { mutableStateOf(sessionOwner.coordinator) }
     var confirmOnlineLeave by remember { mutableStateOf(false) }
+    var logoutError by remember { mutableStateOf<String?>(null) }
+    var logoutInProgress by remember { mutableStateOf(false) }
     DisposableEffect(matchmaking) {
-        val closeable = matchmaking?.observe { matchmakingState = it }
-        onDispose { closeable?.close() }
+        val closeable = matchmaking.observe { matchmakingState = it }
+        onDispose { closeable.close() }
     }
-    DisposableEffect(matchmakingState?.status, matchmaking) {
-        val closeable = if (matchmakingState?.status == MatchmakingStatus.WAITING) {
-            matchmaking?.subscribeToMatchNotifications(
+    DisposableEffect(matchmakingState.status, matchmaking) {
+        val closeable = if (matchmakingState.status == MatchmakingStatus.WAITING) {
+            matchmaking.subscribeToMatchNotifications(
                 onMatchAvailable = { scope.launch { matchmaking.claimNotifiedMatch() } },
             )
         } else null
         onDispose { closeable?.close() }
     }
-    LaunchedEffect(component) {
-        runCatching { component?.authGateway?.currentSession() }
-            .onSuccess {
-                session = it
-                if (it != null) runCatching { component?.authGateway?.touchLastActive() }
-            }
-            .onFailure {
-                loginError = authErrorMessage(AuthOperation.SESSION, it)
-                authNoticeIsError = true
-            }
-    }
-    LaunchedEffect(session) {
-        if (session == null) {
-            destination = AppDestination.PLAY
-            selectedReviewInput = null
-        }
-    }
-    LaunchedEffect(matchmakingState?.status, matchmakingState?.assignment) {
-        if (matchmakingState?.status == MatchmakingStatus.WAITING) {
+    LaunchedEffect(matchmakingState.status, matchmakingState.assignment) {
+        if (matchmakingState.status == MatchmakingStatus.WAITING) {
             while (isActive) {
                 delay(10_000)
-                matchmaking?.heartbeat()
+                matchmaking.heartbeat()
             }
         }
     }
-    LaunchedEffect(matchmakingState?.assignment) {
-        val assignment = matchmakingState?.assignment ?: return@LaunchedEffect
-        val supabase = component ?: return@LaunchedEffect
-        val session = supabase.authGateway.currentSession() ?: return@LaunchedEffect
+    LaunchedEffect(matchmakingState.assignment) {
+        val assignment = matchmakingState.assignment ?: return@LaunchedEffect
         p2pCoordinator = sessionOwner.startCoordinator(
             session.userId,
             assignment,
@@ -187,7 +180,7 @@ private fun OthelloApp(
         confirmOnlineLeave = false
         val leaving = p2pCoordinator
         p2pCoordinator = null
-        matchmaking?.reset()
+        matchmaking.reset()
         scope.launch {
             if (sessionOwner.coordinator === leaving) sessionOwner.leaveCoordinator()
             else leaving?.leave()
@@ -244,8 +237,8 @@ private fun OthelloApp(
                         onOfflineRecords = { destination = AppDestination.OFFLINE_RECORDS },
                     )
                     destination == AppDestination.ONLINE_RECORDS -> OnlineRecordsScreen(
-                        userId = session?.userId,
-                        repository = component?.gameRecordRepository,
+                        userId = session.userId,
+                        repository = component.gameRecordRepository,
                         localStore = localRecordStore,
                         onBack = { destination = AppDestination.STUDY },
                         onReview = {
@@ -270,23 +263,20 @@ private fun OthelloApp(
                         settingsStore = edaxSettings,
                         engine = analysisEngine,
                         localStore = localRecordStore,
-                        researchParticipationRepository = component?.researchParticipationRepository,
-                        researchPositionRepository = component?.researchPositionRepository,
+                        researchParticipationRepository = component.researchParticipationRepository,
+                        researchPositionRepository = component.researchPositionRepository,
                         onBack = { destination = reviewBackDestination },
                         onOpenCommonSettings = {
                             commonSettingsBackDestination = AppDestination.REVIEW
                             destination = AppDestination.COMMON_SETTINGS
                         },
                     )
-                    destination == AppDestination.ACCOUNT_DELETION && component != null -> AccountDeletionScreen(
+                    destination == AppDestination.ACCOUNT_DELETION -> AccountDeletionScreen(
                         component.accountDeletionRepository,
                         onBack = { destination = AppDestination.MORE },
                         onRequested = {
                             scope.launch {
-                                runCatching { component.authGateway.signOut() }
-                                matchmaking?.reset()
-                                session = null
-                                destination = AppDestination.PLAY
+                                sessionOwner.finishAccountDeletionSession()
                             }
                         },
                     )
@@ -297,12 +287,10 @@ private fun OthelloApp(
                             commonSettingsBackDestination = AppDestination.SETTINGS
                             destination = AppDestination.COMMON_SETTINGS
                         },
-                        onResearch = if (session != null && component != null) {
-                            {
-                                researchSettingsBackDestination = AppDestination.SETTINGS
-                                destination = AppDestination.RESEARCH_SETTINGS
-                            }
-                        } else null,
+                        onResearch = {
+                            researchSettingsBackDestination = AppDestination.SETTINGS
+                            destination = AppDestination.RESEARCH_SETTINGS
+                        },
                     )
                     destination == AppDestination.MATCH_SETTINGS -> MatchSettingsScreen(
                         onBack = { destination = AppDestination.SETTINGS },
@@ -330,27 +318,33 @@ private fun OthelloApp(
                         },
                         onStart = { localMatchMode = LocalMatchMode.AI; localMatch = true; destination = AppDestination.PLAY },
                     )
-                    destination == AppDestination.RESEARCH_SETTINGS && session != null && component != null -> ResearchSettingsScreen(
+                    destination == AppDestination.RESEARCH_SETTINGS -> ResearchSettingsScreen(
                         repository = component.researchParticipationRepository,
                         onBack = { destination = researchSettingsBackDestination },
                     )
                     destination == AppDestination.MORE -> MoreScreen(
-                        canDeleteAccount = session != null && component != null,
                         onResearchInfo = { destination = AppDestination.RESEARCH_INFO },
                         onPrivacy = { uriHandler.openUri("https://chanriva.shinp-studio.com/privacy") },
-                        onAccountDeletion = if (session != null && component != null) {
-                            { destination = AppDestination.ACCOUNT_DELETION }
-                        } else null,
+                        onAccountDeletion = { destination = AppDestination.ACCOUNT_DELETION },
                         onAbout = { destination = AppDestination.ABOUT },
+                        logoutInProgress = logoutInProgress,
+                        logoutError = logoutError,
+                        onLogout = {
+                            scope.launch {
+                                logoutInProgress = true
+                                logoutError = null
+                                sessionOwner.signOut()
+                                    .onFailure { logoutError = authErrorMessage(AuthOperation.SIGN_OUT, it) }
+                                logoutInProgress = false
+                            }
+                        },
                     )
                     destination == AppDestination.RESEARCH_INFO -> ResearchInfoScreen(
                         onBack = { destination = AppDestination.MORE },
-                        onResearchSettings = if (session != null && component != null) {
-                            {
-                                researchSettingsBackDestination = AppDestination.RESEARCH_INFO
-                                destination = AppDestination.RESEARCH_SETTINGS
-                            }
-                        } else null,
+                        onResearchSettings = {
+                            researchSettingsBackDestination = AppDestination.RESEARCH_INFO
+                            destination = AppDestination.RESEARCH_SETTINGS
+                        },
                     )
                     destination == AppDestination.ABOUT -> AboutScreen(
                         onBack = { destination = AppDestination.MORE },
@@ -360,86 +354,20 @@ private fun OthelloApp(
                         onBack = { destination = AppDestination.ABOUT },
                     )
                     else -> PlayScreen(
-                state = matchmakingState,
-                configurationError = componentResult.exceptionOrNull()?.message,
-                session = session,
-                currentRatingRepository = component?.currentRatingRepository,
-                loginError = loginError,
-                authNotice = authNotice,
-                authNoticeIsError = authNoticeIsError,
-                failedLocalRecordSaves = localRecordSaveStates.values
-                    .filter { it.status == LocalRecordSaveStatus.FAILED },
-                onLogin = { email, password ->
-                    val auth = component?.authGateway ?: return@PlayScreen
-                    scope.launch {
-                        runCatching { auth.signIn(email, password) }
-                            .onSuccess {
-                                session = it
-                                runCatching { auth.touchLastActive() }
-                                loginError = null
-                                authNotice = null
-                            }
-                            .onFailure {
-                                loginError = authErrorMessage(AuthOperation.LOGIN, it)
-                                authNoticeIsError = true
-                            }
-                    }
-                },
-                onSignUp = { email, password ->
-                    val auth = component?.authGateway ?: return@PlayScreen
-                    scope.launch {
-                        runCatching { auth.signUp(email, password) }
-                            .onSuccess { result ->
-                                loginError = null
-                                when (result) {
-                                    is SignUpResult.SignedIn -> {
-                                        session = result.session
-                                        runCatching { auth.touchLastActive() }
-                                        authNotice = "アカウントを作成しました"
-                                        authNoticeIsError = false
-                                    }
-                                    SignUpResult.EmailConfirmationRequired -> {
-                                        authNotice = "確認メールを送信しました。メール内のリンクを開いてからログインしてください。"
-                                        authNoticeIsError = false
-                                    }
-                                }
-                            }
-                            .onFailure {
-                                authNotice = authErrorMessage(AuthOperation.SIGN_UP, it)
-                                authNoticeIsError = true
-                            }
-                    }
-                },
-                onPasswordReset = { email ->
-                    val auth = component?.authGateway ?: return@PlayScreen
-                    scope.launch {
-                        runCatching { auth.requestPasswordReset(email) }
-                            .onSuccess {
-                                authNotice = "再設定メールを送信しました。登録済みの場合はメールをご確認ください。"
-                                authNoticeIsError = false
-                                loginError = null
-                            }
-                            .onFailure {
-                                authNotice = "再設定メールを送信できませんでした。しばらく時間をおいてお試しください。"
-                                authNoticeIsError = true
-                            }
-                    }
-                },
-                onSignOut = {
-                    scope.launch {
-                        runCatching { component?.authGateway?.signOut() }
-                            .onSuccess { session = null; loginError = null; authNotice = null }
-                            .onFailure {
-                                loginError = authErrorMessage(AuthOperation.SIGN_OUT, it)
-                                authNoticeIsError = true
-                            }
-                    }
-                },
-                onOnlineStart = { if (session != null) matchmaking?.let { scope.launch { it.enqueue() } } },
-                onCancel = { matchmaking?.let { scope.launch { it.cancel() } } },
-                onLocalHumanStart = { localMatchMode = LocalMatchMode.HUMAN; localHumanDisc = Disc.BLACK; localMatch = true },
-                onLocalAiStart = { destination = AppDestination.LOCAL_AI_SETUP },
-                onRetryLocalRecordSave = localRecordPersistence::retry,
+                        state = matchmakingState,
+                        session = session,
+                        currentRatingRepository = component.currentRatingRepository,
+                        failedLocalRecordSaves = localRecordSaveStates.values
+                            .filter { it.status == LocalRecordSaveStatus.FAILED },
+                        onOnlineStart = { scope.launch { matchmaking.enqueue() } },
+                        onCancel = { scope.launch { matchmaking.cancel() } },
+                        onLocalHumanStart = {
+                            localMatchMode = LocalMatchMode.HUMAN
+                            localHumanDisc = Disc.BLACK
+                            localMatch = true
+                        },
+                        onLocalAiStart = { destination = AppDestination.LOCAL_AI_SETUP },
+                        onRetryLocalRecordSave = localRecordPersistence::retry,
                     )
                 }
             }
@@ -671,37 +599,22 @@ private fun OnlineOthelloBoard(
 
 @Composable
 private fun PlayScreen(
-    state: com.example.othello.matchmaking.MatchmakingViewState?,
-    configurationError: String?,
-    session: UserSession?,
-    currentRatingRepository: CurrentRatingRepository?,
-    loginError: String?,
-    authNotice: String?,
-    authNoticeIsError: Boolean,
+    state: com.example.othello.matchmaking.MatchmakingViewState,
+    session: UserSession,
+    currentRatingRepository: CurrentRatingRepository,
     failedLocalRecordSaves: List<LocalRecordSaveState>,
-    onLogin: (String, String) -> Unit,
-    onSignUp: (String, String) -> Unit,
-    onPasswordReset: (String) -> Unit,
-    onSignOut: () -> Unit,
     onOnlineStart: () -> Unit,
     onCancel: () -> Unit,
     onLocalHumanStart: () -> Unit,
     onLocalAiStart: () -> Unit,
     onRetryLocalRecordSave: (String) -> Unit,
 ) {
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var currentRating by remember(session?.userId) { mutableStateOf<Int?>(null) }
-    var currentRatingLoading by remember(session?.userId) { mutableStateOf(false) }
-    LaunchedEffect(session?.userId, currentRatingRepository) {
-        if (session == null || currentRatingRepository == null) {
-            currentRating = null
-            currentRatingLoading = false
-        } else {
-            currentRatingLoading = true
-            currentRating = runCatching { currentRatingRepository.getCurrentRating() }.getOrNull()
-            currentRatingLoading = false
-        }
+    var currentRating by remember(session.userId) { mutableStateOf<Int?>(null) }
+    var currentRatingLoading by remember(session.userId) { mutableStateOf(false) }
+    LaunchedEffect(session.userId, currentRatingRepository) {
+        currentRatingLoading = true
+        currentRating = runCatching { currentRatingRepository.getCurrentRating() }.getOrNull()
+        currentRatingLoading = false
     }
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
@@ -711,66 +624,28 @@ private fun PlayScreen(
         ChanrivaScreenHeader("対局")
         Text("ちゃんりば", style = MaterialTheme.typography.headlineSmall, color = ChanrivaColors.accent)
         Text("ちゃんと残る、ちゃんと振り返れるリバーシ", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (session == null) {
-            Text("オンライン対局", style = MaterialTheme.typography.titleMedium)
-            OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("メールアドレス") }, singleLine = true)
-            OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
-                label = { Text("パスワード") },
-                visualTransformation = PasswordVisualTransformation(),
-                singleLine = true,
-            )
-            Button(
-                onClick = { onLogin(email, password) },
-                enabled = email.isNotBlank() && password.isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("ログイン") }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                TextButton(
-                    onClick = { onSignUp(email, password) },
-                    enabled = email.isNotBlank() && password.length >= 8,
-                ) { Text("アカウント作成") }
-                TextButton(onClick = { onPasswordReset(email) }, enabled = email.isNotBlank()) {
-                    Text("パスワードを忘れた場合")
-                }
+        Text(
+            "現在のレート ${when {
+                currentRatingLoading -> "取得中…"
+                currentRating != null -> currentRating.toString()
+                else -> "---"
+            }}",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text("オンライン対局", style = MaterialTheme.typography.titleMedium)
+        Button(
+            onClick = onOnlineStart,
+            enabled = state.status !in setOf(MatchmakingStatus.WAITING, MatchmakingStatus.SIGNALING),
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("対局する") }
+        when (state.status) {
+            MatchmakingStatus.WAITING -> {
+                Text("対戦相手を待っています")
+                OutlinedButton(onClick = onCancel) { Text("キャンセル") }
             }
-            if (loginError != null) Text(loginError, color = MaterialTheme.colorScheme.error)
-            if (authNotice != null) {
-                Text(
-                    authNotice,
-                    color = if (authNoticeIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                )
-            }
-        } else {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.fillMaxWidth().padding(ChanrivaSpacing.card), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("ログイン済み", style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        "現在のレート ${when {
-                            currentRatingLoading -> "取得中…"
-                            currentRating != null -> currentRating.toString()
-                            else -> "---"
-                        }}",
-                    )
-                    OutlinedButton(onClick = onSignOut) { Text("ログアウト") }
-                }
-            }
-            Text("オンライン対局", style = MaterialTheme.typography.titleMedium)
-            Button(
-                onClick = onOnlineStart,
-                enabled = state?.status !in setOf(MatchmakingStatus.WAITING, MatchmakingStatus.SIGNALING),
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("対局する") }
-            when (state?.status) {
-                MatchmakingStatus.WAITING -> {
-                    Text("対戦相手を待っています")
-                    OutlinedButton(onClick = onCancel) { Text("キャンセル") }
-                }
-                MatchmakingStatus.SIGNALING -> Text("対戦相手が見つかりました。P2P接続を開始します")
-                MatchmakingStatus.FAILED -> Text(state.error ?: "マッチングに失敗しました", color = MaterialTheme.colorScheme.error)
-                else -> Unit
-            }
+            MatchmakingStatus.SIGNALING -> Text("対戦相手が見つかりました。P2P接続を開始します")
+            MatchmakingStatus.FAILED -> Text(state.error ?: "マッチングに失敗しました", color = MaterialTheme.colorScheme.error)
+            else -> Unit
         }
         Text("端末で対局", style = MaterialTheme.typography.titleMedium)
         ChanrivaNavigationRow("ふたりで対局", onLocalHumanStart)
@@ -794,7 +669,6 @@ private fun PlayScreen(
                 }
             }
         }
-        if (configurationError != null) Text(configurationError, color = MaterialTheme.colorScheme.error)
     }
 }
 

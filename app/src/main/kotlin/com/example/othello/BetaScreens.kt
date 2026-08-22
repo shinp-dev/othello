@@ -477,8 +477,8 @@ private fun formatDate(epochMillis: Long): String = DateTimeFormatter.ofPattern(
 
 @Composable
 internal fun OnlineRecordsScreen(
-    userId: String?,
-    repository: GameRecordRepository?,
+    userId: String,
+    repository: GameRecordRepository,
     localStore: LocalGameRecordStore,
     onBack: () -> Unit,
     onReview: (ReviewInput) -> Unit,
@@ -489,11 +489,9 @@ internal fun OnlineRecordsScreen(
     val snackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(userId, repository) {
-        if (userId != null && repository != null) {
-            runCatching { repository.recent(userId, 50) }
-                .onSuccess { records = it; error = null }
-                .onFailure { error = it.message ?: "オンライン棋譜を読み込めませんでした" }
-        }
+        runCatching { repository.recent(userId, 50) }
+            .onSuccess { records = it; error = null }
+            .onFailure { error = it.message ?: "オンライン棋譜を読み込めませんでした" }
     }
     Box(Modifier.fillMaxSize()) {
         Column(
@@ -504,7 +502,6 @@ internal fun OnlineRecordsScreen(
             Text("この画面では最新50局を表示します", style = MaterialTheme.typography.bodySmall)
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             when {
-                userId == null || repository == null -> Text("ログインするとオンライン棋譜を表示できます")
                 records == null -> Text("読み込み中…")
                 records.orEmpty().isEmpty() -> Text("オンライン棋譜はありません")
                 else -> records.orEmpty().forEach { record ->
