@@ -73,7 +73,7 @@ npm run deploy
 
 `MatchTransport`のWebRTC DataChannel実装を使用します。Supabase RealtimeのPostgres Changesは、待機側へのparticipant限定`match_notifications`と、SDP offer/answer用`match_signaling`だけに使用します。通知を受けた待機側は即座にmatchをclaimし、heartbeat pollingは通知失敗時のfallbackとして残します。P2P接続後に着手、時計、盤面、結果をRealtimeへ送信しません。実機2台では、Auth設定、同一Supabase project、TURN/STUN設定、2台のqueue参加、DataChannel成立、両者start ACK、双方の同一棋譜・hash、結果提出の順で確認します。
 
-ログイン後のホームには本人のサーバー管理`ratings.current_rating`を表示します。対局画面には成立時に保存した相手rating snapshotだけを表示し、ニックネーム、メールアドレス、UUIDをプレイヤー名として表示しません。
+ログイン後のホームには本人のサーバー管理`ratings.current_rating`と、最新の昨日分日次順位（存在する場合）を表示します。日次順位は確認済み・未削除で、既存の`profiles.last_active_at`による365日以内のアクティブアカウントを母集団とし、サーバー側の直近スナップショットだけを参照します。端末内最高順位はSupabase AuthのユーザーUUIDごとに端末へ保存し、サーバーへ同期しません。対局画面には成立時に保存した相手rating snapshotだけを表示し、ニックネーム、メールアドレス、UUIDをプレイヤー名として表示しません。
 
 `applicationId = com.shinpstudio.chanriva` をGoogle Play公開用の正式IDとして使用します。repository名と内部package/DB識別子の`othello`は、公開ブランドではなく既存の技術識別子として変更していません。
 
@@ -89,6 +89,8 @@ select public.cleanup_expired_pending_results();
 select public.cleanup_expired_started_matches();
 select public.cleanup_terminal_matches();
 ```
+
+日次順位は既存のmaintenance pathに分散させず、service role相当でAsia/Tokyoの日付境界後に`select public.refresh_rating_daily_snapshot();`を1日1回実行します。migrationはこの関数を追加するだけで、本番Cronの有効化は行いません。
 
 ## Edax / OSS
 

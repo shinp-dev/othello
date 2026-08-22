@@ -147,6 +147,7 @@ private fun AuthenticatedApp(
     val uriHandler = LocalUriHandler.current
     val application = context.applicationContext as OthelloApplication
     val audioSettings = remember { AudioSettingsStore(context) }
+    val ratingAchievementStore = remember { RatingAchievementStore(context) }
     val analysisDataManager = remember { EdaxDataManager(context) }
     val edaxSettings = remember { EdaxSettingsStore(context) }
     val analysisEngine = remember { ProductionAnalysisEngine() }
@@ -386,6 +387,7 @@ private fun AuthenticatedApp(
                         state = matchmakingState,
                         session = session,
                         currentRatingRepository = component.currentRatingRepository,
+                        ratingAchievementStore = ratingAchievementStore,
                         failedLocalRecordSaves = localRecordSaveStates.values
                             .filter { it.status == LocalRecordSaveStatus.FAILED },
                         onOnlineStart = { scope.launch { matchmaking.enqueue() } },
@@ -619,6 +621,7 @@ private fun PlayScreen(
     state: com.example.othello.matchmaking.MatchmakingViewState,
     session: UserSession,
     currentRatingRepository: CurrentRatingRepository,
+    ratingAchievementStore: RatingAchievementStore,
     failedLocalRecordSaves: List<LocalRecordSaveState>,
     onOnlineStart: () -> Unit,
     onCancel: () -> Unit,
@@ -626,11 +629,15 @@ private fun PlayScreen(
     onLocalAiStart: () -> Unit,
     onRetryLocalRecordSave: (String) -> Unit,
 ) {
-    var currentRating by remember(session.userId) { mutableStateOf<Int?>(null) }
+    var ratingSummary by remember(session.userId) { mutableStateOf<com.example.othello.profile.RatingSummary?>(null) }
+    var localBest by remember(session.userId) { mutableStateOf<LocalBestRating?>(null) }
     var currentRatingLoading by remember(session.userId) { mutableStateOf(false) }
-    LaunchedEffect(session.userId, currentRatingRepository) {
+    LaunchedEffect(session.userId, currentRatingRepository, ratingAchievementStore) {
         currentRatingLoading = true
-        currentRating = runCatching { currentRatingRepository.getCurrentRating() }.getOrNull()
+        ratingSummary = runCatching { currentRatingRepository.getRatingSummary() }.getOrNull()
+        localBest = ratingSummary?.yesterdayRanking?.let {
+            ratingAchievementStore.recordIfBetter(session.userId, it)
+        } ?: ratingAchievementStore.getBest(session.userId)
         currentRatingLoading = false
     }
     Column(
@@ -642,13 +649,21 @@ private fun PlayScreen(
         Text("ちゃんりば", style = MaterialTheme.typography.headlineSmall, color = ChanrivaColors.accent)
         Text("ちゃんと残る、ちゃんと振り返れるリバーシ", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
-            "現在のレート ${when {
+            "レート ${when {
                 currentRatingLoading -> "取得中…"
-                currentRating != null -> currentRating.toString()
+                ratingSummary != null -> ratingSummary!!.currentRating.toString()
                 else -> "---"
             }}",
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.titleMedium,
         )
+        Text("昨日", style = MaterialTheme.typography.titleMedium)
+        ratingSummary?.yesterdayRanking?.let { ranking ->
+            Text(formatYesterdayRanking(ranking))
+        } ?: Text("順位データはまだありません", style = MaterialTheme.typography.bodySmall)
+        Text("端末内最高", style = MaterialTheme.typography.titleMedium)
+        localBest?.let { best ->
+            Text("上位 ${formatTopPercentile(best.topPercentile)}　${formatAchievementDate(best.achievedDate)}")
+        } ?: Text("まだ記録がありません", style = MaterialTheme.typography.bodySmall)
         Text("オンライン対局", style = MaterialTheme.typography.titleMedium)
         Button(
             onClick = onOnlineStart,

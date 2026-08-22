@@ -15,6 +15,8 @@ import com.example.othello.matchmaking.MatchmakingRepository
 import com.example.othello.network.CURRENT_PROTOCOL_VERSION
 import com.example.othello.profile.AccountDeletionRepository
 import com.example.othello.profile.CurrentRatingRepository
+import com.example.othello.profile.RatingSummary
+import com.example.othello.profile.YesterdayRanking
 import com.example.othello.records.FinishReason
 import com.example.othello.records.GameRecord
 import com.example.othello.records.GameRecordRepository
@@ -344,6 +346,18 @@ private data class RatingRow(
     @SerialName("peak_rating") val peakRating: Int,
 )
 
+@Serializable
+private data class YesterdayRankingRow(
+    @SerialName("snapshot_date") val snapshotDate: String,
+    val rank: Int,
+    @SerialName("active_user_count") val activeUserCount: Int,
+    @SerialName("top_percentile") val topPercentile: Double,
+) {
+    fun toDomainOrNull(): YesterdayRanking? = runCatching {
+        YesterdayRanking(snapshotDate, rank, activeUserCount, topPercentile)
+    }.getOrNull()
+}
+
 internal class SupabaseGameRecordRepository(private val client: SupabaseClient) : GameRecordRepository {
     override suspend fun recent(userId: String, limit: Int): List<GameRecord> = client.from("game_records")
         .select {
@@ -382,6 +396,19 @@ internal class SupabaseAccountDeletionRepository(private val client: SupabaseCli
 
 internal class SupabaseCurrentRatingRepository(private val client: SupabaseClient) : CurrentRatingRepository {
     override suspend fun getCurrentRating(): Int = client.from("ratings").select().decodeSingle<RatingRow>().currentRating
+
+    override suspend fun getRatingSummary(): RatingSummary {
+        val current = client.from("ratings").select().decodeSingle<RatingRow>().currentRating
+        val yesterday = try {
+            client.from("rating_daily_snapshot").select().decodeSingle<YesterdayRankingRow>().toDomainOrNull()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // The snapshot is additive and may not exist until the first server run.
+            null
+        }
+        return RatingSummary(current, yesterday)
+    }
 }
 
 @Serializable
