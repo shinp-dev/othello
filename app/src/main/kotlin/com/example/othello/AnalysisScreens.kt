@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -41,9 +42,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.othello.analysis.edax.AiMatchSettings
 import com.example.othello.analysis.edax.EdaxDataManager
-import com.example.othello.analysis.edax.EdaxReleaseConstants
+import com.example.othello.analysis.edax.EdaxSettingsStore
 import com.example.othello.analysis.edax.ImportedAnalysisFile
+import com.example.othello.analysis.edax.ReviewAnalysisSettings
 import com.example.othello.designsystem.ChanrivaColors
 import com.example.othello.designsystem.ChanrivaNavigationRow
 import com.example.othello.designsystem.ChanrivaScreenHeader
@@ -52,6 +55,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -59,7 +63,8 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun SettingsScreen(
     onMatchSettings: () -> Unit,
-    onAnalysis: () -> Unit,
+    onReviewSettings: () -> Unit,
+    onCommonSettings: () -> Unit,
     onResearch: (() -> Unit)?,
 ) {
     Column(
@@ -68,7 +73,8 @@ internal fun SettingsScreen(
     ) {
         ChanrivaScreenHeader("設定")
         ChanrivaNavigationRow("対局時設定", onMatchSettings)
-        ChanrivaNavigationRow("AI解析設定", onAnalysis)
+        ChanrivaNavigationRow("検討設定", onReviewSettings)
+        ChanrivaNavigationRow("共通設定", onCommonSettings)
         ChanrivaNavigationRow("研究参加", onResearch)
         if (onResearch == null) {
             Text("研究参加の設定にはログインが必要です", style = MaterialTheme.typography.bodySmall)
@@ -80,7 +86,9 @@ internal fun SettingsScreen(
 internal fun MatchSettingsScreen(
     onBack: () -> Unit,
     audioSettings: AudioSettingsStore,
+    edaxSettings: EdaxSettingsStore,
 ) {
+    var aiSettings by remember(edaxSettings) { mutableStateOf(edaxSettings.aiMatchSettings()) }
     var timeWarningEnabled by remember { mutableStateOf(audioSettings.timeWarningEnabled) }
     var focusSoundEnabled by remember { mutableStateOf(audioSettings.focusSoundEnabled) }
     var focusSoundVolume by remember { mutableStateOf(audioSettings.focusSoundVolume) }
@@ -128,6 +136,36 @@ internal fun MatchSettingsScreen(
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
     ) {
         SettingsHeader("対局時設定", onBack)
+        Text("AI対局", style = MaterialTheme.typography.titleMedium)
+        Text("AI対局レベル: Level ${aiSettings.level}")
+        Slider(
+            value = aiSettings.level.toFloat(),
+            onValueChange = {
+                aiSettings = aiSettings.copy(
+                    level = it.roundToInt().coerceIn(
+                        AiMatchSettings.MIN_LEVEL,
+                        AiMatchSettings.MAX_LEVEL,
+                    ),
+                )
+            },
+            onValueChangeFinished = { edaxSettings.setAiMatchLevel(aiSettings.level) },
+            valueRange = AiMatchSettings.MIN_LEVEL.toFloat()..AiMatchSettings.MAX_LEVEL.toFloat(),
+            steps = 6,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text("1着手あたり思考時間: ${aiSettings.moveTimeMs}ms")
+        Slider(
+            value = aiSettings.moveTimeMs.toFloat(),
+            onValueChange = {
+                val moveTimeMs = snapAnalysisTime(it)
+                aiSettings = aiSettings.copy(moveTimeMs = moveTimeMs)
+            },
+            onValueChangeFinished = { edaxSettings.setAiMatchMoveTimeMs(aiSettings.moveTimeMs) },
+            valueRange = EdaxSettingsStore.MIN_ANALYSIS_TIME_MS.toFloat()..EdaxSettingsStore.MAX_ANALYSIS_TIME_MS.toFloat(),
+            steps = analysisTimeSliderSteps,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        HorizontalDivider()
         Text("対局中の音", style = MaterialTheme.typography.titleMedium)
         SettingSwitchRow(
             title = "時間警告音",
@@ -183,6 +221,87 @@ internal fun MatchSettingsScreen(
 }
 
 @Composable
+internal fun ReviewSettingsScreen(
+    settingsStore: EdaxSettingsStore,
+    onBack: () -> Unit,
+) {
+    var settings by remember(settingsStore) { mutableStateOf(settingsStore.reviewAnalysisSettings()) }
+    var showHighLoadWarning by remember { mutableStateOf(false) }
+    val maximumLevel = if (settings.highLoadAnalysisEnabled) {
+        ReviewAnalysisSettings.HIGH_LOAD_MAX_LEVEL
+    } else {
+        ReviewAnalysisSettings.NORMAL_MAX_LEVEL
+    }
+
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
+        verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
+    ) {
+        SettingsHeader("検討設定", onBack)
+        SettingSwitchRow(
+            title = "高負荷解析",
+            checked = settings.highLoadAnalysisEnabled,
+            onCheckedChange = { enabled ->
+                if (enabled) {
+                    showHighLoadWarning = true
+                } else {
+                    settingsStore.setHighLoadAnalysisEnabled(false)
+                    settings = settingsStore.reviewAnalysisSettings()
+                }
+            },
+        )
+        if (settings.highLoadAnalysisEnabled) {
+            Text(HIGH_LOAD_ANALYSIS_WARNING, color = ChanrivaColors.accent, style = MaterialTheme.typography.bodySmall)
+        }
+        Text("解析レベル: Level ${settings.level}")
+        Slider(
+            value = settings.level.toFloat(),
+            onValueChange = {
+                settings = settings.copy(
+                    level = it.roundToInt().coerceIn(
+                        ReviewAnalysisSettings.MIN_LEVEL,
+                        maximumLevel,
+                    ),
+                )
+            },
+            onValueChangeFinished = { settingsStore.setReviewAnalysisLevel(settings.level) },
+            valueRange = ReviewAnalysisSettings.MIN_LEVEL.toFloat()..maximumLevel.toFloat(),
+            steps = maximumLevel - ReviewAnalysisSettings.MIN_LEVEL - 1,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text("1候補あたり解析時間: ${settings.timePerCandidateMs}ms")
+        Slider(
+            value = settings.timePerCandidateMs.toFloat(),
+            onValueChange = { settings = settings.copy(timePerCandidateMs = snapAnalysisTime(it)) },
+            onValueChangeFinished = {
+                settingsStore.setReviewAnalysisTimePerCandidateMs(settings.timePerCandidateMs)
+            },
+            valueRange = EdaxSettingsStore.MIN_ANALYSIS_TIME_MS.toFloat()..EdaxSettingsStore.MAX_ANALYSIS_TIME_MS.toFloat(),
+            steps = analysisTimeSliderSteps,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+
+    if (showHighLoadWarning) {
+        AlertDialog(
+            onDismissRequest = { showHighLoadWarning = false },
+            title = { Text("高負荷解析を有効にしますか？") },
+            text = { Text(HIGH_LOAD_ANALYSIS_WARNING) },
+            confirmButton = {
+                Button(onClick = {
+                    settingsStore.setHighLoadAnalysisEnabled(true)
+                    settings = settingsStore.reviewAnalysisSettings()
+                    showHighLoadWarning = false
+                }) { Text("有効にする") }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showHighLoadWarning = false }) { Text("キャンセル") }
+            },
+        )
+    }
+}
+
+@Composable
 private fun AudioPreviewButton(
     preview: AudioPreview,
     activePreview: AudioPreview?,
@@ -215,20 +334,20 @@ private fun SettingSwitchRow(
 }
 
 @Composable
-internal fun AnalysisSettingsScreen(
+internal fun CommonSettingsScreen(
     manager: EdaxDataManager,
     onDataChanged: () -> Unit,
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    var status by remember(manager) { mutableStateOf(manager.status()) }
+    var status by remember(manager) { mutableStateOf(manager.commonDataStatus()) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var messageIsError by remember { mutableStateOf(false) }
     var busyMessage by remember { mutableStateOf("検証・コピー中…") }
     val uriHandler = LocalUriHandler.current
 
-    fun refresh() { status = manager.status(); onDataChanged() }
+    fun refresh() { status = manager.commonDataStatus(); onDataChanged() }
     fun importEvaluation(uri: android.net.Uri) {
         busy = true
         busyMessage = "検証・コピー中…"
@@ -285,26 +404,7 @@ internal fun AnalysisSettingsScreen(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
     ) {
-        SettingsHeader("AI解析設定", onBack, enabled = !busy)
-        Text("解析エンジン: Edax ${EdaxReleaseConstants.ENGINE_VERSION}")
-        Text("Edax状態: ${if (status.nativeAvailable) "利用可能" else "利用不可"}")
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Edax解析 ON/OFF")
-            Switch(
-                checked = status.enabled,
-                onCheckedChange = { manager.setEnabled(it); refresh() },
-                enabled = status.nativeAvailable,
-            )
-        }
-        Text("解析level: ${status.level}")
-        Slider(
-            value = status.level.toFloat(),
-            onValueChange = { status = status.copy(level = it.toInt().coerceIn(1, 18)) },
-            onValueChangeFinished = { manager.setLevel(status.level); onDataChanged() },
-            valueRange = 1f..18f,
-            steps = 16,
-            enabled = !busy,
-        )
+        SettingsHeader("共通設定", onBack, enabled = !busy)
         AnalysisFileStatus("評価データ", status.evaluationData, required = true)
         Button(
             onClick = ::downloadOfficialEvaluation,
@@ -426,3 +526,15 @@ internal fun formatAnalysisFileSize(sizeBytes: Long): String = when {
 private const val EDAX_GUIDE_URL = "https://chanriva.shinp-studio.com/edax"
 private const val CHANRIVA_SITE_URL = "https://chanriva.shinp-studio.com/"
 private const val CHANRIVA_SOURCE_URL = "https://github.com/shinp-dev/othello"
+private const val HIGH_LOAD_ANALYSIS_WARNING =
+    "Lv.9以上は解析負荷が大きくなります。端末によっては解析時間の増加や動作の不安定化が発生する場合があります。通常はLv.8以下を推奨します。"
+private val analysisTimeSliderSteps =
+    (EdaxSettingsStore.MAX_ANALYSIS_TIME_MS - EdaxSettingsStore.MIN_ANALYSIS_TIME_MS) /
+        EdaxSettingsStore.ANALYSIS_TIME_STEP_MS - 1
+
+private fun snapAnalysisTime(value: Float): Int {
+    val offsetSteps = ((value - EdaxSettingsStore.MIN_ANALYSIS_TIME_MS) /
+        EdaxSettingsStore.ANALYSIS_TIME_STEP_MS).roundToInt()
+    return (EdaxSettingsStore.MIN_ANALYSIS_TIME_MS + offsetSteps * EdaxSettingsStore.ANALYSIS_TIME_STEP_MS)
+        .coerceIn(EdaxSettingsStore.MIN_ANALYSIS_TIME_MS, EdaxSettingsStore.MAX_ANALYSIS_TIME_MS)
+}

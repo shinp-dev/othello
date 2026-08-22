@@ -81,19 +81,19 @@ class EdaxNativeInstrumentationTest {
             invalidSource.writeBytes(byteArrayOf(1, 2, 3, 4))
 
             val first = manager.importEvaluationData(Uri.fromFile(firstSource))
-            assertEquals(EVAL_SIZE, manager.status().evaluationData?.sizeBytes)
+            assertEquals(EVAL_SIZE, manager.commonDataStatus().evaluationData?.sizeBytes)
 
             val second = manager.importEvaluationData(Uri.fromFile(secondSource))
-            assertEquals(second.sha256, manager.status().evaluationData?.sha256)
+            assertEquals(second.sha256, manager.commonDataStatus().evaluationData?.sha256)
             assertFalse(File(first.appPrivatePath).exists())
 
             assertFailsWith<IllegalStateException> {
                 manager.importEvaluationData(Uri.fromFile(invalidSource))
             }
-            assertEquals(second.sha256, EdaxDataManager(context).status().evaluationData?.sha256)
+            assertEquals(second.sha256, EdaxDataManager(context).commonDataStatus().evaluationData?.sha256)
 
             manager.deleteEvaluationData()
-            assertNull(manager.status().evaluationData)
+            assertNull(manager.commonDataStatus().evaluationData)
         } finally {
             manager.deleteEvaluationData()
             firstSource.delete()
@@ -119,16 +119,16 @@ class EdaxNativeInstrumentationTest {
             assertEquals(42L, first.sizeBytes)
 
             val second = manager.importOpeningBook(Uri.fromFile(secondSource))
-            assertEquals(second.sha256, manager.status().openingBook?.sha256)
+            assertEquals(second.sha256, manager.commonDataStatus().openingBook?.sha256)
             assertFalse(File(first.appPrivatePath).exists())
 
             assertFailsWith<IllegalStateException> {
                 manager.importOpeningBook(Uri.fromFile(invalidSource))
             }
-            assertEquals(second.sha256, EdaxDataManager(context).status().openingBook?.sha256)
+            assertEquals(second.sha256, EdaxDataManager(context).commonDataStatus().openingBook?.sha256)
 
             manager.deleteOpeningBook()
-            assertNull(manager.status().openingBook)
+            assertNull(manager.commonDataStatus().openingBook)
         } finally {
             manager.deleteOpeningBook()
             firstSource.delete()

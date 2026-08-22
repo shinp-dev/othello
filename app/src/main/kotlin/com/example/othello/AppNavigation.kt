@@ -18,7 +18,8 @@ internal enum class AppDestination(val label: String, val shortLabel: String? = 
     REVIEW("棋譜レビュー"),
     ACCOUNT_DELETION("アカウント削除"),
     MATCH_SETTINGS("対局時設定"),
-    ANALYSIS_SETTINGS("AI解析設定"),
+    REVIEW_SETTINGS("検討設定"),
+    COMMON_SETTINGS("共通設定"),
     LOCAL_AI_SETUP("AIと対局"),
     RESEARCH_SETTINGS("研究参加"),
     RESEARCH_INFO("研究データについて"),
@@ -38,7 +39,7 @@ internal fun AppDestination.isTopLevel(): Boolean = this in topLevelDestinations
 internal fun backDestination(
     current: AppDestination,
     reviewParent: AppDestination = AppDestination.STUDY,
-    analysisParent: AppDestination = AppDestination.SETTINGS,
+    commonSettingsParent: AppDestination = AppDestination.SETTINGS,
     researchSettingsParent: AppDestination = AppDestination.SETTINGS,
 ): AppDestination? = when (current) {
     AppDestination.PLAY -> null
@@ -53,8 +54,9 @@ internal fun backDestination(
     AppDestination.RESEARCH_INFO,
     AppDestination.ABOUT -> AppDestination.MORE
     AppDestination.MATCH_SETTINGS -> AppDestination.SETTINGS
+    AppDestination.REVIEW_SETTINGS -> AppDestination.SETTINGS
     AppDestination.RESEARCH_SETTINGS -> researchSettingsParent
-    AppDestination.ANALYSIS_SETTINGS -> analysisParent
+    AppDestination.COMMON_SETTINGS -> commonSettingsParent
     AppDestination.OSS_LICENSES -> AppDestination.ABOUT
 }
 

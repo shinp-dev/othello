@@ -56,6 +56,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.othello.auth.UserSession
 import com.example.othello.auth.SignUpResult
 import com.example.othello.analysis.edax.EdaxDataManager
+import com.example.othello.analysis.edax.EdaxSettingsStore
 import com.example.othello.analysis.edax.ProductionAnalysisEngine
 import com.example.othello.designsystem.OthelloTheme
 import com.example.othello.designsystem.ChanrivaColors
@@ -105,6 +106,7 @@ private fun OthelloApp(
     val application = context.applicationContext as OthelloApplication
     val audioSettings = remember { AudioSettingsStore(context) }
     val analysisDataManager = remember { EdaxDataManager(context) }
+    val edaxSettings = remember { EdaxSettingsStore(context) }
     val analysisEngine = remember { ProductionAnalysisEngine() }
     val localRecordStore = application.localGameRecordStore
     val localRecordPersistence = application.localGameRecordPersistence.coordinator
@@ -117,7 +119,7 @@ private fun OthelloApp(
     val selectedReviewSession = remember(selectedReviewInput?.id) {
         selectedReviewInput?.let(::ReviewSession)
     }
-    var analysisSettingsBackDestination by remember { mutableStateOf(AppDestination.SETTINGS) }
+    var commonSettingsBackDestination by remember { mutableStateOf(AppDestination.SETTINGS) }
     var reviewBackDestination by remember { mutableStateOf(AppDestination.STUDY) }
     var researchSettingsBackDestination by remember { mutableStateOf(AppDestination.SETTINGS) }
     val scope = rememberCoroutineScope()
@@ -199,7 +201,7 @@ private fun OthelloApp(
     val parentDestination = backDestination(
         destination,
         reviewBackDestination,
-        analysisSettingsBackDestination,
+        commonSettingsBackDestination,
         researchSettingsBackDestination,
     )
     BackHandler(enabled = localMatch || p2pCoordinator != null || parentDestination != null) {
@@ -224,6 +226,7 @@ private fun OthelloApp(
                         mode = localMatchMode,
                         humanDisc = localHumanDisc,
                         dataManager = analysisDataManager,
+                        settingsStore = edaxSettings,
                         engine = analysisEngine,
                         persistence = localRecordPersistence,
                         onBack = { localMatch = false; destination = AppDestination.PLAY },
@@ -262,14 +265,15 @@ private fun OthelloApp(
                         input = requireNotNull(selectedReviewInput),
                         review = selectedReviewSession,
                         dataManager = analysisDataManager,
+                        settingsStore = edaxSettings,
                         engine = analysisEngine,
                         localStore = localRecordStore,
                         researchParticipationRepository = component?.researchParticipationRepository,
                         researchPositionRepository = component?.researchPositionRepository,
                         onBack = { destination = reviewBackDestination },
-                        onOpenAnalysis = {
-                            analysisSettingsBackDestination = AppDestination.REVIEW
-                            destination = AppDestination.ANALYSIS_SETTINGS
+                        onOpenCommonSettings = {
+                            commonSettingsBackDestination = AppDestination.REVIEW
+                            destination = AppDestination.COMMON_SETTINGS
                         },
                     )
                     destination == AppDestination.ACCOUNT_DELETION && component != null -> AccountDeletionScreen(
@@ -286,9 +290,10 @@ private fun OthelloApp(
                     )
                     destination == AppDestination.SETTINGS -> SettingsScreen(
                         onMatchSettings = { destination = AppDestination.MATCH_SETTINGS },
-                        onAnalysis = {
-                            analysisSettingsBackDestination = AppDestination.SETTINGS
-                            destination = AppDestination.ANALYSIS_SETTINGS
+                        onReviewSettings = { destination = AppDestination.REVIEW_SETTINGS },
+                        onCommonSettings = {
+                            commonSettingsBackDestination = AppDestination.SETTINGS
+                            destination = AppDestination.COMMON_SETTINGS
                         },
                         onResearch = if (session != null && component != null) {
                             {
@@ -300,20 +305,26 @@ private fun OthelloApp(
                     destination == AppDestination.MATCH_SETTINGS -> MatchSettingsScreen(
                         onBack = { destination = AppDestination.SETTINGS },
                         audioSettings = audioSettings,
+                        edaxSettings = edaxSettings,
                     )
-                    destination == AppDestination.ANALYSIS_SETTINGS -> AnalysisSettingsScreen(
+                    destination == AppDestination.REVIEW_SETTINGS -> ReviewSettingsScreen(
+                        settingsStore = edaxSettings,
+                        onBack = { destination = AppDestination.SETTINGS },
+                    )
+                    destination == AppDestination.COMMON_SETTINGS -> CommonSettingsScreen(
                         manager = analysisDataManager,
                         onDataChanged = analysisEngine::clearCache,
-                        onBack = { destination = analysisSettingsBackDestination },
+                        onBack = { destination = commonSettingsBackDestination },
                     )
                     destination == AppDestination.LOCAL_AI_SETUP -> LocalAiSetupScreen(
                         dataManager = analysisDataManager,
+                        settingsStore = edaxSettings,
                         selectedDisc = localHumanDisc,
                         onDiscSelected = { localHumanDisc = it },
                         onBack = { destination = AppDestination.PLAY },
-                        onOpenAnalysis = {
-                            analysisSettingsBackDestination = AppDestination.LOCAL_AI_SETUP
-                            destination = AppDestination.ANALYSIS_SETTINGS
+                        onOpenCommonSettings = {
+                            commonSettingsBackDestination = AppDestination.LOCAL_AI_SETUP
+                            destination = AppDestination.COMMON_SETTINGS
                         },
                         onStart = { localMatchMode = LocalMatchMode.AI; localMatch = true; destination = AppDestination.PLAY },
                     )
@@ -816,6 +827,7 @@ private fun LocalMatchScreen(
     mode: LocalMatchMode,
     humanDisc: Disc,
     dataManager: EdaxDataManager,
+    settingsStore: EdaxSettingsStore,
     engine: ProductionAnalysisEngine,
     persistence: LocalGameRecordPersistenceCoordinator,
     onBack: () -> Unit,
@@ -837,7 +849,9 @@ private fun LocalMatchScreen(
         if (mode == LocalMatchMode.AI && viewState.aiDisc == viewState.game.currentPlayer &&
             !viewState.aiThinking && viewState.completedRecord == null && viewState.game.status is com.example.othello.game.GameStatus.InProgress
         ) {
-            runCatching { aiTurnController.play(dataManager.analysisSettings()) }
+            runCatching {
+                aiTurnController.play(dataManager.analysisSettings(settingsStore.aiMatchSettings().level))
+            }
                 .onFailure { if (it !is CancellationException) saveError = it.message ?: "AI analysis failed" }
         }
     }
@@ -899,14 +913,16 @@ private fun LocalMatchScreen(
 @Composable
 private fun LocalAiSetupScreen(
     dataManager: EdaxDataManager,
+    settingsStore: EdaxSettingsStore,
     selectedDisc: Disc,
     onDiscSelected: (Disc) -> Unit,
     onBack: () -> Unit,
-    onOpenAnalysis: () -> Unit,
+    onOpenCommonSettings: () -> Unit,
     onStart: () -> Unit,
 ) {
-    val status = remember { dataManager.status() }
-    val ready = status.enabled && status.nativeAvailable && status.evaluationData != null
+    val status = remember { dataManager.commonDataStatus() }
+    val aiSettings = remember { settingsStore.aiMatchSettings() }
+    val ready = status.nativeAvailable && status.evaluationData != null
     Column(Modifier.fillMaxSize().padding(ChanrivaSpacing.page), verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             OutlinedButton(onClick = onBack) { Text("戻る") }
@@ -918,20 +934,19 @@ private fun LocalAiSetupScreen(
             OutlinedButton(onClick = { onDiscSelected(Disc.BLACK) }, modifier = Modifier.weight(1f)) { Text(if (selectedDisc == Disc.BLACK) "✓ 黒" else "黒") }
             OutlinedButton(onClick = { onDiscSelected(Disc.WHITE) }, modifier = Modifier.weight(1f)) { Text(if (selectedDisc == Disc.WHITE) "✓ 白" else "白") }
         }
-        Text("既存の解析設定を使用: Edax level ${status.level}")
+        Text("AI対局レベル: Level ${aiSettings.level}")
         if (!ready) {
             Text(
                 when {
-                    !status.enabled -> "設定でEdax解析がOFFです"
                     !status.nativeAvailable -> "Edaxを利用できません"
                     status.evaluationData == null -> "評価データを設定してください"
                     else -> "AI対局を開始できません"
                 },
                 color = MaterialTheme.colorScheme.error,
             )
-            if (!status.enabled || status.evaluationData == null) {
-                OutlinedButton(onClick = onOpenAnalysis, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (status.evaluationData == null) "評価データを設定する" else "解析設定を開く")
+            if (status.evaluationData == null) {
+                OutlinedButton(onClick = onOpenCommonSettings, modifier = Modifier.fillMaxWidth()) {
+                    Text("評価データを設定する")
                 }
             }
         }

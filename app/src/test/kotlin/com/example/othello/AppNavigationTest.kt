@@ -30,6 +30,8 @@ class AppNavigationTest {
             backDestination(AppDestination.REVIEW, reviewParent = AppDestination.OFFLINE_RECORDS),
         )
         assertEquals(AppDestination.SETTINGS, backDestination(AppDestination.MATCH_SETTINGS))
+        assertEquals(AppDestination.SETTINGS, backDestination(AppDestination.REVIEW_SETTINGS))
+        assertEquals(AppDestination.SETTINGS, backDestination(AppDestination.COMMON_SETTINGS))
         assertEquals(AppDestination.SETTINGS, backDestination(AppDestination.RESEARCH_SETTINGS))
         assertEquals(
             AppDestination.RESEARCH_INFO,
@@ -45,14 +47,17 @@ class AppNavigationTest {
     }
 
     @Test
-    fun analysisReturnsToTheScreenThatOpenedIt() {
+    fun commonSettingsReturnsToTheScreenThatOpenedIt() {
         assertEquals(
             AppDestination.REVIEW,
-            backDestination(AppDestination.ANALYSIS_SETTINGS, analysisParent = AppDestination.REVIEW),
+            backDestination(AppDestination.COMMON_SETTINGS, commonSettingsParent = AppDestination.REVIEW),
         )
         assertEquals(
             AppDestination.LOCAL_AI_SETUP,
-            backDestination(AppDestination.ANALYSIS_SETTINGS, analysisParent = AppDestination.LOCAL_AI_SETUP),
+            backDestination(
+                AppDestination.COMMON_SETTINGS,
+                commonSettingsParent = AppDestination.LOCAL_AI_SETUP,
+            ),
         )
     }
 }

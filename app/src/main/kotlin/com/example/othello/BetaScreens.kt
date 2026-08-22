@@ -47,6 +47,7 @@ import com.example.othello.designsystem.ChanrivaDangerButton
 import com.example.othello.designsystem.ChanrivaScreenHeader
 import com.example.othello.designsystem.ChanrivaSpacing
 import com.example.othello.analysis.edax.EdaxDataManager
+import com.example.othello.analysis.edax.EdaxSettingsStore
 import com.example.othello.analysis.edax.ProductionAnalysisEngine
 import com.example.othello.game.CanonicalMoves
 import com.example.othello.game.Disc
@@ -119,6 +120,7 @@ internal fun RecordsScreen(
 internal fun ReviewScreen(
     record: GameRecord,
     dataManager: EdaxDataManager,
+    settingsStore: EdaxSettingsStore,
     engine: ProductionAnalysisEngine,
     researchParticipationRepository: ResearchParticipationRepository,
     researchPositionRepository: ResearchPositionRepository,
@@ -134,18 +136,18 @@ internal fun ReviewScreen(
     var analysisResult by remember { mutableStateOf<AnalysisResult?>(null) }
     var analysisMessage by remember { mutableStateOf("解析未実行") }
     val state = remember(revision) { review.current }
-    val dataStatus = remember(revision, analysisRun) { dataManager.status() }
-    val settings = remember(revision, analysisRun) { dataManager.analysisSettings() }
+    val dataStatus = remember(revision, analysisRun) { dataManager.commonDataStatus() }
+    val reviewSettings = remember(revision, analysisRun) { settingsStore.reviewAnalysisSettings() }
+    val settings = remember(revision, analysisRun) { dataManager.analysisSettings(reviewSettings.level) }
     val positionKey = state.stateHash()
 
     LaunchedEffect(
         positionKey,
         analysisRequested,
         analysisRun,
-        dataStatus.enabled,
         dataStatus.evaluationData?.sha256,
         dataStatus.openingBook?.sha256,
-        dataStatus.level,
+        reviewSettings.level,
     ) {
         engine.cancel()
         val requestToken = analysisGuard.begin(positionKey)
@@ -153,7 +155,6 @@ internal fun ReviewScreen(
         analysisResult = null
         if (!analysisRequested) return@LaunchedEffect
         when {
-            !dataStatus.enabled -> analysisMessage = "設定でEdax解析がOFFです"
             !dataStatus.nativeAvailable -> analysisMessage = "Edax解析エンジンを利用できません"
             dataStatus.evaluationData == null -> analysisMessage = "解析用評価データが設定されていません"
             else -> {
@@ -641,12 +642,13 @@ internal fun ReviewScreenV2(
     input: ReviewInput,
     review: ReviewSession,
     dataManager: EdaxDataManager,
+    settingsStore: EdaxSettingsStore,
     engine: ProductionAnalysisEngine,
     localStore: LocalGameRecordStore,
     researchParticipationRepository: ResearchParticipationRepository?,
     researchPositionRepository: ResearchPositionRepository?,
     onBack: () -> Unit,
-    onOpenAnalysis: () -> Unit,
+    onOpenCommonSettings: () -> Unit,
 ) {
     val guard = remember(input.id) { AnalysisRequestGuard() }
     val scope = rememberCoroutineScope()
@@ -658,17 +660,17 @@ internal fun ReviewScreenV2(
     var message by remember { mutableStateOf("解析は開始されていません") }
     var saveMessage by remember { mutableStateOf<String?>(null) }
     val state = remember(revision) { review.current }
-    val status = remember(revision, analysisRun) { dataManager.status() }
-    val settings = remember(revision, analysisRun) { dataManager.analysisSettings() }
+    val status = remember(revision, analysisRun) { dataManager.commonDataStatus() }
+    val reviewSettings = remember(revision, analysisRun) { settingsStore.reviewAnalysisSettings() }
+    val settings = remember(revision, analysisRun) { dataManager.analysisSettings(reviewSettings.level) }
     val positionKey = state.stateHash()
     val analysisIssue = when {
         !status.nativeAvailable -> "Edaxを利用できません"
-        !status.enabled -> "設定でEdax解析がOFFです"
         status.evaluationData == null -> "評価データを設定してください"
         else -> null
     }
 
-    LaunchedEffect(positionKey, requested, analysisRun, analysisIssue, status.level, status.evaluationData?.sha256, status.openingBook?.sha256) {
+    LaunchedEffect(positionKey, requested, analysisRun, analysisIssue, reviewSettings.level, status.evaluationData?.sha256, status.openingBook?.sha256) {
         engine.cancel()
         val token = guard.begin(positionKey)
         running = false
@@ -735,7 +737,7 @@ internal fun ReviewScreenV2(
         analysisIssue?.let { issue ->
             Text(issue, color = MaterialTheme.colorScheme.error)
             if (status.nativeAvailable || status.evaluationData == null) {
-                OutlinedButton(onClick = onOpenAnalysis, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = onOpenCommonSettings, modifier = Modifier.fillMaxWidth()) {
                     Text(if (status.evaluationData == null) "評価データを設定する" else "解析設定を開く")
                 }
             }

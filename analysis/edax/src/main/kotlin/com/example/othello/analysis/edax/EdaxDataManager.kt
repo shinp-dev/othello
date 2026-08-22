@@ -27,14 +27,14 @@ data class ImportedAnalysisFile(
     val importedAtEpochMillis: Long,
 )
 
-data class EdaxDataStatus(
+data class EdaxCommonDataStatus(
     val nativeAvailable: Boolean,
     val nativeVersion: String?,
-    val enabled: Boolean,
-    val level: Int,
     val evaluationData: ImportedAnalysisFile?,
     val openingBook: ImportedAnalysisFile?,
 )
+
+internal const val EDAX_PREFERENCES = "edax-analysis"
 
 /** Deliberately separate engine and evaluation-data versions. The archive URL is pinned below. */
 object EdaxReleaseConstants {
@@ -50,19 +50,17 @@ class EdaxDataManager(context: Context) {
     private val preferences = appContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
     private val storageDirectory = File(appContext.filesDir, "analysis/edax/slots/default").apply { mkdirs() }
 
-    fun status(): EdaxDataStatus = EdaxDataStatus(
+    fun commonDataStatus(): EdaxCommonDataStatus = EdaxCommonDataStatus(
         nativeAvailable = NativeEdax.available,
         nativeVersion = NativeEdax.version,
-        enabled = preferences.getBoolean(KEY_ENABLED, true),
-        level = preferences.getInt(KEY_LEVEL, DEFAULT_LEVEL).coerceIn(MIN_LEVEL, MAX_LEVEL),
         evaluationData = readMetadata(EVAL_PREFIX),
         openingBook = readMetadata(BOOK_PREFIX),
     )
 
-    fun analysisSettings(): AnalysisSettings {
-        val current = status()
+    fun analysisSettings(level: Int): AnalysisSettings {
+        val current = commonDataStatus()
         return AnalysisSettings(
-            level = current.level,
+            level = level,
             evaluationData = current.evaluationData?.let {
                 EvaluationDataSource.Imported(AnalysisAsset(it.appPrivatePath, it.sha256))
             } ?: EvaluationDataSource.None,
@@ -70,15 +68,6 @@ class EdaxDataManager(context: Context) {
                 BookSource.ImportedBook(AnalysisAsset(it.appPrivatePath, it.sha256))
             } ?: BookSource.None,
         )
-    }
-
-    fun setEnabled(enabled: Boolean) {
-        preferences.edit().putBoolean(KEY_ENABLED, enabled).apply()
-    }
-
-    fun setLevel(level: Int) {
-        require(level in MIN_LEVEL..MAX_LEVEL)
-        preferences.edit().putInt(KEY_LEVEL, level).apply()
     }
 
     suspend fun importEvaluationData(uri: Uri): ImportedAnalysisFile =
@@ -260,14 +249,9 @@ class EdaxDataManager(context: Context) {
     }
 
     private companion object {
-        const val PREFERENCES = "edax-analysis"
-        const val KEY_ENABLED = "enabled"
-        const val KEY_LEVEL = "level"
+        const val PREFERENCES = EDAX_PREFERENCES
         const val EVAL_PREFIX = "evaluation"
         const val BOOK_PREFIX = "book"
-        const val DEFAULT_LEVEL = 8
-        const val MIN_LEVEL = 1
-        const val MAX_LEVEL = 18
         const val EVAL_MAX_BYTES = 13_952_436L
         const val BOOK_MAX_BYTES = 256L * 1024L * 1024L
         val SHA256 = Regex("[0-9a-f]{64}")
