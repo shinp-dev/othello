@@ -73,9 +73,9 @@ The Android client never contains a service-role key. It cannot mark a rating or
 
 ## Daily rating position
 
-The account home surface may show the latest completed daily position without turning the product into a ranking-history system. `refresh_rating_daily_snapshot(date)` replaces the previous rows atomically, so the database retains only the latest snapshot needed by the client: Tokyo snapshot date, tied `RANK()` rank, active-account count, and top percentile. The refresh is service-role-only and is intended to run once after the Asia/Tokyo day boundary; no client can trigger or write it.
+The account home surface may show the latest completed daily position without turning the product into a ranking-history system. `refresh_rating_daily_snapshot(date)` replaces the previous rows atomically, so the database retains only the latest snapshot needed by the client: Tokyo snapshot date, tied `RANK()` rank, active-user count, and top percentile. The refresh is service-role-only and is intended to run once after the Asia/Tokyo day boundary; no client can trigger or write it.
 
-For this feature, “active account” reuses the existing lifecycle definition: a confirmed, non-deleted account whose `profiles.last_active_at` is within the existing 365-day inactivity window as of the snapshot cutoff. `touch_last_active()` remains the only activity marker and the existing rating/match contracts are unchanged. The Android client reads the owner-scoped snapshot and keeps a separate device-only best percentile/date keyed by Supabase Auth user UUID; it is not an official server achievement and is not synchronized between devices.
+For this feature, “active in ranking” means a non-deleted user with at least one `rating_history` row created by the existing confirmed rating finalization flow during the 30 days ending at the Tokyo snapshot cutoff. The existing rating flow has no separate provisional-rating condition, so no new minimum-game or provisional exclusion is added. This ranking activity definition is intentionally separate from the account-lifecycle `profiles.last_active_at` marker. The Android client reads the owner-scoped snapshot and keeps a separate device-only best percentile/date keyed by Supabase Auth user UUID; it is not an official server achievement and is not synchronized between devices.
 
 ## Game Core
 

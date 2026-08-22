@@ -1,6 +1,6 @@
 -- Daily rating snapshot contract and ranking calculation tests.
 begin;
-select plan(23);
+select plan(24);
 
 select ok(to_regclass('public.rating_daily_snapshot') is not null, 'daily rating snapshot table exists');
 select is((select count(*)::int from information_schema.columns
@@ -16,7 +16,8 @@ select ok(has_function_privilege('service_role', 'public.refresh_rating_daily_sn
 select ok(not has_function_privilege('authenticated', 'public.refresh_rating_daily_snapshot(date)', 'execute'), 'authenticated cannot refresh snapshots');
 select ok(position('Asia/Tokyo' in pg_get_functiondef(to_regprocedure('public.refresh_rating_daily_snapshot(date)'))) > 0, 'refresh uses Tokyo date boundaries');
 select ok(position('rank() over' in lower(pg_get_functiondef(to_regprocedure('public.refresh_rating_daily_snapshot(date)')))) > 0, 'refresh uses tied rank semantics');
-select ok(position('365 days' in pg_get_functiondef(to_regprocedure('public.refresh_rating_daily_snapshot(date)'))) > 0, 'refresh reuses the existing active-account lifetime');
+select ok(position('rating_history' in pg_get_functiondef(to_regprocedure('public.refresh_rating_daily_snapshot(date)'))) > 0, 'refresh uses completed rating history as the activity source');
+select ok(position('30 days' in pg_get_functiondef(to_regprocedure('public.refresh_rating_daily_snapshot(date)'))) > 0, 'refresh uses the requested 30-day activity window');
 select ok(to_regprocedure('public.enqueue_or_match()') is not null, 'existing matchmaking RPC remains present');
 select ok(to_regprocedure('public.submit_match_result(uuid,text,text,text,text,jsonb)') is not null, 'existing result RPC remains present');
 
@@ -34,7 +35,7 @@ update public.ratings set current_rating = case user_id
   when '00000000-0000-0000-0000-000000000101'::uuid then 1600
   when '00000000-0000-0000-0000-000000000102'::uuid then 1600
   when '00000000-0000-0000-0000-000000000103'::uuid then 1500
-  when '00000000-0000-0000-0000-000000000104'::uuid then 1800
+  when '00000000-0000-0000-0000-000000000104'::uuid then 1400
   when '00000000-0000-0000-0000-000000000105'::uuid then 1900
   when '00000000-0000-0000-0000-000000000107'::uuid then 2100
   else 2000 end;
@@ -48,15 +49,24 @@ update public.profiles set last_active_at = case id
 update public.profiles set deleted_at = '2026-08-21 05:00:00+09'::timestamptz
  where id = '00000000-0000-0000-0000-000000000105';
 
+insert into public.rating_history(user_id, match_id, rating, delta, algorithm_version, created_at)
+values
+ ('00000000-0000-0000-0000-000000000101', '10000000-0000-0000-0000-000000000101', 1600, 10, 'elo-v1', '2026-08-01 00:00:00+09'),
+ ('00000000-0000-0000-0000-000000000102', '10000000-0000-0000-0000-000000000102', 1600, 10, 'elo-v1', '2026-08-21 00:00:00+09'),
+ ('00000000-0000-0000-0000-000000000103', '10000000-0000-0000-0000-000000000103', 1500, 10, 'elo-v1', '2026-07-23 00:00:00+09'),
+ ('00000000-0000-0000-0000-000000000104', '10000000-0000-0000-0000-000000000104', 1400, 10, 'elo-v1', '2026-08-10 00:00:00+09'),
+ ('00000000-0000-0000-0000-000000000105', '10000000-0000-0000-0000-000000000105', 1900, 10, 'elo-v1', '2026-08-10 00:00:00+09'),
+ ('00000000-0000-0000-0000-000000000107', '10000000-0000-0000-0000-000000000107', 2100, 10, 'elo-v1', '2026-08-22 00:00:00+09');
+
 select set_config('request.jwt.claim.role', 'service_role', false);
-select is(public.refresh_rating_daily_snapshot('2026-08-21'::date), 3, 'refresh returns the active confirmed user count');
-select is((select count(*)::int from public.rating_daily_snapshot), 3, 'only active users are stored');
-select is((select count(*)::int from public.rating_daily_snapshot where snapshot_date = '2026-08-21'), 3, 'all rows use the requested Tokyo snapshot date');
+select is(public.refresh_rating_daily_snapshot('2026-08-21'::date), 4, 'refresh returns users with a completed rated game in the window');
+select is((select count(*)::int from public.rating_daily_snapshot), 4, 'only users with recent rated games are stored');
+select is((select count(*)::int from public.rating_daily_snapshot where snapshot_date = '2026-08-21'), 4, 'all rows use the requested Tokyo snapshot date');
 select is((select rank from public.rating_daily_snapshot where user_id = '00000000-0000-0000-0000-000000000101'), 1, 'equal top ratings share rank one');
 select is((select rank from public.rating_daily_snapshot where user_id = '00000000-0000-0000-0000-000000000103'), 3, 'rank uses gaps after ties');
-select is((select top_percentile from public.rating_daily_snapshot where user_id = '00000000-0000-0000-0000-000000000101'), 33.3333::numeric, 'top percentile is rank divided by active count');
+select is((select top_percentile from public.rating_daily_snapshot where user_id = '00000000-0000-0000-0000-000000000101'), 25.0000::numeric, 'top percentile is rank divided by active count');
 update public.ratings set current_rating = 1900 where user_id = '00000000-0000-0000-0000-000000000103';
-select is(public.refresh_rating_daily_snapshot('2026-08-21'::date), 3, 'repeated refresh is idempotent in row count');
+select is(public.refresh_rating_daily_snapshot('2026-08-21'::date), 4, 'repeated refresh is idempotent in row count');
 select is((select rank from public.rating_daily_snapshot where user_id = '00000000-0000-0000-0000-000000000101'), 1, 'repeated refresh does not rewrite an already published date');
 select is((select count(distinct snapshot_date)::int from public.rating_daily_snapshot), 1, 'only the latest snapshot date is retained');
 

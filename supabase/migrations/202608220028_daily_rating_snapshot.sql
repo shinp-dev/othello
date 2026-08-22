@@ -1,4 +1,4 @@
--- Additive daily ranking snapshot.  Only the latest snapshot is retained;
+-- Additive daily ranking snapshot. Only the latest snapshot is retained;
 -- no existing rating table, RPC, RLS policy, or client contract is changed.
 
 create table public.rating_daily_snapshot (
@@ -45,18 +45,24 @@ begin
   end if;
   delete from public.rating_daily_snapshot;
 
-  with ranked as (
+  with bounds as (
+    select (((p_snapshot_date + 1)::timestamp) at time zone 'Asia/Tokyo') as cutoff
+  ), ranked as (
     select
       r.user_id,
       rank() over (order by r.current_rating desc) as user_rank,
       count(*) over () as users
     from public.ratings r
     join public.profiles p on p.id = r.user_id
-    join auth.users u on u.id = r.user_id
-    where u.email_confirmed_at is not null
-      and p.deleted_at is null
-      and p.last_active_at >= ((p_snapshot_date::timestamp at time zone 'Asia/Tokyo') - interval '365 days')
-      and p.last_active_at < (((p_snapshot_date + 1)::timestamp) at time zone 'Asia/Tokyo')
+    cross join bounds b
+    where p.deleted_at is null
+      and exists (
+        select 1
+          from public.rating_history h
+         where h.user_id = r.user_id
+           and h.created_at >= b.cutoff - interval '30 days'
+           and h.created_at < b.cutoff
+      )
   )
   insert into public.rating_daily_snapshot(user_id, snapshot_date, rank, active_user_count, top_percentile)
   select
