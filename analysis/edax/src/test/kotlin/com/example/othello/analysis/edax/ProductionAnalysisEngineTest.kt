@@ -7,6 +7,7 @@ import com.example.othello.analysis.api.EvaluationDataSource
 import com.example.othello.analysis.api.EvaluationKind
 import com.example.othello.analysis.api.ReviewPosition
 import com.example.othello.game.GameState
+import java.util.concurrent.CancellationException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -141,6 +142,73 @@ class ProductionAnalysisEngineTest {
         assertTrue(gateway.cancelCalls.get() > 0)
         first.cancelAndJoin()
         second.cancelAndJoin()
+    }
+
+    @Test
+    fun cancelledQueuedRequestsNeverRunOrOverwriteActiveNativeCancellation() = runBlocking {
+        val blockerEntered = CountDownLatch(1)
+        val releaseBlocker = CountDownLatch(1)
+        val blockerId = EdaxExecution.requestSequence.incrementAndGet()
+        val blocker = launch(Dispatchers.Default) {
+            EdaxExecution.executeCancellable(blockerId, { _ -> }) {
+                blockerEntered.countDown()
+                releaseBlocker.await(5, TimeUnit.SECONDS)
+            }
+        }
+        assertTrue(blockerEntered.await(5, TimeUnit.SECONDS))
+
+        val staleRuns = AtomicInteger()
+        val queuedNativeCancels = AtomicInteger()
+        suspend fun enqueueAndCancel(): Unit {
+            val requestId = EdaxExecution.requestSequence.incrementAndGet()
+            val request = launch(Dispatchers.Default) {
+                EdaxExecution.executeCancellable(requestId, { queuedNativeCancels.incrementAndGet() }) {
+                    staleRuns.incrementAndGet()
+                }
+            }
+            awaitPendingRequest(requestId)
+            request.cancelAndJoin()
+            assertFalse(EdaxExecution.hasPendingRequest(requestId))
+        }
+
+        enqueueAndCancel()
+        enqueueAndCancel()
+
+        val latestRuns = AtomicInteger()
+        val latestId = EdaxExecution.requestSequence.incrementAndGet()
+        val latest = launch(Dispatchers.Default) {
+            EdaxExecution.executeCancellable(latestId, { _ -> }) { latestRuns.incrementAndGet() }
+        }
+        awaitPendingRequest(latestId)
+        releaseBlocker.countDown()
+        blocker.join()
+        latest.join()
+
+        assertEquals(0, staleRuns.get())
+        assertEquals(0, queuedNativeCancels.get())
+        assertEquals(1, latestRuns.get())
+    }
+
+    @Test
+    fun cancellationBeforeExecutorRegistrationPreventsTheRequestFromRunning() = runBlocking {
+        val requestId = EdaxExecution.requestSequence.incrementAndGet()
+        val runs = AtomicInteger()
+
+        EdaxExecution.cancel(requestId)
+        assertFailsWith<CancellationException> {
+            EdaxExecution.executeCancellable(requestId, { _ -> }) { runs.incrementAndGet() }
+        }
+        EdaxExecution.forgetCancellation(requestId)
+
+        assertEquals(0, runs.get())
+    }
+
+    private suspend fun awaitPendingRequest(requestId: Long) {
+        repeat(100) {
+            if (EdaxExecution.hasPendingRequest(requestId)) return
+            kotlinx.coroutines.delay(10)
+        }
+        throw AssertionError("Edax request $requestId was not queued")
     }
 
     private fun settings(

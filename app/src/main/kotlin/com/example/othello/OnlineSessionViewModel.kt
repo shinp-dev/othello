@@ -7,6 +7,7 @@ import com.example.othello.data.supabase.SupabaseComponent
 import com.example.othello.data.supabase.SupabaseModule
 import com.example.othello.matchmaking.MatchAssignment
 import com.example.othello.matchmaking.MatchmakingController
+import com.example.othello.matchmaking.MatchmakingStatus
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
@@ -19,6 +20,7 @@ class OnlineSessionViewModel(application: Application) : AndroidViewModel(applic
         private set
     private val authController = AuthSessionController(
         gatewayResult = componentResult.map { it.authGateway },
+        onBeforeSignOut = { prepareForSignOut() },
         onAuthenticatedSessionEnding = {
             matchmaking?.reset()
             leaveCoordinator()
@@ -27,7 +29,7 @@ class OnlineSessionViewModel(application: Application) : AndroidViewModel(applic
     internal val authState: StateFlow<AuthState> = authController.state
 
     init {
-        viewModelScope.launch { authController.restoreSession() }
+        viewModelScope.launch { authController.runSessionLifecycle() }
     }
 
     fun retrySessionRestore() {
@@ -67,7 +69,24 @@ class OnlineSessionViewModel(application: Application) : AndroidViewModel(applic
     suspend fun leaveCoordinator() {
         val leaving = coordinator
         coordinator = null
-        leaving?.leave()
+        try {
+            leaving?.leave()
+        } finally {
+            leaving?.close()
+        }
+    }
+
+    private suspend fun prepareForSignOut() {
+        val controller = matchmaking
+        if (controller?.state?.status == MatchmakingStatus.WAITING) {
+            controller.cancel()
+            val racedAssignment = controller.state.assignment
+            controller.reset()
+            if (racedAssignment != null) {
+                runCatching { component?.onlineMatchRepository?.abandonMatch(racedAssignment.matchId) }
+            }
+        }
+        leaveCoordinator()
     }
 
     override fun onCleared() {

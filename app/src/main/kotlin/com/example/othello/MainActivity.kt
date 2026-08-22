@@ -53,6 +53,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.example.othello.auth.UserSession
 import com.example.othello.analysis.edax.EdaxDataManager
 import com.example.othello.analysis.edax.EdaxSettingsStore
@@ -151,6 +152,7 @@ private fun AuthenticatedApp(
     var reviewBackDestination by remember { mutableStateOf(AppDestination.STUDY) }
     var researchSettingsBackDestination by remember { mutableStateOf(AppDestination.SETTINGS) }
     val scope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
     val component = requireNotNull(sessionOwner.component) { "Authenticated app requires Supabase component" }
     val matchmaking = requireNotNull(sessionOwner.matchmaking) { "Authenticated app requires matchmaking controller" }
     var matchmakingState by remember { mutableStateOf(matchmaking.state) }
@@ -170,11 +172,13 @@ private fun AuthenticatedApp(
         } else null
         onDispose { closeable?.close() }
     }
-    LaunchedEffect(matchmakingState.status, matchmakingState.assignment) {
+    LaunchedEffect(matchmakingState.status, matchmakingState.assignment, lifecycleOwner) {
         if (matchmakingState.status == MatchmakingStatus.WAITING) {
-            while (isActive) {
-                delay(10_000)
-                matchmaking.heartbeat()
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (isActive) {
+                    delay(10_000)
+                    matchmaking.heartbeat()
+                }
             }
         }
     }

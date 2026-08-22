@@ -15,7 +15,12 @@ import com.example.othello.game.Position
 import java.io.File
 import java.util.LinkedHashMap
 import java.util.concurrent.CancellationException
-import java.util.concurrent.Executors
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.FutureTask
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -203,28 +208,20 @@ class ProductionAnalysisEngine private constructor(
         synchronized(cacheLock) { cache[key] }?.let { return it }
 
         val requestId = EdaxExecution.requestSequence.incrementAndGet()
-        activeRequest.getAndSet(requestId).takeIf { it != NO_REQUEST }?.let(gateway::cancel)
+        activeRequest.getAndSet(requestId).takeIf { it != NO_REQUEST }?.let(EdaxExecution::cancel)
         return try {
             val (player, opponent) = state.toEdaxBoard()
-            val nativeMoves = suspendCancellableCoroutine { continuation ->
-                continuation.invokeOnCancellation { gateway.cancel(requestId) }
-                EdaxExecution.executor.execute {
-                    runCatching {
-                        gateway.analyze(
-                        player = player,
-                        opponent = opponent,
-                        side = state.currentPlayer.toEdaxSide(),
-                        level = settings.level,
-                        timePerCandidateMs = settings.timePerCandidateMs,
-                        evaluationDataPath = evaluationAsset.appPrivatePath,
-                        bookPath = bookAsset?.appPrivatePath,
-                        requestId = requestId,
-                    )
-                    }.fold(
-                        onSuccess = { continuation.resumeWith(Result.success(it)) },
-                        onFailure = { continuation.resumeWith(Result.failure(it)) },
-                    )
-                }
+            val nativeMoves = EdaxExecution.executeCancellable(requestId, gateway::cancel) {
+                gateway.analyze(
+                    player = player,
+                    opponent = opponent,
+                    side = state.currentPlayer.toEdaxSide(),
+                    level = settings.level,
+                    timePerCandidateMs = settings.timePerCandidateMs,
+                    evaluationDataPath = evaluationAsset.appPrivatePath,
+                    bookPath = bookAsset?.appPrivatePath,
+                    requestId = requestId,
+                )
             }
             currentCoroutineContext().ensureActive()
             if (nativeMoves.isEmpty() && state.legalMoves.isNotEmpty()) throw CancellationException("Edax analysis cancelled")
@@ -250,11 +247,12 @@ class ProductionAnalysisEngine private constructor(
             unavailable("Edax解析に失敗しました: ${failure.message ?: failure::class.simpleName}")
         } finally {
             activeRequest.compareAndSet(requestId, NO_REQUEST)
+            EdaxExecution.forgetCancellation(requestId)
         }
     }
 
     override fun cancel() {
-        activeRequest.get().takeIf { it != NO_REQUEST }?.let(gateway::cancel)
+        activeRequest.get().takeIf { it != NO_REQUEST }?.let(EdaxExecution::cancel)
     }
 
     override fun clearCache() = synchronized(cacheLock) { cache.clear() }
@@ -278,9 +276,92 @@ class ProductionAnalysisEngine private constructor(
 
 internal object EdaxExecution {
     val requestSequence = AtomicLong()
-    val executor = Executors.newSingleThreadExecutor { runnable ->
+    private val pendingRequests = ConcurrentHashMap<Long, PendingRequest>()
+    private val cancelledBeforeRegistration = ConcurrentHashMap.newKeySet<Long>()
+    private val executor = ThreadPoolExecutor(
+        1,
+        1,
+        0L,
+        TimeUnit.MILLISECONDS,
+        LinkedBlockingQueue(),
+    ) { runnable ->
         Thread(runnable, "EdaxEngine").apply { isDaemon = true }
     }
+
+    suspend fun <T> executeCancellable(
+        requestId: Long,
+        cancelNative: (Long) -> Unit,
+        block: () -> T,
+    ): T = suspendCancellableCoroutine { continuation ->
+        val started = AtomicBoolean(false)
+        lateinit var task: FutureTask<Unit>
+        task = FutureTask {
+            started.set(true)
+            try {
+                if (!continuation.isActive) return@FutureTask
+                val result = runCatching(block)
+                pendingRequests.remove(requestId)
+                result.fold(
+                    onSuccess = { continuation.resumeWith(Result.success(it)) },
+                    onFailure = { continuation.resumeWith(Result.failure(it)) },
+                )
+            } finally {
+                pendingRequests.remove(requestId)
+            }
+        }
+        val pending = PendingRequest(
+            task = task,
+            started = started,
+            cancelNative = cancelNative,
+            cancelContinuation = {
+                continuation.cancel(CancellationException("Edax request $requestId cancelled"))
+            },
+        )
+        check(pendingRequests.putIfAbsent(requestId, pending) == null) { "Duplicate Edax request ID: $requestId" }
+        continuation.invokeOnCancellation { cancelRegistered(requestId) }
+        if (cancelledBeforeRegistration.remove(requestId) || !continuation.isActive) {
+            cancelRegistered(requestId)
+        } else {
+            executor.execute(task)
+        }
+    }
+
+    fun cancel(requestId: Long) {
+        val pending = pendingRequests.remove(requestId)
+        if (pending == null) {
+            cancelledBeforeRegistration += requestId
+            return
+        }
+        cancelPending(requestId, pending)
+    }
+
+    private fun cancelRegistered(requestId: Long) {
+        val pending = pendingRequests.remove(requestId) ?: return
+        cancelPending(requestId, pending)
+    }
+
+    private fun cancelPending(requestId: Long, pending: PendingRequest) {
+        pending.task.cancel(false)
+        executor.remove(pending.task)
+        try {
+            if (pending.started.get()) pending.cancelNative(requestId)
+        } finally {
+            pending.cancelContinuation()
+        }
+    }
+
+    fun forgetCancellation(requestId: Long) {
+        cancelledBeforeRegistration.remove(requestId)
+    }
+
+    internal fun hasPendingRequest(requestId: Long): Boolean = pendingRequests.containsKey(requestId)
+
+    private data class PendingRequest(
+        val task: FutureTask<Unit>,
+        val started: AtomicBoolean,
+        val cancelNative: (Long) -> Unit,
+        val cancelContinuation: () -> Unit,
+    )
 }
 
 internal fun com.example.othello.game.GameState.toEdaxBoard(): Pair<Long, Long> {

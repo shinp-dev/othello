@@ -1,12 +1,20 @@
 package com.example.othello
 
 import com.example.othello.auth.AuthGateway
+import com.example.othello.auth.AuthSessionStatus
 import com.example.othello.auth.SignUpResult
 import com.example.othello.auth.UserSession
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.test.fail
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 
@@ -31,6 +39,28 @@ class AuthSessionControllerTest {
         assertEquals(1, gateway.currentSessionCalls)
         assertEquals(1, gateway.touchCalls)
         assertEquals(0, gateway.emailSignInCalls)
+    }
+
+    @Test
+    fun initializationDoesNotBecomeUnauthenticatedBeforeRestoreCompletes() = runBlocking {
+        val restored = CompletableDeferred<UserSession?>()
+        val gateway = FakeAuthGateway(
+            status = AuthSessionStatus.Initializing,
+            currentSessionBlock = { restored.await() },
+        )
+        val controller = AuthSessionController(Result.success(gateway))
+
+        val restore = launch { controller.restoreSession() }
+        delay(20)
+        assertEquals(AuthState.Checking, controller.state.value)
+
+        restored.complete(UserSession("cold-start-user"))
+        restore.join()
+        assertEquals(
+            UserSession("cold-start-user"),
+            assertIs<AuthState.Authenticated>(controller.state.value).session,
+        )
+        assertEquals(1, gateway.touchCalls)
     }
 
     @Test
@@ -165,6 +195,133 @@ class AuthSessionControllerTest {
     }
 
     @Test
+    fun runtimeTransientStatusesDoNotLogoutButTerminalLossDoes() = runBlocking {
+        val session = UserSession("runtime-user")
+        val gateway = FakeAuthGateway(current = session)
+        var cleanupCalls = 0
+        val controller = AuthSessionController(Result.success(gateway)) { cleanupCalls++ }
+        val lifecycle = launch { controller.runSessionLifecycle() }
+        awaitState { controller.state.value is AuthState.Authenticated }
+
+        gateway.emit(AuthSessionStatus.Initializing)
+        gateway.emit(AuthSessionStatus.Recovering)
+        delay(20)
+        assertIs<AuthState.Authenticated>(controller.state.value)
+        assertEquals(0, cleanupCalls)
+
+        gateway.emit(AuthSessionStatus.Unauthenticated)
+        awaitState { controller.state.value == AuthState.Unauthenticated }
+        assertEquals(1, cleanupCalls)
+        lifecycle.cancelAndJoin()
+    }
+
+    @Test
+    fun runtimeAuthenticatedEventCanRecoverAStartupRestoreError() = runBlocking {
+        val gateway = FakeAuthGateway(
+            currentFailure = IllegalStateException("refresh temporarily unavailable"),
+            status = AuthSessionStatus.Recovering,
+        )
+        val controller = AuthSessionController(Result.success(gateway))
+        val lifecycle = launch { controller.runSessionLifecycle() }
+        awaitState { controller.state.value is AuthState.Error }
+
+        gateway.emit(AuthSessionStatus.Authenticated(UserSession("recovered-user")))
+        awaitState { controller.state.value is AuthState.Authenticated }
+        assertEquals(1, gateway.touchCalls)
+        lifecycle.cancelAndJoin()
+    }
+
+    @Test
+    fun successfulRuntimeRecoveryIsNotOverwrittenByAStaleRetryFailure() = runBlocking {
+        val attempts = AtomicInteger()
+        val retryResult = CompletableDeferred<UserSession?>()
+        val gateway = FakeAuthGateway(
+            status = AuthSessionStatus.Recovering,
+            currentSessionBlock = {
+                if (attempts.incrementAndGet() == 1) {
+                    throw IllegalStateException("initial refresh failure")
+                }
+                retryResult.await()
+            },
+        )
+        val controller = AuthSessionController(Result.success(gateway))
+        val lifecycle = launch { controller.runSessionLifecycle() }
+        awaitState { controller.state.value is AuthState.Error }
+
+        val retry = launch { controller.restoreSession() }
+        awaitState { controller.state.value == AuthState.Checking }
+        gateway.emit(AuthSessionStatus.Authenticated(UserSession("recovered-user")))
+        awaitState { controller.state.value is AuthState.Authenticated }
+        retryResult.completeExceptionally(IllegalStateException("stale retry failure"))
+        retry.join()
+
+        assertEquals(
+            UserSession("recovered-user"),
+            assertIs<AuthState.Authenticated>(controller.state.value).session,
+        )
+        lifecycle.cancelAndJoin()
+    }
+
+    @Test
+    fun terminalRuntimeLossIsNotOverwrittenByAStaleRetrySuccess() = runBlocking {
+        val attempts = AtomicInteger()
+        val retryResult = CompletableDeferred<UserSession?>()
+        val gateway = FakeAuthGateway(
+            status = AuthSessionStatus.Recovering,
+            currentSessionBlock = {
+                if (attempts.incrementAndGet() == 1) {
+                    throw IllegalStateException("initial refresh failure")
+                }
+                retryResult.await()
+            },
+        )
+        val controller = AuthSessionController(Result.success(gateway))
+        val lifecycle = launch { controller.runSessionLifecycle() }
+        awaitState { controller.state.value is AuthState.Error }
+
+        val retry = launch { controller.restoreSession() }
+        awaitState { controller.state.value == AuthState.Checking }
+        gateway.emit(AuthSessionStatus.Unauthenticated)
+        awaitState { controller.state.value == AuthState.Unauthenticated }
+        retryResult.complete(UserSession("stale-session"))
+        retry.join()
+
+        assertEquals(AuthState.Unauthenticated, controller.state.value)
+        lifecycle.cancelAndJoin()
+    }
+
+    @Test
+    fun logoutRunsRemoteQueueCleanupBeforeSdkSignOut() = runBlocking {
+        val events = mutableListOf<String>()
+        val gateway = FakeAuthGateway(
+            current = UserSession("user"),
+            onSignOut = { events += "sdk-sign-out" },
+        )
+        val controller = AuthSessionController(
+            gatewayResult = Result.success(gateway),
+            onBeforeSignOut = { events += "queue-cleanup" },
+        )
+        controller.restoreSession()
+
+        assertTrue(controller.signOut().isSuccess)
+        assertEquals(listOf("queue-cleanup", "sdk-sign-out"), events)
+    }
+
+    @Test
+    fun sdkSignOutEventAndExplicitLogoutShareOneAuthenticatedCleanup() = runBlocking {
+        val gateway = FakeAuthGateway(current = UserSession("user"))
+        var cleanupCalls = 0
+        val controller = AuthSessionController(Result.success(gateway)) { cleanupCalls++ }
+        val lifecycle = launch { controller.runSessionLifecycle() }
+        awaitState { controller.state.value is AuthState.Authenticated }
+
+        assertTrue(controller.signOut().isSuccess)
+        awaitState { controller.state.value == AuthState.Unauthenticated }
+        assertEquals(1, cleanupCalls)
+        lifecycle.cancelAndJoin()
+    }
+
+    @Test
     fun acceptedAccountDeletionAlwaysClearsLocalAuthenticatedState() = runBlocking {
         val gateway = FakeAuthGateway(
             current = UserSession("deleting-user"),
@@ -177,8 +334,17 @@ class AuthSessionControllerTest {
         controller.finishAccountDeletionSession()
 
         assertEquals(1, gateway.signOutCalls)
+        assertEquals(1, gateway.clearLocalSessionCalls)
         assertEquals(1, cleanupCalls)
         assertEquals(AuthState.Unauthenticated, controller.state.value)
+    }
+
+    private suspend fun awaitState(predicate: () -> Boolean) {
+        repeat(100) {
+            if (predicate()) return
+            delay(10)
+        }
+        fail("Auth state did not reach the expected value")
     }
 
     private class FakeAuthGateway(
@@ -190,17 +356,28 @@ class AuthSessionControllerTest {
         private val signUpFailure: Throwable? = null,
         private val passwordResetFailure: Throwable? = null,
         private val signOutFailure: Throwable? = null,
+        status: AuthSessionStatus = current?.let(AuthSessionStatus::Authenticated)
+            ?: AuthSessionStatus.Unauthenticated,
+        private val currentSessionBlock: (suspend () -> UserSession?)? = null,
+        private val onSignOut: () -> Unit = {},
     ) : AuthGateway {
+        private val mutableSessionStatus = MutableStateFlow(status)
+        override val sessionStatus = mutableSessionStatus
         var currentSessionCalls = 0
         var emailSignInCalls = 0
         var touchCalls = 0
         var passwordResetCalls = 0
         var signOutCalls = 0
+        var clearLocalSessionCalls = 0
+
+        fun emit(status: AuthSessionStatus) {
+            mutableSessionStatus.value = status
+        }
 
         override suspend fun currentSession(): UserSession? {
             currentSessionCalls++
             currentFailure?.let { throw it }
-            return current
+            return currentSessionBlock?.invoke() ?: current
         }
 
         override suspend fun signIn(email: String, password: String): UserSession {
@@ -228,6 +405,13 @@ class AuthSessionControllerTest {
         override suspend fun signOut() {
             signOutCalls++
             signOutFailure?.let { throw it }
+            onSignOut()
+            mutableSessionStatus.value = AuthSessionStatus.Unauthenticated
+        }
+
+        override suspend fun clearLocalSession() {
+            clearLocalSessionCalls++
+            mutableSessionStatus.value = AuthSessionStatus.Unauthenticated
         }
     }
 }

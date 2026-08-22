@@ -12,7 +12,6 @@ import java.util.concurrent.CancellationException
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.suspendCancellableCoroutine
 
 class ProductionAiMoveEngine private constructor(
     private val gateway: AiMoveGateway,
@@ -37,28 +36,20 @@ class ProductionAiMoveEngine private constructor(
         if (position.legalMoves.isEmpty()) return unavailable("AIが着手できる合法手がありません")
 
         val requestId = EdaxExecution.requestSequence.incrementAndGet()
-        activeRequest.getAndSet(requestId).takeIf { it != NO_REQUEST }?.let(gateway::cancel)
+        activeRequest.getAndSet(requestId).takeIf { it != NO_REQUEST }?.let(EdaxExecution::cancel)
         return try {
             val (player, opponent) = position.toEdaxBoard()
-            val square = suspendCancellableCoroutine { continuation ->
-                continuation.invokeOnCancellation { gateway.cancel(requestId) }
-                EdaxExecution.executor.execute {
-                    runCatching {
-                        gateway.chooseBestMove(
-                            player = player,
-                            opponent = opponent,
-                            side = position.currentPlayer.toEdaxSide(),
-                            level = settings.level,
-                            moveTimeMs = settings.moveTimeMs,
-                            evaluationDataPath = evaluationAsset.appPrivatePath,
-                            bookPath = bookAsset?.appPrivatePath,
-                            requestId = requestId,
-                        )
-                    }.fold(
-                        onSuccess = { continuation.resumeWith(Result.success(it)) },
-                        onFailure = { continuation.resumeWith(Result.failure(it)) },
-                    )
-                }
+            val square = EdaxExecution.executeCancellable(requestId, gateway::cancel) {
+                gateway.chooseBestMove(
+                    player = player,
+                    opponent = opponent,
+                    side = position.currentPlayer.toEdaxSide(),
+                    level = settings.level,
+                    moveTimeMs = settings.moveTimeMs,
+                    evaluationDataPath = evaluationAsset.appPrivatePath,
+                    bookPath = bookAsset?.appPrivatePath,
+                    requestId = requestId,
+                )
             }
             currentCoroutineContext().ensureActive()
             if (square == NATIVE_CANCELLED) throw CancellationException("Edax AI move cancelled")
@@ -71,11 +62,12 @@ class ProductionAiMoveEngine private constructor(
             unavailable("Edax AI着手に失敗しました: ${failure.message ?: failure::class.simpleName}")
         } finally {
             activeRequest.compareAndSet(requestId, NO_REQUEST)
+            EdaxExecution.forgetCancellation(requestId)
         }
     }
 
     override fun cancel() {
-        activeRequest.get().takeIf { it != NO_REQUEST }?.let(gateway::cancel)
+        activeRequest.get().takeIf { it != NO_REQUEST }?.let(EdaxExecution::cancel)
     }
 
     private fun unavailable(message: String) = AiMoveResult(move = null, available = false, message = message)

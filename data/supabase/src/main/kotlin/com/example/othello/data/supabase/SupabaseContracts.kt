@@ -1,6 +1,7 @@
 package com.example.othello.data.supabase
 
 import com.example.othello.auth.AuthGateway
+import com.example.othello.auth.AuthSessionStatus
 import com.example.othello.auth.SignUpResult
 import com.example.othello.auth.UserSession
 import com.example.othello.match.MatchFinishResult
@@ -31,6 +32,8 @@ import com.example.othello.game.Disc
 import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.annotations.SupabaseExperimental
 import io.github.jan.supabase.auth.*
+import io.github.jan.supabase.auth.status.RefreshFailureCause
+import io.github.jan.supabase.auth.status.SessionStatus as SupabaseSessionStatus
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
@@ -43,17 +46,22 @@ import io.github.jan.supabase.realtime.*
 import io.github.jan.supabase.SupabaseClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicBoolean
 
 private const val EMAIL_CONFIRMATION_REDIRECT_URL = "https://chanriva.shinp-studio.com/signup-complete"
 private const val PASSWORD_RESET_REDIRECT_URL = "https://chanriva.shinp-studio.com/reset-password"
@@ -258,7 +266,21 @@ internal class SupabaseOnlineMatchRepository(private val client: SupabaseClient)
 }
 
 internal class SupabaseAuthGateway(private val client: SupabaseClient) : AuthGateway {
-    override suspend fun currentSession(): UserSession? = client.auth.currentUserOrNull()?.let { UserSession(it.id) }
+    override val sessionStatus = client.auth.sessionStatus
+        .map(::toDomainSessionStatus)
+        .distinctUntilChanged()
+
+    override suspend fun currentSession(): UserSession? {
+        client.auth.awaitInitialization()
+        return when (val status = client.auth.sessionStatus.value) {
+            is SupabaseSessionStatus.Authenticated -> UserSession(
+                requireNotNull(status.session.user?.id) { "Authenticated Supabase session has no user" },
+            )
+            is SupabaseSessionStatus.NotAuthenticated -> null
+            is SupabaseSessionStatus.RefreshFailure -> throw sessionRestoreFailure(status)
+            SupabaseSessionStatus.Initializing -> error("Supabase Auth initialization did not complete")
+        }
+    }
 
     override suspend fun signIn(email: String, password: String): UserSession {
         require(email.isNotBlank()) { "email is required" }
@@ -294,6 +316,25 @@ internal class SupabaseAuthGateway(private val client: SupabaseClient) : AuthGat
         ?: throw IllegalStateException("Sign-in UI must establish a Supabase Auth session before matchmaking")
 
     override suspend fun signOut() { client.auth.signOut() }
+    override suspend fun clearLocalSession() { client.auth.clearSession() }
+
+    private fun toDomainSessionStatus(status: SupabaseSessionStatus): AuthSessionStatus = when (status) {
+        is SupabaseSessionStatus.Authenticated -> status.session.user?.id
+            ?.let { AuthSessionStatus.Authenticated(UserSession(it)) }
+            ?: AuthSessionStatus.Recovering
+        is SupabaseSessionStatus.NotAuthenticated -> AuthSessionStatus.Unauthenticated
+        is SupabaseSessionStatus.RefreshFailure -> AuthSessionStatus.Recovering
+        SupabaseSessionStatus.Initializing -> AuthSessionStatus.Initializing
+    }
+
+    @Suppress("DEPRECATION")
+    private fun sessionRestoreFailure(status: SupabaseSessionStatus.RefreshFailure): Throwable {
+        val cause = when (val failure = status.cause) {
+            is RefreshFailureCause.NetworkError -> failure.exception
+            is RefreshFailureCause.InternalServerError -> failure.exception
+        }
+        return IllegalStateException("Supabase session refresh failed during restore", cause)
+    }
 }
 
 @Serializable
@@ -615,6 +656,7 @@ internal class SupabaseResearchPositionRepository(
 
 /** Composition root for Supabase infrastructure. SDK types never cross this boundary. */
 class SupabaseComponent private constructor(
+    private val client: SupabaseClient,
     val authGateway: AuthGateway,
     val matchmakingRepository: MatchmakingRepository,
     val onlineMatchRepository: OnlineMatchRepository,
@@ -626,13 +668,25 @@ class SupabaseComponent private constructor(
     val signalingDataSource: SupabaseSignalingDataSource,
     private val scope: CoroutineScope,
 ) : AutoCloseable {
+    private val closed = AtomicBoolean(false)
+    private val closeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun close() {
+        if (!closed.compareAndSet(false, true)) return
         signalingDataSource.close()
         scope.cancel()
+        closeScope.launch {
+            try {
+                client.close()
+            } finally {
+                closeScope.cancel()
+            }
+        }
     }
 
     internal companion object {
         fun create(client: SupabaseClient, scope: CoroutineScope): SupabaseComponent = SupabaseComponent(
+            client = client,
             authGateway = SupabaseAuthGateway(client),
             matchmakingRepository = SupabaseMatchmakingRepository(client, scope),
             onlineMatchRepository = SupabaseOnlineMatchRepository(client),
