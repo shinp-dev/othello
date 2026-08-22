@@ -1,9 +1,11 @@
 package com.example.othello
 
+import android.widget.ImageView
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -14,9 +16,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.example.othello.designsystem.ChanrivaColors
 import com.example.othello.designsystem.ChanrivaSpacing
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -86,13 +92,44 @@ internal fun VersionGate(
     when (state) {
         VersionGateState.Checking -> VersionGateMessageScreen(showProgress = true)
         VersionGateState.Supported -> supportedContent()
-        is VersionGateState.Unsupported -> VersionGateMessageScreen(
-            message = "このバージョンは利用できません。\nアプリを最新版に更新してください。",
-        )
+        is VersionGateState.Unsupported -> VersionGateUnsupportedScreen()
         VersionGateState.Error -> VersionGateMessageScreen(
             message = "サーバーに接続できませんでした。\n通信環境を確認して、もう一度お試しください。",
             onRetry = owner::retry,
         )
+    }
+}
+
+@Composable
+private fun VersionGateUnsupportedScreen() {
+    Surface(Modifier.fillMaxSize().statusBarsPadding()) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(ChanrivaSpacing.page),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            AndroidView(
+                factory = { context ->
+                    ImageView(context).apply {
+                        setImageResource(R.mipmap.ic_launcher)
+                        scaleType = ImageView.ScaleType.FIT_CENTER
+                        contentDescription = "ちゃんりば アプリアイコン"
+                    }
+                },
+                modifier = Modifier.size(96.dp),
+            )
+            Text(
+                text = "アプリの更新が必要です",
+                style = MaterialTheme.typography.headlineSmall,
+                color = ChanrivaColors.accent,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                text = "このバージョンは利用できません。\n最新版へ更新してから、もう一度起動してください。",
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }
 
