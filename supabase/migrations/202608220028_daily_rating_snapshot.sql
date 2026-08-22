@@ -31,10 +31,13 @@ as $$
 declare
   inserted_count integer;
 begin
-  if auth.role() <> 'service_role' then
-    raise exception 'admin service role required';
+  if p_snapshot_date is null then
+    raise exception 'snapshot date is required';
   end if;
 
+  -- PostgreSQL EXECUTE grants below are the caller boundary. This keeps both
+  -- service-role API calls and a privileged DB-owned pg_cron job explicit;
+  -- JWT claims are not available to an in-database cron execution.
   -- Serialize a refresh so retries cannot interleave delete/insert phases.
   perform pg_advisory_xact_lock(hashtextextended('rating_daily_snapshot_refresh', 0));
   select count(*)::integer into inserted_count
@@ -43,26 +46,32 @@ begin
   if inserted_count > 0 then
     return inserted_count;
   end if;
+  if exists (
+    select 1 from public.rating_daily_snapshot where snapshot_date > p_snapshot_date
+  ) then
+    raise exception 'cannot replace a newer rating snapshot';
+  end if;
   delete from public.rating_daily_snapshot;
 
   with bounds as (
     select (((p_snapshot_date + 1)::timestamp) at time zone 'Asia/Tokyo') as cutoff
-  ), ranked as (
-    select
-      r.user_id,
-      rank() over (order by r.current_rating desc) as user_rank,
-      count(*) over () as users
-    from public.ratings r
-    join public.profiles p on p.id = r.user_id
+  ), snapshot_ratings as (
+    select distinct on (h.user_id)
+      h.user_id,
+      h.rating
+    from public.rating_history h
+    join public.profiles p on p.id = h.user_id
     cross join bounds b
     where p.deleted_at is null
-      and exists (
-        select 1
-          from public.rating_history h
-         where h.user_id = r.user_id
-           and h.created_at >= b.cutoff - interval '30 days'
-           and h.created_at < b.cutoff
-      )
+      and h.created_at >= b.cutoff - interval '30 days'
+      and h.created_at < b.cutoff
+    order by h.user_id, h.created_at desc, h.id desc
+  ), ranked as (
+    select
+      s.user_id,
+      rank() over (order by s.rating desc) as user_rank,
+      count(*) over () as users
+    from snapshot_ratings s
   )
   insert into public.rating_daily_snapshot(user_id, snapshot_date, rank, active_user_count, top_percentile)
   select

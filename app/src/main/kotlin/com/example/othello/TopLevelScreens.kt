@@ -43,27 +43,20 @@ internal fun StudyScreen(
 
 @Composable
 internal fun MoreScreen(
+    onAccount: () -> Unit,
     onResearchInfo: () -> Unit,
     onPrivacy: () -> Unit,
-    onAccountDeletion: () -> Unit,
     onAbout: () -> Unit,
-    logoutInProgress: Boolean,
-    logoutError: String?,
-    onLogout: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
     ) {
         ChanrivaScreenHeader("その他")
+        ChanrivaNavigationRow("アカウント", onAccount)
         ChanrivaNavigationRow("研究データについて", onResearchInfo)
         ChanrivaNavigationRow("プライバシーポリシー", onPrivacy)
-        ChanrivaNavigationRow("アカウント削除", onAccountDeletion)
         ChanrivaNavigationRow("このアプリについて", onAbout)
-        OutlinedButton(onClick = onLogout, enabled = !logoutInProgress, modifier = Modifier.fillMaxWidth()) {
-            Text(if (logoutInProgress) "ログアウト中…" else "ログアウト")
-        }
-        logoutError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }
 }
 

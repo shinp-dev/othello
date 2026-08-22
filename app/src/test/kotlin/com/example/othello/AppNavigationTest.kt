@@ -41,7 +41,8 @@ class AppNavigationTest {
             ),
         )
         assertEquals(AppDestination.MORE, backDestination(AppDestination.RESEARCH_INFO))
-        assertEquals(AppDestination.MORE, backDestination(AppDestination.ACCOUNT_DELETION))
+        assertEquals(AppDestination.MORE, backDestination(AppDestination.ACCOUNT))
+        assertEquals(AppDestination.ACCOUNT, backDestination(AppDestination.ACCOUNT_DELETION))
         assertEquals(AppDestination.MORE, backDestination(AppDestination.ABOUT))
         assertEquals(AppDestination.ABOUT, backDestination(AppDestination.OSS_LICENSES))
     }

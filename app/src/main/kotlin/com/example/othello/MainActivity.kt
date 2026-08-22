@@ -72,7 +72,6 @@ import com.example.othello.match.OnlineMatchController
 import com.example.othello.match.OnlineMatchViewState
 import com.example.othello.match.TimeWarningTracker
 import com.example.othello.matchmaking.MatchmakingStatus
-import com.example.othello.profile.CurrentRatingRepository
 import com.example.othello.records.GameRecord
 import com.example.othello.review.ReviewInput
 import com.example.othello.review.ReviewSession
@@ -301,9 +300,27 @@ private fun AuthenticatedApp(
                             destination = AppDestination.COMMON_SETTINGS
                         },
                     )
+                    destination == AppDestination.ACCOUNT -> AccountScreen(
+                        userId = session.userId,
+                        currentRatingRepository = component.currentRatingRepository,
+                        ratingAchievementStore = ratingAchievementStore,
+                        logoutInProgress = logoutInProgress,
+                        logoutError = logoutError,
+                        onBack = { destination = AppDestination.MORE },
+                        onAccountDeletion = { destination = AppDestination.ACCOUNT_DELETION },
+                        onLogout = {
+                            scope.launch {
+                                logoutInProgress = true
+                                logoutError = null
+                                sessionOwner.signOut()
+                                    .onFailure { logoutError = authErrorMessage(AuthOperation.SIGN_OUT, it) }
+                                logoutInProgress = false
+                            }
+                        },
+                    )
                     destination == AppDestination.ACCOUNT_DELETION -> AccountDeletionScreen(
                         component.accountDeletionRepository,
-                        onBack = { destination = AppDestination.MORE },
+                        onBack = { destination = AppDestination.ACCOUNT },
                         onRequested = {
                             scope.launch {
                                 sessionOwner.finishAccountDeletionSession()
@@ -353,21 +370,10 @@ private fun AuthenticatedApp(
                         onBack = { destination = researchSettingsBackDestination },
                     )
                     destination == AppDestination.MORE -> MoreScreen(
+                        onAccount = { destination = AppDestination.ACCOUNT },
                         onResearchInfo = { destination = AppDestination.RESEARCH_INFO },
                         onPrivacy = { uriHandler.openUri("https://chanriva.shinp-studio.com/privacy") },
-                        onAccountDeletion = { destination = AppDestination.ACCOUNT_DELETION },
                         onAbout = { destination = AppDestination.ABOUT },
-                        logoutInProgress = logoutInProgress,
-                        logoutError = logoutError,
-                        onLogout = {
-                            scope.launch {
-                                logoutInProgress = true
-                                logoutError = null
-                                sessionOwner.signOut()
-                                    .onFailure { logoutError = authErrorMessage(AuthOperation.SIGN_OUT, it) }
-                                logoutInProgress = false
-                            }
-                        },
                     )
                     destination == AppDestination.RESEARCH_INFO -> ResearchInfoScreen(
                         onBack = { destination = AppDestination.MORE },
@@ -385,9 +391,6 @@ private fun AuthenticatedApp(
                     )
                     else -> PlayScreen(
                         state = matchmakingState,
-                        session = session,
-                        currentRatingRepository = component.currentRatingRepository,
-                        ratingAchievementStore = ratingAchievementStore,
                         failedLocalRecordSaves = localRecordSaveStates.values
                             .filter { it.status == LocalRecordSaveStatus.FAILED },
                         onOnlineStart = { scope.launch { matchmaking.enqueue() } },
@@ -619,9 +622,6 @@ private fun OnlineOthelloBoard(
 @Composable
 private fun PlayScreen(
     state: com.example.othello.matchmaking.MatchmakingViewState,
-    session: UserSession,
-    currentRatingRepository: CurrentRatingRepository,
-    ratingAchievementStore: RatingAchievementStore,
     failedLocalRecordSaves: List<LocalRecordSaveState>,
     onOnlineStart: () -> Unit,
     onCancel: () -> Unit,
@@ -629,17 +629,6 @@ private fun PlayScreen(
     onLocalAiStart: () -> Unit,
     onRetryLocalRecordSave: (String) -> Unit,
 ) {
-    var ratingSummary by remember(session.userId) { mutableStateOf<com.example.othello.profile.RatingSummary?>(null) }
-    var localBest by remember(session.userId) { mutableStateOf<LocalBestRating?>(null) }
-    var currentRatingLoading by remember(session.userId) { mutableStateOf(false) }
-    LaunchedEffect(session.userId, currentRatingRepository, ratingAchievementStore) {
-        currentRatingLoading = true
-        ratingSummary = runCatching { currentRatingRepository.getRatingSummary() }.getOrNull()
-        localBest = ratingSummary?.yesterdayRanking?.let {
-            ratingAchievementStore.recordIfBetter(session.userId, it)
-        } ?: ratingAchievementStore.getBest(session.userId)
-        currentRatingLoading = false
-    }
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
@@ -648,22 +637,6 @@ private fun PlayScreen(
         ChanrivaScreenHeader("対局")
         Text("ちゃんりば", style = MaterialTheme.typography.headlineSmall, color = ChanrivaColors.accent)
         Text("ちゃんと残る、ちゃんと振り返れるリバーシ", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-            "レート ${when {
-                currentRatingLoading -> "取得中…"
-                ratingSummary != null -> ratingSummary!!.currentRating.toString()
-                else -> "---"
-            }}",
-            style = MaterialTheme.typography.titleMedium,
-        )
-        Text("昨日", style = MaterialTheme.typography.titleMedium)
-        ratingSummary?.yesterdayRanking?.let { ranking ->
-            Text(formatYesterdayRanking(ranking))
-        } ?: Text("順位データはまだありません", style = MaterialTheme.typography.bodySmall)
-        Text("端末内最高", style = MaterialTheme.typography.titleMedium)
-        localBest?.let { best ->
-            Text("上位 ${formatTopPercentile(best.topPercentile)}　${formatAchievementDate(best.achievedDate)}")
-        } ?: Text("まだ記録がありません", style = MaterialTheme.typography.bodySmall)
         Text("オンライン対局", style = MaterialTheme.typography.titleMedium)
         Button(
             onClick = onOnlineStart,

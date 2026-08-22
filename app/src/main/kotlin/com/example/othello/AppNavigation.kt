@@ -16,6 +16,7 @@ internal enum class AppDestination(val label: String, val shortLabel: String? = 
     ONLINE_RECORDS("オンライン棋譜"),
     OFFLINE_RECORDS("オフライン棋譜"),
     REVIEW("棋譜レビュー"),
+    ACCOUNT("アカウント"),
     ACCOUNT_DELETION("アカウント削除"),
     MATCH_SETTINGS("対局時設定"),
     REVIEW_SETTINGS("検討設定"),
@@ -50,9 +51,10 @@ internal fun backDestination(
     AppDestination.ONLINE_RECORDS,
     AppDestination.OFFLINE_RECORDS -> AppDestination.STUDY
     AppDestination.REVIEW -> reviewParent
-    AppDestination.ACCOUNT_DELETION,
     AppDestination.RESEARCH_INFO,
     AppDestination.ABOUT -> AppDestination.MORE
+    AppDestination.ACCOUNT -> AppDestination.MORE
+    AppDestination.ACCOUNT_DELETION -> AppDestination.ACCOUNT
     AppDestination.MATCH_SETTINGS -> AppDestination.SETTINGS
     AppDestination.REVIEW_SETTINGS -> AppDestination.SETTINGS
     AppDestination.RESEARCH_SETTINGS -> researchSettingsParent

@@ -1,6 +1,10 @@
 package com.example.othello.profile
 
+import java.time.Clock
 import java.time.LocalDate
+import java.time.ZoneId
+
+private val TOKYO_ZONE: ZoneId = ZoneId.of("Asia/Tokyo")
 
 interface AccountDeletionRepository {
     /** Queues a server-side deletion/anonymization request; Android never receives service-role authority. */
@@ -25,6 +29,12 @@ data class RatingSummary(
     val currentRating: Int,
     val yesterdayRanking: YesterdayRanking?,
 )
+
+fun tokyoYesterday(clock: Clock = Clock.systemUTC()): LocalDate =
+    LocalDate.now(clock.withZone(TOKYO_ZONE)).minusDays(1)
+
+fun YesterdayRanking.isTokyoYesterday(clock: Clock = Clock.systemUTC()): Boolean =
+    LocalDate.parse(snapshotDate) == tokyoYesterday(clock)
 
 interface CurrentRatingRepository {
     suspend fun getCurrentRating(): Int

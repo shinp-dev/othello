@@ -10,6 +10,7 @@ class AuthUiArchitectureContractTest {
     private val authGate = File("src/main/kotlin/com/example/othello/AuthGate.kt").readText()
     private val mainActivity = File("src/main/kotlin/com/example/othello/MainActivity.kt").readText()
     private val topLevelScreens = File("src/main/kotlin/com/example/othello/TopLevelScreens.kt").readText()
+    private val accountScreen = File("src/main/kotlin/com/example/othello/AccountScreen.kt").readText()
     private val analysisScreens = File("src/main/kotlin/com/example/othello/AnalysisScreens.kt").readText()
     private val betaScreens = File("src/main/kotlin/com/example/othello/BetaScreens.kt").readText()
     private val sessionOwner = File("src/main/kotlin/com/example/othello/OnlineSessionViewModel.kt").readText()
@@ -60,6 +61,8 @@ class AuthUiArchitectureContractTest {
         assertFalse("パスワード" in playBody)
         assertFalse("ログイン済み" in playBody)
         assertFalse("ログアウト" in playBody)
+        assertFalse("レート" in playBody)
+        assertFalse("端末内最高" in playBody)
         assertTrue("オンライン対局" in playBody)
         assertTrue("ふたりで対局" in playBody)
         assertTrue("AIと対局" in playBody)
@@ -67,8 +70,12 @@ class AuthUiArchitectureContractTest {
 
     @Test
     fun logoutAndAuthenticatedOnlyActionsAreInNaturalScreens() {
-        assertTrue("onLogout" in topLevelScreens)
-        assertTrue("ログアウト" in topLevelScreens)
+        assertTrue("ChanrivaNavigationRow(\"アカウント\"" in topLevelScreens)
+        assertTrue("onLogout" in accountScreen)
+        assertTrue("ログアウト" in accountScreen)
+        assertTrue("レート" in accountScreen)
+        assertTrue("昨日" in accountScreen)
+        assertTrue("端末内最高" in accountScreen)
         assertFalse("ログインが必要" in topLevelScreens)
         assertFalse("ログインが必要" in analysisScreens)
         assertFalse("ログインするとオンライン棋譜" in betaScreens)

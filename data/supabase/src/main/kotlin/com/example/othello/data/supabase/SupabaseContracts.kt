@@ -17,6 +17,7 @@ import com.example.othello.profile.AccountDeletionRepository
 import com.example.othello.profile.CurrentRatingRepository
 import com.example.othello.profile.RatingSummary
 import com.example.othello.profile.YesterdayRanking
+import com.example.othello.profile.isTokyoYesterday
 import com.example.othello.records.FinishReason
 import com.example.othello.records.GameRecord
 import com.example.othello.records.GameRecordRepository
@@ -62,6 +63,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import java.time.Clock
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -347,15 +349,15 @@ private data class RatingRow(
 )
 
 @Serializable
-private data class YesterdayRankingRow(
+internal data class YesterdayRankingRow(
     @SerialName("snapshot_date") val snapshotDate: String,
     val rank: Int,
     @SerialName("active_user_count") val activeUserCount: Int,
     @SerialName("top_percentile") val topPercentile: Double,
 ) {
-    fun toDomainOrNull(): YesterdayRanking? = runCatching {
+    fun toDomainOrNull(clock: Clock = Clock.systemUTC()): YesterdayRanking? = runCatching {
         YesterdayRanking(snapshotDate, rank, activeUserCount, topPercentile)
-    }.getOrNull()
+    }.getOrNull()?.takeIf { it.isTokyoYesterday(clock) }
 }
 
 internal class SupabaseGameRecordRepository(private val client: SupabaseClient) : GameRecordRepository {
@@ -405,6 +407,7 @@ internal class SupabaseCurrentRatingRepository(private val client: SupabaseClien
             throw cancelled
         } catch (_: Exception) {
             // The snapshot is additive and may not exist until the first server run.
+            // A missing or unavailable snapshot must not hide the independently read current rating.
             null
         }
         return RatingSummary(current, yesterday)
