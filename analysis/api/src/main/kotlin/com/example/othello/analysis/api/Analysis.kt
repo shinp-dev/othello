@@ -22,11 +22,28 @@ sealed interface BookSource {
 
 /** Review-analysis settings for evaluating every legal candidate. */
 data class AnalysisSettings(
-    val level: Int = 8,
+    val level: Int = DEFAULT_LEVEL,
+    val timePerCandidateMs: Int = DEFAULT_TIME_PER_CANDIDATE_MS,
     val evaluationData: EvaluationDataSource = EvaluationDataSource.None,
     val bookSource: BookSource = BookSource.None,
 ) {
-    init { require(level in 1..18) { "analysis level must be in 1..18" } }
+    init {
+        require(level in MIN_LEVEL..MAX_LEVEL) { "analysis level must be in 1..18" }
+        require(
+            timePerCandidateMs in MIN_TIME_PER_CANDIDATE_MS..MAX_TIME_PER_CANDIDATE_MS &&
+                (timePerCandidateMs - MIN_TIME_PER_CANDIDATE_MS) % TIME_PER_CANDIDATE_STEP_MS == 0,
+        ) { "analysis time per candidate is unsupported" }
+    }
+
+    companion object {
+        const val DEFAULT_LEVEL = 6
+        const val MIN_LEVEL = 1
+        const val MAX_LEVEL = 18
+        const val DEFAULT_TIME_PER_CANDIDATE_MS = 2_000
+        const val MIN_TIME_PER_CANDIDATE_MS = 500
+        const val MAX_TIME_PER_CANDIDATE_MS = 10_000
+        const val TIME_PER_CANDIDATE_STEP_MS = 500
+    }
 }
 
 enum class EvaluationPerspective { SIDE_TO_MOVE }

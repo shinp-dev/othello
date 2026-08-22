@@ -41,6 +41,19 @@ class EdaxSettingsStoreTest {
     }
 
     @Test
+    fun aiMatchAndReviewTimesAreSavedIndependently() {
+        val preferences = FakeEdaxSettingPreferences()
+        val store = EdaxSettingsStore(preferences)
+
+        store.setAiMatchMoveTimeMs(500)
+        store.setReviewAnalysisTimePerCandidateMs(10_000)
+
+        val restored = EdaxSettingsStore(preferences)
+        assertEquals(500, restored.aiMatchSettings().moveTimeMs)
+        assertEquals(10_000, restored.reviewAnalysisSettings().timePerCandidateMs)
+    }
+
+    @Test
     fun highLoadRangeIsConsistentWhenEnabledAndDisabled() {
         val preferences = FakeEdaxSettingPreferences()
         val store = EdaxSettingsStore(preferences)

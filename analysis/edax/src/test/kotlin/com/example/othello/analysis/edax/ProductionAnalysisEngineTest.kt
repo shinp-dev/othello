@@ -2,6 +2,7 @@ package com.example.othello.analysis.edax
 
 import com.example.othello.analysis.api.AnalysisAsset
 import com.example.othello.analysis.api.AnalysisSettings
+import com.example.othello.analysis.api.BookSource
 import com.example.othello.analysis.api.EvaluationDataSource
 import com.example.othello.analysis.api.EvaluationKind
 import com.example.othello.analysis.api.ReviewPosition
@@ -11,6 +12,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +21,18 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Test
 
 class ProductionAnalysisEngineTest {
+    @Test
+    fun reviewAnalysisDefaultsAndTimeBoundsAreExplicit() {
+        assertEquals(6, AnalysisSettings().level)
+        assertEquals(2_000, AnalysisSettings().timePerCandidateMs)
+        AnalysisSettings(level = 1, timePerCandidateMs = 500)
+        AnalysisSettings(level = 18, timePerCandidateMs = 10_000)
+
+        assertFailsWith<IllegalArgumentException> { AnalysisSettings(timePerCandidateMs = 499) }
+        assertFailsWith<IllegalArgumentException> { AnalysisSettings(timePerCandidateMs = 501) }
+        assertFailsWith<IllegalArgumentException> { AnalysisSettings(timePerCandidateMs = 10_001) }
+    }
+
     @Test
     fun missingEvaluationDataNeverReturnsFakeScores() = runBlocking {
         val engine = ProductionAnalysisEngine(FakeGateway())
@@ -48,6 +62,7 @@ class ProductionAnalysisEngineTest {
         assertEquals(2, gateway.player.countOneBits())
         assertEquals(2, gateway.opponent.countOneBits())
         assertEquals(null, gateway.bookPath)
+        assertEquals(2_000, gateway.timePerCandidateMs)
         assertEquals(EvaluationKind.EXACT, result.evaluations.first().score.kind)
     }
 
@@ -60,6 +75,32 @@ class ProductionAnalysisEngineTest {
         engine.analyze(ReviewPosition(GameState()), settings("eval-b"))
 
         assertEquals(2, gateway.calls.get())
+    }
+
+    @Test
+    fun bookIdentityRemainsPartOfSmallMemoryCacheKey() = runBlocking {
+        val gateway = FakeGateway()
+        val engine = ProductionAnalysisEngine(gateway)
+
+        engine.analyze(ReviewPosition(GameState()), settings("eval-a", bookIdentity = "book-a"))
+        engine.analyze(ReviewPosition(GameState()), settings("eval-a", bookIdentity = "book-a"))
+        engine.analyze(ReviewPosition(GameState()), settings("eval-a", bookIdentity = "book-b"))
+
+        assertEquals(2, gateway.calls.get())
+    }
+
+    @Test
+    fun candidateTimeIsPartOfCacheKeyAndIsPassedToGateway() = runBlocking {
+        val gateway = FakeGateway()
+        val engine = ProductionAnalysisEngine(gateway)
+
+        engine.analyze(ReviewPosition(GameState()), settings("eval-a", timePerCandidateMs = 2_000))
+        engine.analyze(ReviewPosition(GameState()), settings("eval-a", timePerCandidateMs = 2_000))
+        engine.analyze(ReviewPosition(GameState()), settings("eval-a", timePerCandidateMs = 10_000))
+        engine.analyze(ReviewPosition(GameState()), settings("eval-a", timePerCandidateMs = 10_000))
+
+        assertEquals(2, gateway.calls.get())
+        assertEquals(10_000, gateway.timePerCandidateMs)
     }
 
     @Test
@@ -102,8 +143,16 @@ class ProductionAnalysisEngineTest {
         second.cancelAndJoin()
     }
 
-    private fun settings(identity: String) = AnalysisSettings(
+    private fun settings(
+        identity: String,
+        timePerCandidateMs: Int = 2_000,
+        bookIdentity: String? = null,
+    ) = AnalysisSettings(
+        timePerCandidateMs = timePerCandidateMs,
         evaluationData = EvaluationDataSource.Imported(AnalysisAsset("/private/eval-$identity.dat", identity)),
+        bookSource = bookIdentity?.let {
+            BookSource.ImportedBook(AnalysisAsset("/private/book-$it.dat", it))
+        } ?: BookSource.None,
     )
 
     private class FakeGateway(
@@ -123,6 +172,7 @@ class ProductionAnalysisEngineTest {
         var player = 0L
         var opponent = 0L
         var side = -1
+        var timePerCandidateMs = -1
         var bookPath: String? = "unset"
 
         override fun validateEvaluationData(path: String): String? = null
@@ -133,6 +183,7 @@ class ProductionAnalysisEngineTest {
             opponent: Long,
             side: Int,
             level: Int,
+            timePerCandidateMs: Int,
             evaluationDataPath: String,
             bookPath: String?,
             requestId: Long,
@@ -141,6 +192,7 @@ class ProductionAnalysisEngineTest {
             this.player = player
             this.opponent = opponent
             this.side = side
+            this.timePerCandidateMs = timePerCandidateMs
             this.bookPath = bookPath
             return onAnalyze?.invoke() ?: moves
         }

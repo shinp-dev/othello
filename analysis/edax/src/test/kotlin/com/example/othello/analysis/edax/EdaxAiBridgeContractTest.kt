@@ -10,15 +10,12 @@ class EdaxAiBridgeContractTest {
     private val source = File("src/main/cpp/edax_android_bridge.c").readText()
     private val aiBody = source.substringAfter("int edax_android_choose_best_move(")
         .substringBefore("const char *edax_android_version")
-    private val reviewBody = source.substringAfter("int edax_android_analyze(")
-        .substringBefore("static bool select_best_legal_book_move")
 
     @Test
-    fun aiUsesOneTimedRootSearchWhileReviewRemainsUntimedPerCandidate() {
+    fun aiUsesOneTimedRootSearch() {
         assertEquals(1, Regex("""\bsearch_run\s*\(""").findAll(aiBody).count())
         assertEquals(1, Regex("""\bsearch_set_move_time\s*\(""").findAll(aiBody).count())
         assertTrue(aiBody.indexOf("search_set_move_time") < aiBody.indexOf("search_run"))
-        assertFalse("search_set_move_time" in reviewBody)
     }
 
     @Test

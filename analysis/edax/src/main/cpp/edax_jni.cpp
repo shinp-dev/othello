@@ -54,6 +54,7 @@ Java_com_example_othello_analysis_edax_NativeEdax_nativeAnalyze(
     jlong opponent,
     jint side,
     jint level,
+    jint time_per_candidate_ms,
     jstring eval_path,
     jstring book_path,
     jlong request_id
@@ -72,6 +73,7 @@ Java_com_example_othello_analysis_edax_NativeEdax_nativeAnalyze(
         static_cast<uint64_t>(opponent),
         side,
         level,
+        time_per_candidate_ms,
         eval_chars.get(),
         book_chars.get(),
         request_id,

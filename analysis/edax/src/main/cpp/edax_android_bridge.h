@@ -52,6 +52,7 @@ int edax_android_analyze(
     uint64_t opponent,
     int side,
     int level,
+    int time_per_candidate_ms,
     const char *eval_path,
     const char *book_path,
     int64_t request_id,

@@ -138,7 +138,7 @@ internal fun ReviewScreen(
     val state = remember(revision) { review.current }
     val dataStatus = remember(revision, analysisRun) { dataManager.commonDataStatus() }
     val reviewSettings = remember(revision, analysisRun) { settingsStore.reviewAnalysisSettings() }
-    val settings = remember(revision, analysisRun) { dataManager.analysisSettings(reviewSettings.level) }
+    val settings = remember(revision, analysisRun) { dataManager.analysisSettings(reviewSettings) }
     val positionKey = state.stateHash()
 
     LaunchedEffect(
@@ -148,6 +148,7 @@ internal fun ReviewScreen(
         dataStatus.evaluationData?.sha256,
         dataStatus.openingBook?.sha256,
         reviewSettings.level,
+        reviewSettings.timePerCandidateMs,
     ) {
         engine.cancel()
         val requestToken = analysisGuard.begin(positionKey)
@@ -662,7 +663,7 @@ internal fun ReviewScreenV2(
     val state = remember(revision) { review.current }
     val status = remember(revision, analysisRun) { dataManager.commonDataStatus() }
     val reviewSettings = remember(revision, analysisRun) { settingsStore.reviewAnalysisSettings() }
-    val settings = remember(revision, analysisRun) { dataManager.analysisSettings(reviewSettings.level) }
+    val settings = remember(revision, analysisRun) { dataManager.analysisSettings(reviewSettings) }
     val positionKey = state.stateHash()
     val analysisIssue = when {
         !status.nativeAvailable -> "Edaxを利用できません"
@@ -670,7 +671,16 @@ internal fun ReviewScreenV2(
         else -> null
     }
 
-    LaunchedEffect(positionKey, requested, analysisRun, analysisIssue, reviewSettings.level, status.evaluationData?.sha256, status.openingBook?.sha256) {
+    LaunchedEffect(
+        positionKey,
+        requested,
+        analysisRun,
+        analysisIssue,
+        reviewSettings.level,
+        reviewSettings.timePerCandidateMs,
+        status.evaluationData?.sha256,
+        status.openingBook?.sha256,
+    ) {
         engine.cancel()
         val token = guard.begin(positionKey)
         running = false

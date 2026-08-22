@@ -28,7 +28,9 @@ class AiMatchArchitectureContractTest {
     @Test
     fun reviewStillUsesItsAllCandidateAnalysisContract() {
         assertTrue("review.analyze(engine, settings)" in reviewScreens)
-        assertTrue("dataManager.analysisSettings(reviewSettings.level)" in reviewScreens)
+        assertTrue("dataManager.analysisSettings(reviewSettings)" in reviewScreens)
+        assertTrue("reviewSettings.timePerCandidateMs" in reviewScreens)
+        assertFalse("aiMatchSettings" in reviewScreens)
         assertFalse("chooseBestMove" in reviewScreens)
     }
 }

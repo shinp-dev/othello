@@ -43,6 +43,7 @@ class EdaxNativeInstrumentationTest {
         val engine = ProductionAnalysisEngine()
         val settings = AnalysisSettings(
             level = 8,
+            timePerCandidateMs = 2_000,
             evaluationData = EvaluationDataSource.Imported(AnalysisAsset(evaluation.absolutePath, "synthetic-zero-v1")),
             bookSource = BookSource.ImportedBook(AnalysisAsset(book.absolutePath, "synthetic-empty-book-v1")),
         )

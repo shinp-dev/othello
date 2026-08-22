@@ -24,6 +24,9 @@
 #define EDAX_BOOK_HEADER_BYTES 42LL
 #define EDAX_BOOK_MIN_POSITION_BYTES 42LL
 #define EDAX_BOOK_MAX_BYTES (256LL * 1024LL * 1024LL)
+#define EDAX_REVIEW_MIN_TIME_PER_CANDIDATE_MS 500
+#define EDAX_REVIEW_MAX_TIME_PER_CANDIDATE_MS 10000
+#define EDAX_REVIEW_TIME_PER_CANDIDATE_STEP_MS 500
 #define EDAX_AI_MIN_LEVEL 1
 #define EDAX_AI_MAX_LEVEL 8
 #define EDAX_AI_MIN_MOVE_TIME_MS 500
@@ -254,6 +257,7 @@ int edax_android_analyze(
     uint64_t opponent,
     int side,
     int level,
+    int time_per_candidate_ms,
     const char *eval_path,
     const char *book_path,
     int64_t request_id,
@@ -261,9 +265,14 @@ int edax_android_analyze(
 ) {
     if (result == NULL) return EDAX_ANDROID_INVALID_ARGUMENT;
     memset(result, 0, sizeof *result);
-    if ((player & opponent) != 0 || (player | opponent) == 0 || (side != BLACK && side != WHITE) || level < 1 || level > 18) {
+    if ((player & opponent) != 0 || (player | opponent) == 0 ||
+        (side != BLACK && side != WHITE) || level < 1 || level > 18 ||
+        time_per_candidate_ms < EDAX_REVIEW_MIN_TIME_PER_CANDIDATE_MS ||
+        time_per_candidate_ms > EDAX_REVIEW_MAX_TIME_PER_CANDIDATE_MS ||
+        (time_per_candidate_ms - EDAX_REVIEW_MIN_TIME_PER_CANDIDATE_MS) %
+            EDAX_REVIEW_TIME_PER_CANDIDATE_STEP_MS != 0) {
         result->status = EDAX_ANDROID_INVALID_ARGUMENT;
-        set_message(result->message, sizeof result->message, "Invalid board, side, or Edax level");
+        set_message(result->message, sizeof result->message, "Invalid board, side, Edax level, or candidate time");
         return result->status;
     }
 
@@ -340,9 +349,11 @@ int edax_android_analyze(
             search_init(&search);
             search_set_board(&search, &child, side == BLACK ? WHITE : BLACK);
             search_set_level(&search, level, search.n_empties);
+            search_set_move_time(&search, time_per_candidate_ms);
             set_active_search(&search, request_id);
             search_run(&search);
             clear_active_search(&search);
+            /* STOP_TIMEOUT is a valid completed candidate result; only an on-demand stop cancels. */
             if (is_cancelled(request_id) || search.stop == STOP_ON_DEMAND) {
                 search_free(&search);
                 result->status = EDAX_ANDROID_CANCELLED;

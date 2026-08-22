@@ -58,10 +58,11 @@ class EdaxDataManager(context: Context) {
         openingBook = readMetadata(BOOK_PREFIX),
     )
 
-    fun analysisSettings(level: Int): AnalysisSettings {
+    fun analysisSettings(settings: ReviewAnalysisSettings): AnalysisSettings {
         val current = commonDataStatus()
         return AnalysisSettings(
-            level = level,
+            level = settings.level,
+            timePerCandidateMs = settings.timePerCandidateMs,
             evaluationData = current.evaluationData?.let {
                 EvaluationDataSource.Imported(AnalysisAsset(it.appPrivatePath, it.sha256))
             } ?: EvaluationDataSource.None,

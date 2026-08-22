@@ -39,6 +39,7 @@ internal interface EdaxGateway {
         opponent: Long,
         side: Int,
         level: Int,
+        timePerCandidateMs: Int,
         evaluationDataPath: String,
         bookPath: String?,
         requestId: Long,
@@ -78,11 +79,21 @@ internal object NativeEdax : EdaxGateway, AiMoveGateway {
         opponent: Long,
         side: Int,
         level: Int,
+        timePerCandidateMs: Int,
         evaluationDataPath: String,
         bookPath: String?,
         requestId: Long,
     ): List<NativeMove> {
-        val encoded = nativeAnalyze(player, opponent, side, level, evaluationDataPath, bookPath, requestId)
+        val encoded = nativeAnalyze(
+            player,
+            opponent,
+            side,
+            level,
+            timePerCandidateMs,
+            evaluationDataPath,
+            bookPath,
+            requestId,
+        )
         require(encoded.size % NATIVE_FIELDS == 0) { "Malformed Edax JNI result" }
         return encoded.asList().chunked(NATIVE_FIELDS).map { values ->
             NativeMove(
@@ -132,6 +143,7 @@ internal object NativeEdax : EdaxGateway, AiMoveGateway {
         opponent: Long,
         side: Int,
         level: Int,
+        timePerCandidateMs: Int,
         evaluationDataPath: String,
         bookPath: String?,
         requestId: Long,
@@ -184,6 +196,7 @@ class ProductionAnalysisEngine private constructor(
             board = state.board.toCompactString(),
             currentPlayer = state.currentPlayer,
             level = settings.level,
+            timePerCandidateMs = settings.timePerCandidateMs,
             evaluationIdentity = evaluationAsset.identitySha256,
             bookIdentity = bookAsset?.identitySha256,
         )
@@ -202,6 +215,7 @@ class ProductionAnalysisEngine private constructor(
                         opponent = opponent,
                         side = state.currentPlayer.toEdaxSide(),
                         level = settings.level,
+                        timePerCandidateMs = settings.timePerCandidateMs,
                         evaluationDataPath = evaluationAsset.appPrivatePath,
                         bookPath = bookAsset?.appPrivatePath,
                         requestId = requestId,
@@ -251,6 +265,7 @@ class ProductionAnalysisEngine private constructor(
         val board: String,
         val currentPlayer: Disc,
         val level: Int,
+        val timePerCandidateMs: Int,
         val evaluationIdentity: String,
         val bookIdentity: String?,
     )
