@@ -1,7 +1,7 @@
 package com.example.othello
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -80,8 +80,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.CancellationException
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        AppLanguageStore(this).selected().let(::applyAppLanguage)
         super.onCreate(savedInstanceState)
         val launchOptions = debugLaunchOptions(intent)
         setContent {
@@ -434,13 +435,13 @@ private fun AuthenticatedApp(
     if (confirmOnlineLeave) {
         AlertDialog(
             onDismissRequest = { confirmOnlineLeave = false },
-            title = { Text("オンライン対局を終了しますか？") },
-            text = { Text("対局中に戻ると切断負けとして結果を送信します。") },
+            title = { Text(appString(R.string.leave_online_title)) },
+            text = { Text(appString(R.string.leave_online_text)) },
             confirmButton = {
-                ChanrivaDangerButton(onClick = ::leaveOnlineMatch) { Text("終了する") }
+                ChanrivaDangerButton(onClick = ::leaveOnlineMatch) { Text(appString(R.string.end_match)) }
             },
             dismissButton = {
-                OutlinedButton(onClick = { confirmOnlineLeave = false }) { Text("対局を続ける") }
+                OutlinedButton(onClick = { confirmOnlineLeave = false }) { Text(appString(R.string.continue_match)) }
             },
         )
     }
@@ -532,25 +533,25 @@ private fun OnlineMatchScreen(
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = onBack) { Text("戻る") }
+            OutlinedButton(onClick = onBack) { Text(appString(R.string.back)) }
             Spacer(Modifier.weight(1f))
-            Text("オンライン対局", style = MaterialTheme.typography.titleLarge)
+            Text(appString(R.string.online_match), style = MaterialTheme.typography.titleLarge)
         }
         Text(
-            opponentRatingLabel(coordinator.opponentRating),
+            opponentRatingLabel(coordinator.opponentRating, context),
             modifier = Modifier.align(Alignment.CenterHorizontally),
         )
         diagnostics?.let {
             Text("matchId: ${it.matchId}", style = MaterialTheme.typography.labelSmall)
             Text("status ${viewState.matchState.status.name} / disc ${viewState.localDisc}", style = MaterialTheme.typography.labelSmall)
         }
-        ScoreHeader(viewState.game, viewState.matchState.status.userLabel())
+        ScoreHeader(viewState.game, viewState.matchState.status.userLabel(context))
         Text(
-            "黒 ${formatClock(viewState.blackRemainingMillis)} / 白 ${formatClock(viewState.whiteRemainingMillis)}",
+            "${appString(R.string.black)} ${formatClock(viewState.blackRemainingMillis)} / ${appString(R.string.white)} ${formatClock(viewState.whiteRemainingMillis)}",
             modifier = Modifier.align(Alignment.CenterHorizontally),
         )
         OnlineOthelloBoard(viewState, controller, scope)
-        Text(viewState.message, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text(localizeUserMessage(context, viewState.message).orEmpty(), modifier = Modifier.align(Alignment.CenterHorizontally))
         diagnostics?.let {
             Text(
                 "ICE ${it.iceState} / Peer ${it.peerConnectionState} / DC ${it.dataChannelState} / ack ${it.localStartAcked}/${it.bothStartAcked}",
@@ -565,47 +566,47 @@ private fun OnlineMatchScreen(
             val current = result.currentRating
             val peak = result.peakRating
             if (before != null && after != null && delta != null) {
-                Text("レーティング $before → $after (${delta.withSign()})")
+                Text(appString(R.string.rating_change, before, after, delta.withSign()))
             }
             if (current != null && peak != null) {
-                Text("現在 $current / 最高 $peak")
+                Text(appString(R.string.current_peak, current, peak))
             }
         }
         OutlinedButton(
             onClick = { confirmResign = true },
             enabled = viewState.matchState.status == com.example.othello.match.MatchStatus.PLAYING,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("投了") }
-        if (viewState.error != null) Text(viewState.error!!, color = MaterialTheme.colorScheme.error)
+        ) { Text(appString(R.string.resign)) }
+        localizeUserMessage(context, viewState.error)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }
     if (confirmResign) {
         AlertDialog(
             onDismissRequest = { confirmResign = false },
-            title = { Text("投了しますか？") },
-            text = { Text("投了すると、この対局は負けとして確定処理へ進みます。") },
+            title = { Text(appString(R.string.resign_confirm_title)) },
+            text = { Text(appString(R.string.online_resign_text)) },
             confirmButton = {
                 ChanrivaDangerButton(onClick = {
                     confirmResign = false
                     scope.launch { controller.resign() }
-                }) { Text("投了する") }
+                }) { Text(appString(R.string.resign_action)) }
             },
             dismissButton = {
-                OutlinedButton(onClick = { confirmResign = false }) { Text("対局を続ける") }
+                OutlinedButton(onClick = { confirmResign = false }) { Text(appString(R.string.continue_match)) }
             },
         )
     }
 }
 
-private fun com.example.othello.match.MatchStatus.userLabel(): String = when (this) {
-    com.example.othello.match.MatchStatus.P2P_CONNECTED -> "接続確認中"
-    com.example.othello.match.MatchStatus.PLAYING -> "対局中"
-    com.example.othello.match.MatchStatus.FINISHING -> "結果送信中"
-    com.example.othello.match.MatchStatus.PENDING_RESULT -> "相手の結果待ち"
-    com.example.othello.match.MatchStatus.CONFIRMED -> "結果確定"
-    com.example.othello.match.MatchStatus.DISPUTED -> "結果不一致"
-    com.example.othello.match.MatchStatus.DISCONNECTED -> "切断"
-    com.example.othello.match.MatchStatus.SIGNALING_FAILED -> "エラー"
-    com.example.othello.match.MatchStatus.FAILED -> "エラー"
+private fun com.example.othello.match.MatchStatus.userLabel(context: android.content.Context? = null): String = when (this) {
+    com.example.othello.match.MatchStatus.P2P_CONNECTED -> context?.getString(R.string.match_status_connecting) ?: "接続確認中"
+    com.example.othello.match.MatchStatus.PLAYING -> context?.getString(R.string.match_status_playing) ?: "対局中"
+    com.example.othello.match.MatchStatus.FINISHING -> context?.getString(R.string.match_status_sending) ?: "結果送信中"
+    com.example.othello.match.MatchStatus.PENDING_RESULT -> context?.getString(R.string.match_status_waiting_result) ?: "相手の結果待ち"
+    com.example.othello.match.MatchStatus.CONFIRMED -> context?.getString(R.string.match_status_confirmed) ?: "結果確定"
+    com.example.othello.match.MatchStatus.DISPUTED -> context?.getString(R.string.match_status_disputed) ?: "結果不一致"
+    com.example.othello.match.MatchStatus.DISCONNECTED -> context?.getString(R.string.match_status_disconnected) ?: "切断"
+    com.example.othello.match.MatchStatus.SIGNALING_FAILED -> context?.getString(R.string.error) ?: "エラー"
+    com.example.othello.match.MatchStatus.FAILED -> context?.getString(R.string.error) ?: "エラー"
     else -> name
 }
 
@@ -654,30 +655,31 @@ private fun PlayScreen(
     onLocalAiStart: () -> Unit,
     onRetryLocalRecordSave: (String) -> Unit,
 ) {
+    val context = LocalContext.current
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
         horizontalAlignment = Alignment.Start,
     ) {
-        ChanrivaScreenHeader("対局")
-        Text("オンライン対局", style = MaterialTheme.typography.titleMedium)
+        ChanrivaScreenHeader(appString(R.string.play))
+        Text(appString(R.string.online_match), style = MaterialTheme.typography.titleMedium)
         Button(
             onClick = onOnlineStart,
             enabled = state.status !in setOf(MatchmakingStatus.WAITING, MatchmakingStatus.SIGNALING),
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("対局する") }
+        ) { Text(appString(R.string.play_online)) }
         when (state.status) {
             MatchmakingStatus.WAITING -> {
-                Text("対戦相手を待っています")
-                OutlinedButton(onClick = onCancel) { Text("キャンセル") }
+                Text(appString(R.string.opponent_waiting))
+                OutlinedButton(onClick = onCancel) { Text(appString(R.string.cancel)) }
             }
-            MatchmakingStatus.SIGNALING -> Text("対戦相手が見つかりました。P2P接続を開始します")
-            MatchmakingStatus.FAILED -> Text(state.error ?: "マッチングに失敗しました", color = MaterialTheme.colorScheme.error)
+            MatchmakingStatus.SIGNALING -> Text(appString(R.string.opponent_found))
+            MatchmakingStatus.FAILED -> Text(localizeUserMessage(context, state.error) ?: appString(R.string.matchmaking_failed), color = MaterialTheme.colorScheme.error)
             else -> Unit
         }
-        Text("端末で対局", style = MaterialTheme.typography.titleMedium)
-        ChanrivaNavigationRow("ふたりで対局", onLocalHumanStart)
-        ChanrivaNavigationRow("AIと対局", onLocalAiStart)
+        Text(appString(R.string.device_match), style = MaterialTheme.typography.titleMedium)
+        ChanrivaNavigationRow(appString(R.string.two_player_match), onLocalHumanStart)
+        ChanrivaNavigationRow(appString(R.string.play_against_ai), onLocalAiStart)
         if (failedLocalRecordSaves.isNotEmpty()) {
             Card(Modifier.fillMaxWidth()) {
                 Column(
@@ -685,14 +687,14 @@ private fun PlayScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        "ローカル棋譜の保存に失敗しました（${failedLocalRecordSaves.size}件）",
+                        appString(R.string.local_save_failed, failedLocalRecordSaves.size),
                         color = MaterialTheme.colorScheme.error,
                     )
                     failedLocalRecordSaves.forEach { failed ->
                         OutlinedButton(
                             onClick = { onRetryLocalRecordSave(failed.localId) },
                             modifier = Modifier.fillMaxWidth(),
-                        ) { Text("保存を再試行") }
+                        ) { Text(appString(R.string.retry_save)) }
                     }
                 }
             }
@@ -700,10 +702,12 @@ private fun PlayScreen(
     }
 }
 
-internal fun opponentRatingLabel(rating: Int?): String = "相手　レート ${rating ?: "---"}"
+internal fun opponentRatingLabel(rating: Int?, context: android.content.Context? = null): String =
+    context?.getString(R.string.opponent_rating, rating ?: "---") ?: "相手　レート ${rating ?: "---"}"
 
 @Composable
 private fun MatchScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
     val controller = remember { LocalMatchController() }
     var viewState by remember { mutableStateOf<LocalMatchViewState>(controller.viewState) }
     DisposableEffect(controller) {
@@ -715,14 +719,14 @@ private fun MatchScreen(onBack: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = onBack) { Text("戻る") }
+            OutlinedButton(onClick = onBack) { Text(appString(R.string.back)) }
             Spacer(Modifier.weight(1f))
-            Text("ローカル対局", style = MaterialTheme.typography.titleLarge)
+            Text(appString(R.string.local_match), style = MaterialTheme.typography.titleLarge)
         }
         ScoreHeader(viewState)
         OthelloBoard(viewState, controller)
-        Text(viewState.message, style = MaterialTheme.typography.titleMedium, modifier = Modifier.align(Alignment.CenterHorizontally))
-        Button(onClick = controller::reset, modifier = Modifier.fillMaxWidth()) { Text("新しい対局") }
+        Text(localizeUserMessage(context, viewState.message).orEmpty(), style = MaterialTheme.typography.titleMedium, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Button(onClick = controller::reset, modifier = Modifier.fillMaxWidth()) { Text(appString(R.string.new_match)) }
     }
 }
 
@@ -736,6 +740,7 @@ private fun LocalMatchScreen(
     persistence: LocalGameRecordPersistenceCoordinator,
     onBack: () -> Unit,
 ) {
+    val context = LocalContext.current
     val controller = remember(mode, humanDisc) { LocalMatchController(mode = mode, humanDisc = humanDisc) }
     val aiTurnController = remember(controller, engine) { LocalAiTurnController(controller, engine) }
     var viewState by remember { mutableStateOf(controller.viewState) }
@@ -756,7 +761,7 @@ private fun LocalMatchScreen(
             runCatching {
                 aiTurnController.play(dataManager.aiMoveSettings(settingsStore.aiMatchSettings()))
             }
-                .onFailure { if (it !is CancellationException) saveError = it.message ?: "AI move failed" }
+                .onFailure { if (it !is CancellationException) saveError = localizeUserMessage(context, it.message) ?: context.getString(R.string.ai_match_unavailable) }
         }
     }
     DisposableEffect(engine) {
@@ -767,29 +772,29 @@ private fun LocalMatchScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = onBack) { Text("戻る") }
+            OutlinedButton(onClick = onBack) { Text(appString(R.string.back)) }
             Spacer(Modifier.weight(1f))
-            Text(if (mode == LocalMatchMode.AI) "AIと対局" else "ふたりで対局", style = MaterialTheme.typography.titleLarge)
+            Text(appString(if (mode == LocalMatchMode.AI) R.string.play_against_ai else R.string.two_player_match), style = MaterialTheme.typography.titleLarge)
         }
         ScoreHeader(viewState.game)
         LocalOthelloBoard(viewState, controller)
-        Text(viewState.message, style = MaterialTheme.typography.titleMedium, modifier = Modifier.align(Alignment.CenterHorizontally))
-        if (viewState.aiThinking) Text("AI思考中…", modifier = Modifier.align(Alignment.CenterHorizontally))
-        viewState.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        Text(localizeUserMessage(context, viewState.message).orEmpty(), style = MaterialTheme.typography.titleMedium, modifier = Modifier.align(Alignment.CenterHorizontally))
+        if (viewState.aiThinking) Text(appString(R.string.ai_thinking), modifier = Modifier.align(Alignment.CenterHorizontally))
+        localizeUserMessage(context, viewState.error)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         saveError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         viewState.completedRecord?.let { record ->
             when (saveStates[record.localId]?.status) {
-                LocalRecordSaveStatus.SAVED -> Text("ローカル棋譜を保存しました")
+                LocalRecordSaveStatus.SAVED -> Text(appString(R.string.local_record_saved))
                 LocalRecordSaveStatus.FAILED -> {
                     Text(
-                        saveStates[record.localId]?.errorMessage ?: "ローカル棋譜を保存できませんでした",
+                        localizeUserMessage(context, saveStates[record.localId]?.errorMessage) ?: appString(R.string.local_record_save_failed),
                         color = MaterialTheme.colorScheme.error,
                     )
-                    OutlinedButton(onClick = { persistence.retry(record.localId) }) { Text("保存を再試行") }
+                    OutlinedButton(onClick = { persistence.retry(record.localId) }) { Text(appString(R.string.retry_save)) }
                 }
                 LocalRecordSaveStatus.PENDING,
                 LocalRecordSaveStatus.SAVING,
-                null -> Text("ローカル棋譜を保存中…")
+                null -> Text(appString(R.string.local_record_saving))
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -797,19 +802,19 @@ private fun LocalMatchScreen(
                 onClick = { confirmResign = true },
                 enabled = viewState.finishReason == null && !viewState.aiThinking,
                 modifier = Modifier.weight(1f),
-            ) { Text("投了") }
-            Button(onClick = controller::reset, modifier = Modifier.weight(1f)) { Text("新しい対局") }
+            ) { Text(appString(R.string.resign)) }
+            Button(onClick = controller::reset, modifier = Modifier.weight(1f)) { Text(appString(R.string.new_match)) }
         }
     }
     if (confirmResign) {
         AlertDialog(
             onDismissRequest = { confirmResign = false },
-            title = { Text("投了しますか？") },
-            text = { Text("この対局を投了としてローカル棋譜に保存します。") },
+            title = { Text(appString(R.string.resign_confirm_title)) },
+            text = { Text(appString(R.string.local_resign_text)) },
             confirmButton = {
-                ChanrivaDangerButton(onClick = { confirmResign = false; controller.resign(if (mode == LocalMatchMode.AI) humanDisc else viewState.game.currentPlayer) }) { Text("投了する") }
+                ChanrivaDangerButton(onClick = { confirmResign = false; controller.resign(if (mode == LocalMatchMode.AI) humanDisc else viewState.game.currentPlayer) }) { Text(appString(R.string.resign_action)) }
             },
-            dismissButton = { OutlinedButton(onClick = { confirmResign = false }) { Text("続ける") } },
+            dismissButton = { OutlinedButton(onClick = { confirmResign = false }) { Text(appString(R.string.continue_label)) } },
         )
     }
 }
@@ -829,32 +834,32 @@ private fun LocalAiSetupScreen(
     val ready = status.nativeAvailable && status.evaluationData != null
     Column(Modifier.fillMaxSize().padding(ChanrivaSpacing.page), verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = onBack) { Text("戻る") }
+            OutlinedButton(onClick = onBack) { Text(appString(R.string.back)) }
             Spacer(Modifier.weight(1f))
-            Text("AIと対局", style = MaterialTheme.typography.titleLarge)
+            Text(appString(R.string.play_against_ai), style = MaterialTheme.typography.titleLarge)
         }
-        Text("ユーザーの色")
+        Text(appString(R.string.user_color))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { onDiscSelected(Disc.BLACK) }, modifier = Modifier.weight(1f)) { Text(if (selectedDisc == Disc.BLACK) "✓ 黒" else "黒") }
-            OutlinedButton(onClick = { onDiscSelected(Disc.WHITE) }, modifier = Modifier.weight(1f)) { Text(if (selectedDisc == Disc.WHITE) "✓ 白" else "白") }
+            OutlinedButton(onClick = { onDiscSelected(Disc.BLACK) }, modifier = Modifier.weight(1f)) { Text(if (selectedDisc == Disc.BLACK) appString(R.string.black_checked) else appString(R.string.black)) }
+            OutlinedButton(onClick = { onDiscSelected(Disc.WHITE) }, modifier = Modifier.weight(1f)) { Text(if (selectedDisc == Disc.WHITE) appString(R.string.white_checked) else appString(R.string.white)) }
         }
-        Text("AI対局レベル: Level ${aiSettings.level}")
+        Text(appString(R.string.ai_level, aiSettings.level))
         if (!ready) {
             Text(
                 when {
-                    !status.nativeAvailable -> "Edaxを利用できません"
-                    status.evaluationData == null -> "評価データを設定してください"
-                    else -> "AI対局を開始できません"
+                    !status.nativeAvailable -> appString(R.string.edax_engine_unavailable)
+                    status.evaluationData == null -> appString(R.string.analysis_data_not_set)
+                    else -> appString(R.string.ai_match_unavailable)
                 },
                 color = MaterialTheme.colorScheme.error,
             )
             if (status.evaluationData == null) {
                 OutlinedButton(onClick = onOpenCommonSettings, modifier = Modifier.fillMaxWidth()) {
-                    Text("評価データを設定する")
+                    Text(appString(R.string.set_evaluation_data))
                 }
             }
         }
-        Button(onClick = onStart, enabled = ready, modifier = Modifier.fillMaxWidth()) { Text("対局開始") }
+        Button(onClick = onStart, enabled = ready, modifier = Modifier.fillMaxWidth()) { Text(appString(R.string.start_match)) }
     }
 }
 
@@ -888,9 +893,9 @@ private fun ScoreHeader(viewState: LocalMatchViewState) = ScoreHeader(viewState.
 private fun ScoreHeader(game: com.example.othello.game.GameState, status: String? = null) {
     Card(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(ChanrivaSpacing.card)) {
-            Text("黒 ${game.board.count(Disc.BLACK)}", modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            Text("白 ${game.board.count(Disc.WHITE)}", modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            Text("手数 ${game.ply}", modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text(appString(R.string.black_count, game.board.count(Disc.BLACK)), modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text(appString(R.string.white_count, game.board.count(Disc.WHITE)), modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text(appString(R.string.ply_count, game.ply), modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             Text(status.orEmpty(), modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         }
     }

@@ -65,49 +65,53 @@ internal fun AccountScreen(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
     ) {
-        ChanrivaScreenHeader("アカウント", onBack)
-        Text("現在レート", style = MaterialTheme.typography.titleMedium)
+        ChanrivaScreenHeader(appString(R.string.account), onBack, backLabel = appString(R.string.back))
+        Text(appString(R.string.current_rating), style = MaterialTheme.typography.titleMedium)
         Text(
             when {
-                loading -> "取得中…"
+                loading -> appString(R.string.loading)
                 ratingSummary != null -> ratingSummary!!.currentRating.toString()
                 else -> "---"
             },
             style = MaterialTheme.typography.displaySmall,
         )
         if (ratingLoadFailed) {
-            Text("レートを取得できませんでした", style = MaterialTheme.typography.bodySmall)
+            Text(appString(R.string.rating_load_failed), style = MaterialTheme.typography.bodySmall)
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact)) {
-            Text("前日順位", style = MaterialTheme.typography.titleMedium)
+            Text(appString(R.string.previous_day_ranking), style = MaterialTheme.typography.titleMedium)
             when {
-                loading -> Text("取得中…", style = MaterialTheme.typography.bodySmall)
+                loading -> Text(appString(R.string.loading), style = MaterialTheme.typography.bodySmall)
                 ratingSummary?.yesterdayRanking != null -> {
                     val ranking = requireNotNull(ratingSummary?.yesterdayRanking)
                     Text(
-                        "${String.format(java.util.Locale.ROOT, "%,d", ranking.rank)} / ${String.format(java.util.Locale.ROOT, "%,d", ranking.activeUserCount)}位",
+                        appString(
+                            R.string.rank_format,
+                            String.format(java.util.Locale.ROOT, "%,d", ranking.rank),
+                            String.format(java.util.Locale.ROOT, "%,d", ranking.activeUserCount),
+                        ),
                         style = MaterialTheme.typography.headlineSmall,
                     )
-                    Text("上位 ${formatTopPercentile(ranking.topPercentile)}")
+                    Text(appString(R.string.top_percentile, formatTopPercentile(ranking.topPercentile)))
                 }
-                else -> Text("順位データはまだありません", style = MaterialTheme.typography.bodySmall)
+                else -> Text(appString(R.string.no_ranking_yet), style = MaterialTheme.typography.bodySmall)
             }
-            Text("※日本時間の前日終了時点のレートをもとに算出", style = MaterialTheme.typography.bodySmall)
+            Text(appString(R.string.rating_previous_day_note), style = MaterialTheme.typography.bodySmall)
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact)) {
-            Text("この端末の最高記録", style = MaterialTheme.typography.titleMedium)
+            Text(appString(R.string.best_local_record), style = MaterialTheme.typography.titleMedium)
             localBest?.let { best ->
-                Text("上位 ${formatTopPercentile(best.topPercentile)}", style = MaterialTheme.typography.headlineSmall)
+                Text(appString(R.string.top_percentile, formatTopPercentile(best.topPercentile)), style = MaterialTheme.typography.headlineSmall)
                 Text(formatAchievementDate(best.achievedDate), style = MaterialTheme.typography.bodyMedium)
-            } ?: Text("まだ記録がありません", style = MaterialTheme.typography.bodySmall)
-            Text("※この画面を開いて確認した前日順位のみ記録されます", style = MaterialTheme.typography.bodySmall)
+            } ?: Text(appString(R.string.no_record_yet), style = MaterialTheme.typography.bodySmall)
+            Text(appString(R.string.best_record_note), style = MaterialTheme.typography.bodySmall)
         }
 
-        ChanrivaNavigationRow("アカウント削除", onAccountDeletion)
+        ChanrivaNavigationRow(appString(R.string.account_deletion), onAccountDeletion)
         OutlinedButton(onClick = onLogout, enabled = !logoutInProgress, modifier = Modifier.fillMaxWidth()) {
-            Text(if (logoutInProgress) "ログアウト中…" else "ログアウト")
+            Text(appString(if (logoutInProgress) R.string.logout_in_progress else R.string.logout))
         }
         logoutError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }

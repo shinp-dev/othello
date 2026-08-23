@@ -6,30 +6,32 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
+import androidx.annotation.StringRes
 import com.example.othello.designsystem.ChanrivaColors
 
-internal enum class AppDestination(val label: String, val shortLabel: String? = null) {
-    PLAY("対局", "対"),
-    STUDY("検討", "検"),
-    SETTINGS("設定", "設"),
-    MORE("その他", "他"),
-    ONLINE_RECORDS("オンライン棋譜"),
-    OFFLINE_RECORDS("オフライン棋譜"),
-    REVIEW("棋譜レビュー"),
-    ACCOUNT("アカウント"),
-    ACCOUNT_DELETION("アカウント削除"),
-    MATCH_SETTINGS("対局設定"),
-    AI_MATCH_SETTINGS("AI対局設定"),
-    MATCH_COMMON_SETTINGS("対局共通設定"),
-    REVIEW_SETTINGS("検討設定"),
-    COMMON_SETTINGS("共通設定"),
-    LOCAL_AI_SETUP("AIと対局"),
-    RESEARCH_SETTINGS("研究参加"),
-    RESEARCH_INFO("研究データについて"),
-    ABOUT("このアプリについて"),
-    OSS_LICENSES("オープンソースライセンス"),
-    EDAX_LICENSE("Edaxライセンス"),
-    OTHER_OSS_LICENSES("その他のOSSライセンス"),
+internal enum class AppDestination(@StringRes val labelRes: Int, @StringRes val shortLabelRes: Int? = null) {
+    PLAY(R.string.play, R.string.play_short),
+    STUDY(R.string.study, R.string.study_short),
+    SETTINGS(R.string.settings, R.string.settings_short),
+    MORE(R.string.more, R.string.more_short),
+    ONLINE_RECORDS(R.string.online_records),
+    OFFLINE_RECORDS(R.string.offline_records),
+    REVIEW(R.string.review),
+    ACCOUNT(R.string.account),
+    ACCOUNT_DELETION(R.string.account_deletion),
+    MATCH_SETTINGS(R.string.match_settings),
+    AI_MATCH_SETTINGS(R.string.ai_match_settings),
+    MATCH_COMMON_SETTINGS(R.string.match_common_settings),
+    REVIEW_SETTINGS(R.string.review_settings),
+    COMMON_SETTINGS(R.string.common_settings),
+    LOCAL_AI_SETUP(R.string.local_ai_setup),
+    RESEARCH_SETTINGS(R.string.research_participation),
+    RESEARCH_INFO(R.string.research_info),
+    ABOUT(R.string.about_app),
+    OSS_LICENSES(R.string.oss_licenses),
+    EDAX_LICENSE(R.string.edax_license),
+    OTHER_OSS_LICENSES(R.string.other_oss_licenses),
 }
 
 internal val topLevelDestinations = listOf(
@@ -80,8 +82,8 @@ internal fun ChanrivaBottomNavigation(
             NavigationBarItem(
                 selected = destination == selected,
                 onClick = { onSelect(destination) },
-                icon = { Text(requireNotNull(destination.shortLabel)) },
-                label = { Text(destination.label) },
+                icon = { Text(stringResource(requireNotNull(destination.shortLabelRes))) },
+                label = { Text(stringResource(destination.labelRes)) },
                 alwaysShowLabel = true,
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor = ChanrivaColors.accent,

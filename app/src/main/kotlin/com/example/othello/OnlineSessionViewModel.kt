@@ -20,6 +20,7 @@ class OnlineSessionViewModel(application: Application) : AndroidViewModel(applic
         private set
     private val authController = AuthSessionController(
         gatewayResult = componentResult.map { it.authGateway },
+        context = getApplication(),
         onBeforeSignOut = { prepareForSignOut() },
         onAuthenticatedSessionEnding = {
             matchmaking?.reset()

@@ -46,6 +46,8 @@ import com.example.othello.analysis.edax.EdaxDataManager
 import com.example.othello.analysis.edax.EdaxSettingsStore
 import com.example.othello.analysis.edax.ImportedAnalysisFile
 import com.example.othello.analysis.edax.ReviewAnalysisSettings
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.compose.material3.RadioButton
 import com.example.othello.designsystem.ChanrivaColors
 import com.example.othello.designsystem.ChanrivaNavigationRow
 import com.example.othello.designsystem.ChanrivaScreenHeader
@@ -66,16 +68,66 @@ internal fun SettingsScreen(
     onCommonSettings: () -> Unit,
     onResearch: () -> Unit,
 ) {
+    val context = LocalContext.current
+    var showLanguageDialog by remember { mutableStateOf(false) }
+    val selectedLanguage = AppLanguage.fromTag(AppCompatDelegate.getApplicationLocales().toLanguageTags())
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
     ) {
-        ChanrivaScreenHeader("設定")
-        ChanrivaNavigationRow("対局設定", onMatchSettings)
-        ChanrivaNavigationRow("検討設定", onReviewSettings)
-        ChanrivaNavigationRow("共通設定", onCommonSettings)
-        ChanrivaNavigationRow("研究参加", onResearch)
+        ChanrivaScreenHeader(appString(R.string.settings))
+        ChanrivaNavigationRow(appString(R.string.match_settings), onMatchSettings)
+        ChanrivaNavigationRow(appString(R.string.review_settings), onReviewSettings)
+        ChanrivaNavigationRow(appString(R.string.common_settings), onCommonSettings)
+        ChanrivaNavigationRow(appString(R.string.research_participation), onResearch)
+        ChanrivaNavigationRow(
+            title = appString(R.string.language_setting),
+            supportingText = when (selectedLanguage) {
+                AppLanguage.SYSTEM_DEFAULT -> appString(R.string.language_system_default)
+                AppLanguage.JAPANESE -> appString(R.string.language_japanese)
+                AppLanguage.ENGLISH -> appString(R.string.language_english)
+            },
+            onClick = { showLanguageDialog = true },
+        )
     }
+    if (showLanguageDialog) {
+        LanguageSelectionDialog(
+            selectedLanguage = selectedLanguage,
+            onSelect = { language ->
+                AppLanguageStore(context).save(language)
+                applyAppLanguage(language)
+                showLanguageDialog = false
+            },
+            onDismiss = { showLanguageDialog = false },
+        )
+    }
+}
+
+@Composable
+private fun LanguageSelectionDialog(
+    selectedLanguage: AppLanguage,
+    onSelect: (AppLanguage) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(appString(R.string.language_dialog_title)) },
+        text = {
+            Column {
+                listOf(
+                    AppLanguage.SYSTEM_DEFAULT to appString(R.string.language_system_default),
+                    AppLanguage.JAPANESE to appString(R.string.language_japanese),
+                    AppLanguage.ENGLISH to appString(R.string.language_english),
+                ).forEach { (language, label) ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = language == selectedLanguage, onClick = { onSelect(language) })
+                        Text(label)
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+    )
 }
 
 @Composable
@@ -88,9 +140,9 @@ internal fun MatchSettingsScreen(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
     ) {
-        SettingsHeader("対局設定", onBack)
-        ChanrivaNavigationRow("AI対局設定", onAiSettings)
-        ChanrivaNavigationRow("対局共通設定", onCommonMatchSettings)
+        SettingsHeader(appString(R.string.match_settings), onBack)
+        ChanrivaNavigationRow(appString(R.string.ai_match_settings), onAiSettings)
+        ChanrivaNavigationRow(appString(R.string.match_common_settings), onCommonMatchSettings)
     }
 }
 
@@ -104,8 +156,8 @@ internal fun AiMatchSettingsScreen(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
     ) {
-        SettingsHeader("AI対局設定", onBack)
-        Text("AI対局レベル: Level ${aiSettings.level}")
+        SettingsHeader(appString(R.string.ai_match_settings), onBack)
+        Text(appString(R.string.ai_level, aiSettings.level))
         Slider(
             value = aiSettings.level.toFloat(),
             onValueChange = {
@@ -116,7 +168,7 @@ internal fun AiMatchSettingsScreen(
             steps = 6,
             modifier = Modifier.fillMaxWidth(),
         )
-        Text("1着手あたり思考時間: ${aiSettings.moveTimeMs}ms")
+        Text(appString(R.string.ai_move_time, aiSettings.moveTimeMs))
         Slider(
             value = aiSettings.moveTimeMs.toFloat(),
             onValueChange = { aiSettings = aiSettings.copy(moveTimeMs = snapAnalysisTime(it)) },
@@ -179,10 +231,10 @@ internal fun MatchCommonSettingsScreen(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
     ) {
-        SettingsHeader("対局共通設定", onBack)
-        Text("対局中の音", style = MaterialTheme.typography.titleMedium)
+        SettingsHeader(appString(R.string.match_common_settings), onBack)
+        Text(appString(R.string.match_audio), style = MaterialTheme.typography.titleMedium)
         SettingSwitchRow(
-            title = "時間警告音",
+            title = appString(R.string.time_warning_sound),
             checked = timeWarningEnabled,
             onCheckedChange = {
                 timeWarningEnabled = it
@@ -190,14 +242,14 @@ internal fun MatchCommonSettingsScreen(
             },
         )
         SettingSwitchRow(
-            title = "集中サウンド（ピンクノイズ）",
+            title = appString(R.string.focus_sound),
             checked = focusSoundEnabled,
             onCheckedChange = {
                 focusSoundEnabled = it
                 audioSettings.focusSoundEnabled = it
             },
         )
-        Text("集中サウンド音量", style = MaterialTheme.typography.bodyMedium)
+        Text(appString(R.string.focus_volume), style = MaterialTheme.typography.bodyMedium)
         Slider(
             value = focusSoundVolume,
             onValueChange = {
@@ -209,10 +261,10 @@ internal fun MatchCommonSettingsScreen(
             modifier = Modifier.fillMaxWidth(),
         )
         Text(
-            "音量 ${kotlin.math.round(focusSoundVolume * 100).toInt()}%（端末の音量設定を使用）",
+            appString(R.string.volume_with_device, kotlin.math.round(focusSoundVolume * 100).toInt()),
             style = MaterialTheme.typography.bodySmall,
         )
-        Text("試聴", style = MaterialTheme.typography.bodyMedium)
+        Text(appString(R.string.preview), style = MaterialTheme.typography.bodyMedium)
         AudioPreviewButton(
             preview = AudioPreview.PINK_NOISE,
             activePreview = audioPreview,
@@ -229,7 +281,7 @@ internal fun MatchCommonSettingsScreen(
             onClick = ::toggleAudioPreview,
         )
         if (audioPreviewError) {
-            Text("音を再生できませんでした", color = MaterialTheme.colorScheme.error)
+            Text(appString(R.string.audio_playback_failed), color = MaterialTheme.colorScheme.error)
         }
     }
 }
@@ -251,9 +303,9 @@ internal fun ReviewSettingsScreen(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
     ) {
-        SettingsHeader("検討設定", onBack)
+        SettingsHeader(appString(R.string.review_settings), onBack)
         SettingSwitchRow(
-            title = "高負荷解析",
+            title = appString(R.string.high_load_analysis),
             checked = settings.highLoadAnalysisEnabled,
             onCheckedChange = { enabled ->
                 if (enabled) {
@@ -265,9 +317,9 @@ internal fun ReviewSettingsScreen(
             },
         )
         if (settings.highLoadAnalysisEnabled) {
-            Text(HIGH_LOAD_ANALYSIS_WARNING, color = ChanrivaColors.accent, style = MaterialTheme.typography.bodySmall)
+            Text(appString(R.string.high_load_warning), color = ChanrivaColors.accent, style = MaterialTheme.typography.bodySmall)
         }
-        Text("解析レベル: Level ${settings.level}")
+        Text(appString(R.string.analysis_level, settings.level))
         Slider(
             value = settings.level.toFloat(),
             onValueChange = {
@@ -283,7 +335,7 @@ internal fun ReviewSettingsScreen(
             steps = maximumLevel - ReviewAnalysisSettings.MIN_LEVEL - 1,
             modifier = Modifier.fillMaxWidth(),
         )
-        Text("1候補あたり解析時間: ${settings.timePerCandidateMs}ms")
+        Text(appString(R.string.analysis_time, settings.timePerCandidateMs))
         Slider(
             value = settings.timePerCandidateMs.toFloat(),
             onValueChange = { settings = settings.copy(timePerCandidateMs = snapAnalysisTime(it)) },
@@ -299,17 +351,17 @@ internal fun ReviewSettingsScreen(
     if (showHighLoadWarning) {
         AlertDialog(
             onDismissRequest = { showHighLoadWarning = false },
-            title = { Text("高負荷解析を有効にしますか？") },
-            text = { Text(HIGH_LOAD_ANALYSIS_WARNING) },
+            title = { Text(appString(R.string.high_load_analysis_confirm)) },
+            text = { Text(appString(R.string.high_load_warning)) },
             confirmButton = {
                 Button(onClick = {
                     settingsStore.setHighLoadAnalysisEnabled(true)
                     settings = settingsStore.reviewAnalysisSettings()
                     showHighLoadWarning = false
-                }) { Text("有効にする") }
+                }) { Text(appString(R.string.enable)) }
             },
             dismissButton = {
-                OutlinedButton(onClick = { showHighLoadWarning = false }) { Text("キャンセル") }
+                OutlinedButton(onClick = { showHighLoadWarning = false }) { Text(appString(R.string.cancel)) }
             },
         )
     }
@@ -322,12 +374,12 @@ private fun AudioPreviewButton(
     onClick: (AudioPreview) -> Unit,
 ) {
     val label = when (preview) {
-        AudioPreview.PINK_NOISE -> "ピンクノイズを試聴"
-        AudioPreview.ONE_MINUTE_WARNING -> "60秒警告音を試聴"
-        AudioPreview.THIRTY_SECONDS_WARNING -> "30秒警告音を試聴"
+        AudioPreview.PINK_NOISE -> appString(R.string.pink_noise_preview)
+        AudioPreview.ONE_MINUTE_WARNING -> appString(R.string.one_minute_preview)
+        AudioPreview.THIRTY_SECONDS_WARNING -> appString(R.string.thirty_seconds_preview)
     }
     OutlinedButton(onClick = { onClick(preview) }, modifier = Modifier.fillMaxWidth()) {
-        Text(if (activePreview == preview) "$label（停止）" else label)
+        Text(if (activePreview == preview) appString(R.string.preview_stop, label) else label)
     }
 }
 
@@ -353,23 +405,24 @@ internal fun CommonSettingsScreen(
     onDataChanged: () -> Unit,
     onBack: () -> Unit,
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var status by remember(manager) { mutableStateOf(manager.commonDataStatus()) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var messageIsError by remember { mutableStateOf(false) }
-    var busyMessage by remember { mutableStateOf("検証・コピー中…") }
+    var busyMessage by remember { mutableStateOf(context.getString(R.string.processing_copy)) }
     var deleteEvaluationConfirmation by remember { mutableStateOf(false) }
     var deleteBookConfirmation by remember { mutableStateOf(false) }
     fun refresh() { status = manager.commonDataStatus(); onDataChanged() }
     fun importEvaluation(uri: android.net.Uri) {
         busy = true
-        busyMessage = "検証・コピー中…"
+        busyMessage = context.getString(R.string.processing_copy)
         scope.launch {
             runCatching { manager.importEvaluationData(uri) }
-                .onSuccess { message = "評価データをインポートしました"; messageIsError = false; refresh() }
+                .onSuccess { message = context.getString(R.string.eval_imported); messageIsError = false; refresh() }
                 .onFailure {
-                    message = "このデータを評価データとして読み込めませんでした。Edax互換ファイルか確認してください。"
+                    message = context.getString(R.string.eval_import_failed)
                     messageIsError = true
                 }
             busy = false
@@ -377,7 +430,7 @@ internal fun CommonSettingsScreen(
     }
     fun downloadOfficialEvaluation() {
         busy = true
-        busyMessage = "公式データの準備を開始中…"
+        busyMessage = context.getString(R.string.official_data_starting)
         message = null
         scope.launch {
             runCatching {
@@ -385,9 +438,12 @@ internal fun CommonSettingsScreen(
                     withContext(Dispatchers.Main.immediate) { busyMessage = phase }
                 }
             }
-                .onSuccess { message = "Edax公式 v4.4 の評価データを設定しました"; messageIsError = false; refresh() }
+                .onSuccess { message = context.getString(R.string.official_eval_set); messageIsError = false; refresh() }
                 .onFailure { failure ->
-                    message = "公式評価データを設定できませんでした。通信状態を確認して、もう一度お試しください。(${failure.message ?: "原因不明"})"
+                    message = context.getString(
+                        R.string.official_eval_failed,
+                        localizeUserMessage(context, failure.message) ?: context.getString(R.string.unknown_reason),
+                    )
                     messageIsError = true
                 }
             busy = false
@@ -397,9 +453,9 @@ internal fun CommonSettingsScreen(
         busy = true
         scope.launch {
             runCatching { manager.importOpeningBook(uri) }
-                .onSuccess { message = "オープニングブックをインポートしました"; refresh() }
+                .onSuccess { message = context.getString(R.string.book_imported); refresh() }
                 .onFailure {
-                    message = "このデータをオープニングブックとして読み込めませんでした。Edax互換ファイルか確認してください。"
+                    message = context.getString(R.string.book_import_failed)
                 }
             busy = false
         }
@@ -418,75 +474,75 @@ internal fun CommonSettingsScreen(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
     ) {
-        SettingsHeader("共通設定", onBack, enabled = !busy)
-        AnalysisFileStatus("評価データ", status.evaluationData, required = true)
+        SettingsHeader(appString(R.string.common_settings), onBack, enabled = !busy)
+        AnalysisFileStatus(appString(R.string.analysis_data), status.evaluationData, required = true)
         Button(
             onClick = ::downloadOfficialEvaluation,
             enabled = status.nativeAvailable && !busy,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("公式の評価データを自動設定（推奨）") }
+        ) { Text(appString(R.string.auto_setup_eval)) }
         OutlinedButton(
             onClick = { evaluationPicker.launch(arrayOf("application/octet-stream", "*/*")) },
             enabled = status.nativeAvailable && !busy,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("手元の eval.dat を選ぶ") }
+        ) { Text(appString(R.string.choose_eval)) }
         if (status.evaluationData != null) {
             TextButton(onClick = { deleteEvaluationConfirmation = true }, enabled = !busy) {
-                Text("評価データを削除")
+                Text(appString(R.string.delete_eval))
             }
         }
 
-        AnalysisFileStatus("オープニングブック", status.openingBook, required = false)
+        AnalysisFileStatus(appString(R.string.opening_book), status.openingBook, required = false)
         OutlinedButton(
             onClick = { bookPicker.launch(arrayOf("application/octet-stream", "*/*")) },
             enabled = status.nativeAvailable && !busy,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("手元の book.dat を選ぶ") }
+        ) { Text(appString(R.string.choose_book)) }
         if (status.openingBook != null) {
             TextButton(onClick = { deleteBookConfirmation = true }, enabled = !busy) {
-                Text("オープニングブックを削除")
+                Text(appString(R.string.delete_book))
             }
         }
 
         if (busy) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
             Text(busyMessage)
-            Text("処理が完了するまで、この画面を閉じずにお待ちください。", style = MaterialTheme.typography.bodySmall)
+            Text(appString(R.string.wait_processing), style = MaterialTheme.typography.bodySmall)
         }
         message?.let { Text(it, color = if (messageIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface) }
     }
     if (deleteEvaluationConfirmation) {
         AlertDialog(
             onDismissRequest = { deleteEvaluationConfirmation = false },
-            title = { Text("評価データを削除しますか？") },
-            text = { Text("評価データを削除します。削除すると、再設定するまで対局後の解析を利用できなくなります。") },
+            title = { Text(appString(R.string.delete_eval_confirm_title)) },
+            text = { Text(appString(R.string.delete_eval_confirm_text)) },
             confirmButton = {
                 Button(onClick = {
                     deleteEvaluationConfirmation = false
                     manager.deleteEvaluationData()
-                    message = "評価データを削除しました"
+                    message = context.getString(R.string.eval_deleted)
                     messageIsError = false
                     refresh()
-                }) { Text("削除する") }
+                }) { Text(appString(R.string.delete)) }
             },
-            dismissButton = { OutlinedButton(onClick = { deleteEvaluationConfirmation = false }) { Text("キャンセル") } },
+            dismissButton = { OutlinedButton(onClick = { deleteEvaluationConfirmation = false }) { Text(appString(R.string.cancel)) } },
         )
     }
     if (deleteBookConfirmation) {
         AlertDialog(
             onDismissRequest = { deleteBookConfirmation = false },
-            title = { Text("オープニングブックを削除しますか？") },
-            text = { Text("オープニングブックを削除します。削除後は通常探索を使用します。") },
+            title = { Text(appString(R.string.delete_book_confirm_title)) },
+            text = { Text(appString(R.string.delete_book_confirm_text)) },
             confirmButton = {
                 Button(onClick = {
                     deleteBookConfirmation = false
                     manager.deleteOpeningBook()
-                    message = "オープニングブックを削除しました"
+                    message = context.getString(R.string.book_deleted)
                     messageIsError = false
                     refresh()
-                }) { Text("削除する") }
+                }) { Text(appString(R.string.delete)) }
             },
-            dismissButton = { OutlinedButton(onClick = { deleteBookConfirmation = false }) { Text("キャンセル") } },
+            dismissButton = { OutlinedButton(onClick = { deleteBookConfirmation = false }) { Text(appString(R.string.cancel)) } },
         )
     }
 }
@@ -499,7 +555,7 @@ internal fun AboutScreen(onBack: () -> Unit, onLicenses: () -> Unit) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
     ) {
-        SettingsHeader("このアプリについて", onBack)
+        SettingsHeader(appString(R.string.about_app), onBack)
         Column(
             Modifier
                 .fillMaxWidth()
@@ -507,16 +563,16 @@ internal fun AboutScreen(onBack: () -> Unit, onLicenses: () -> Unit) {
                 .padding(vertical = 28.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("ちゃんりば", style = MaterialTheme.typography.labelLarge, color = ChanrivaColors.accent)
-            Text("ちゃんとリバーシ。", style = MaterialTheme.typography.displaySmall, color = ChanrivaColors.textPrimary)
+            Text(appString(R.string.app_name), style = MaterialTheme.typography.labelLarge, color = ChanrivaColors.accent)
+            Text(appString(R.string.about_tagline), style = MaterialTheme.typography.displaySmall, color = ChanrivaColors.textPrimary)
             Spacer(Modifier.size(4.dp))
-            Text("軽く一局打っても、\nその一局がちゃんと残る。\n振り返りが、次の一手につながる。", style = MaterialTheme.typography.bodyLarge, color = ChanrivaColors.textPrimary)
+            Text(appString(R.string.about_copy), style = MaterialTheme.typography.bodyLarge, color = ChanrivaColors.textPrimary)
         }
-        Text("対局後レビューの解析エンジンとしてEdaxを使用します。Edax公式・公認アプリではありません。")
-        ChanrivaNavigationRow("Edaxについて", onClick = { uriHandler.openUri(EDAX_GUIDE_URL) }, trailingLabel = "Web")
-        ChanrivaNavigationRow("ちゃんりば公式サイト", onClick = { uriHandler.openUri(CHANRIVA_SITE_URL) }, trailingLabel = "Web")
-        ChanrivaNavigationRow("ソースコード（GitHub）", onClick = { uriHandler.openUri(CHANRIVA_SOURCE_URL) }, trailingLabel = "Web")
-        ChanrivaNavigationRow("オープンソースライセンス", onLicenses)
+        Text(appString(R.string.edax_disclaimer))
+        ChanrivaNavigationRow(appString(R.string.edax_about), onClick = { uriHandler.openUri(EDAX_GUIDE_URL) }, trailingLabel = "Web")
+        ChanrivaNavigationRow(appString(R.string.official_site), onClick = { uriHandler.openUri(CHANRIVA_SITE_URL) }, trailingLabel = "Web")
+        ChanrivaNavigationRow(appString(R.string.source_code), onClick = { uriHandler.openUri(CHANRIVA_SOURCE_URL) }, trailingLabel = "Web")
+        ChanrivaNavigationRow(appString(R.string.oss_licenses), onLicenses)
         BuildIdentityText()
     }
 }
@@ -531,13 +587,13 @@ internal fun OpenSourceLicensesScreen(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        SettingsHeader("オープンソースライセンス", onBack)
-        Text("ちゃんりば", style = MaterialTheme.typography.titleMedium)
+        SettingsHeader(appString(R.string.oss_licenses), onBack)
+        Text(appString(R.string.app_name), style = MaterialTheme.typography.titleMedium)
         Text("GNU GPLv3")
         Text("Edax 4.6", style = MaterialTheme.typography.titleMedium)
         Text("GNU GPLv3")
-        ChanrivaNavigationRow("Edax 4.6の詳細", onEdax)
-        ChanrivaNavigationRow("その他のOSSライセンス", onOtherOss)
+        ChanrivaNavigationRow("Edax 4.6 details", onEdax)
+        ChanrivaNavigationRow(appString(R.string.other_oss_licenses), onOtherOss)
     }
 }
 
@@ -547,14 +603,14 @@ internal fun EdaxLicenseScreen(onBack: () -> Unit) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        SettingsHeader("Edax 4.6の詳細", onBack)
-        Text("Copyright © 1998–2024 Richard Delorme; source headers also credit Toshihiko Okuhara.")
-        Text("ライセンス：GNU General Public License version 3 (GPLv3)")
-        Text("upstream source: https://github.com/abulmo/edax-reversi")
-        Text("ちゃんりば側の対応ソース: https://github.com/shinp-dev/othello")
-        Text("固定upstream commit: 14f048c05ddfa385b6bf954a9c2905bbe677e9d3")
-        Text("GPLv3全文はrepositoryのLICENSEと、対応ソース内のthird_party/edax/upstream/LICENSEにあります。")
-        Text("本アプリはEdax projectまたは作者による公式・公認配布物ではありません。", color = ChanrivaColors.accent)
+        SettingsHeader("Edax 4.6 details", onBack)
+        Text(appString(R.string.copyright_edax))
+        Text(appString(R.string.license))
+        Text(appString(R.string.upstream_source))
+        Text(appString(R.string.chanriva_source))
+        Text(appString(R.string.upstream_commit))
+        Text(appString(R.string.gpl_location))
+        Text(appString(R.string.edax_not_official), color = ChanrivaColors.accent)
     }
 }
 
@@ -564,33 +620,33 @@ internal fun OtherOssLicensesScreen(onBack: () -> Unit) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        SettingsHeader("その他のOSSライセンス", onBack)
-        Text("AndroidX / Jetpack / Compose：Apache License 2.0")
-        Text("Kotlin / kotlinx.coroutines / kotlinx.serialization：Apache License 2.0")
-        Text("Ktor：Apache License 2.0")
-        Text("supabase-kt：MIT License")
-        Text("WebRTC SDK：BSD 3-Clause License")
-        Text("OkHttpおよびその他の依存関係：各ライセンス条件に従います")
-        Text("Apache Commons Compress：Apache License 2.0")
-        Text("XZ for Java：0BSD License")
-        Text("詳細なNOTICEはリポジトリのNOTICE.mdに記載しています。")
+        SettingsHeader(appString(R.string.other_oss_licenses), onBack)
+        Text(appString(R.string.android_licenses))
+        Text(appString(R.string.kotlin_licenses))
+        Text(appString(R.string.ktor_license))
+        Text(appString(R.string.supabase_license))
+        Text(appString(R.string.webrtc_license))
+        Text(appString(R.string.other_dependencies))
+        Text(appString(R.string.commons_compress_license))
+        Text(appString(R.string.xz_license))
+        Text(appString(R.string.notice_location))
     }
 }
 
 @Composable
 private fun AnalysisFileStatus(label: String, file: ImportedAnalysisFile?, required: Boolean) {
     var showDetails by remember(file?.sha256) { mutableStateOf(false) }
-    Text("$label: ${if (file == null) "未設定" else "設定済み"}", style = MaterialTheme.typography.titleSmall)
+    Text(appString(R.string.file_status, label, appString(if (file == null) R.string.not_configured else R.string.configured)), style = MaterialTheme.typography.titleSmall)
     if (file == null) {
-        Text(if (required) "解析に必要です" else "任意。未設定時は通常探索を使用します", style = MaterialTheme.typography.bodySmall)
+        Text(appString(if (required) R.string.analysis_required else R.string.optional_search), style = MaterialTheme.typography.bodySmall)
     } else {
-        Text("取込日時: ${formatImportDate(file.importedAtEpochMillis)}", style = MaterialTheme.typography.bodySmall)
+        Text(appString(R.string.imported_at, formatImportDate(file.importedAtEpochMillis)), style = MaterialTheme.typography.bodySmall)
         TextButton(onClick = { showDetails = !showDetails }) {
-            Text(if (showDetails) "詳細情報を閉じる" else "詳細情報")
+            Text(appString(if (showDetails) R.string.close_details else R.string.details))
         }
         if (showDetails) {
-            Text("ファイル名: ${file.fileName}", style = MaterialTheme.typography.bodySmall)
-            Text("サイズ: ${formatAnalysisFileSize(file.sizeBytes)}", style = MaterialTheme.typography.bodySmall)
+            Text(appString(R.string.file_name, file.fileName), style = MaterialTheme.typography.bodySmall)
+            Text(appString(R.string.file_size, localizedAnalysisFileSize(file.sizeBytes)), style = MaterialTheme.typography.bodySmall)
             Text("SHA-256: ${file.sha256}", style = MaterialTheme.typography.bodySmall)
         }
     }
@@ -598,7 +654,7 @@ private fun AnalysisFileStatus(label: String, file: ImportedAnalysisFile?, requi
 
 @Composable
 internal fun SettingsHeader(title: String, onBack: () -> Unit, enabled: Boolean = true) {
-    ChanrivaScreenHeader(title, onBack, enabled)
+    ChanrivaScreenHeader(title, onBack, enabled, backLabel = appString(R.string.back))
 }
 
 private fun formatImportDate(epochMillis: Long): String = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
@@ -614,8 +670,6 @@ internal fun formatAnalysisFileSize(sizeBytes: Long): String = when {
 private const val EDAX_GUIDE_URL = "https://chanriva.shinp-studio.com/edax"
 private const val CHANRIVA_SITE_URL = "https://chanriva.shinp-studio.com/"
 private const val CHANRIVA_SOURCE_URL = "https://github.com/shinp-dev/othello"
-private const val HIGH_LOAD_ANALYSIS_WARNING =
-    "Lv.9以上は解析負荷が大きくなります。端末によっては解析時間の増加や動作の不安定化が発生する場合があります。通常はLv.8以下を推奨します。"
 private val analysisTimeSliderSteps =
     (EdaxSettingsStore.MAX_ANALYSIS_TIME_MS - EdaxSettingsStore.MIN_ANALYSIS_TIME_MS) /
         EdaxSettingsStore.ANALYSIS_TIME_STEP_MS - 1
@@ -625,4 +679,11 @@ private fun snapAnalysisTime(value: Float): Int {
         EdaxSettingsStore.ANALYSIS_TIME_STEP_MS).roundToInt()
     return (EdaxSettingsStore.MIN_ANALYSIS_TIME_MS + offsetSteps * EdaxSettingsStore.ANALYSIS_TIME_STEP_MS)
         .coerceIn(EdaxSettingsStore.MIN_ANALYSIS_TIME_MS, EdaxSettingsStore.MAX_ANALYSIS_TIME_MS)
+}
+
+@Composable
+private fun localizedAnalysisFileSize(sizeBytes: Long): String = if (sizeBytes < 1024L) {
+    appString(R.string.file_size_under_kib, sizeBytes)
+} else {
+    formatAnalysisFileSize(sizeBytes)
 }

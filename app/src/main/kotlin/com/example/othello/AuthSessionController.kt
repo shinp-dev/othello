@@ -1,5 +1,7 @@
 package com.example.othello
 
+import android.content.Context
+
 import com.example.othello.auth.AuthGateway
 import com.example.othello.auth.AuthSessionStatus
 import com.example.othello.auth.SignUpResult
@@ -34,6 +36,7 @@ internal fun AuthState.gateContent(): AuthGateContent = when (this) {
 /** Owns the single transition point between startup auth, login, and the authenticated app. */
 internal class AuthSessionController(
     private val gatewayResult: Result<AuthGateway>,
+    private val context: Context? = null,
     private val onBeforeSignOut: suspend () -> Unit = {},
     private val onAuthenticatedSessionEnding: suspend () -> Unit = {},
 ) {
@@ -57,7 +60,8 @@ internal class AuthSessionController(
             transitionMutex.withLock {
                 mutableState.value = AuthState.Error(
                     AuthStartupErrorKind.CONFIGURATION,
-                    "認証サービスを初期化できませんでした。アプリの設定を確認してください。",
+                    context?.getString(R.string.auth_configuration_failed)
+                        ?: "認証サービスを初期化できませんでした。アプリの設定を確認してください。",
                 )
             }
             return
@@ -82,7 +86,7 @@ internal class AuthSessionController(
                 if (mutableState.value !is AuthState.Authenticated) {
                     mutableState.value = AuthState.Error(
                         AuthStartupErrorKind.SESSION_RESTORE,
-                        authErrorMessage(AuthOperation.SESSION, failure),
+                        authErrorMessage(AuthOperation.SESSION, failure, context),
                     )
                 }
             }

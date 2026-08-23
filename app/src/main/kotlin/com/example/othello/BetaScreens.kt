@@ -38,6 +38,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -88,27 +89,28 @@ internal fun RecordsScreen(
     onBack: () -> Unit,
     onReview: (GameRecord) -> Unit,
 ) {
+    val context = LocalContext.current
     var records by remember { mutableStateOf<List<GameRecord>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(userId) {
         runCatching { repository.recent(userId, 50) }
             .onSuccess { records = it }
-            .onFailure { error = it.message ?: "棋譜を取得できませんでした" }
+            .onFailure { error = it.message ?: context.getString(R.string.records_load_failed) }
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page), verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section)) {
-        ScreenHeader("棋譜", onBack)
+        ScreenHeader(appString(R.string.records_title), onBack)
         when {
             error != null -> Text(requireNotNull(error), color = MaterialTheme.colorScheme.error)
-            records == null -> Text("読み込み中…")
-            records!!.isEmpty() -> Text("保存された棋譜はありません")
+            records == null -> Text(appString(R.string.loading))
+            records!!.isEmpty() -> Text(appString(R.string.records_none))
             else -> records!!.forEach { record ->
                 val localIsBlack = record.players.first() == userId
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("${record.result.labelFor(localIsBlack)} / ${if (localIsBlack) "黒" else "白"}")
-                        Text("${record.finishReason.userLabel()} / ${formatDate(record.finishedAtEpochMillis)}")
-                        Text("${record.moves.size}手 / ${CanonicalMoves.encode(record.moves)}", style = MaterialTheme.typography.bodySmall)
-                        OutlinedButton(onClick = { onReview(record) }) { Text("棋譜を開く") }
+                        Text("${record.result.labelFor(localIsBlack, context)} / ${appString(if (localIsBlack) R.string.black else R.string.white)}")
+                        Text("${record.finishReason.userLabel(context)} / ${formatDate(record.finishedAtEpochMillis)}")
+                        Text("${appString(R.string.move_count, record.moves.size)} / ${CanonicalMoves.encode(record.moves)}", style = MaterialTheme.typography.bodySmall)
+                        OutlinedButton(onClick = { onReview(record) }) { Text(appString(R.string.open_record)) }
                     }
                 }
             }
@@ -126,6 +128,12 @@ internal fun ReviewScreen(
     researchPositionRepository: ResearchPositionRepository,
     onBack: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val analysisNotRun = appString(R.string.analysis_not_run)
+    val engineUnavailable = appString(R.string.edax_engine_unavailable)
+    val analysisDataNotSet = appString(R.string.analysis_data_not_set)
+    val analyzing = appString(R.string.analyzing)
+    val analysisCancelled = appString(R.string.analysis_cancelled)
     val review = remember(record.matchId) { ReviewSession(record) }
     val analysisGuard = remember(record.matchId) { AnalysisRequestGuard() }
     var revision by remember { mutableIntStateOf(0) }
@@ -134,7 +142,7 @@ internal fun ReviewScreen(
     var analysisRunning by remember { mutableStateOf(false) }
     var showEvaluations by remember { mutableStateOf(true) }
     var analysisResult by remember { mutableStateOf<AnalysisResult?>(null) }
-    var analysisMessage by remember { mutableStateOf("解析未実行") }
+    var analysisMessage by remember { mutableStateOf(analysisNotRun) }
     val state = remember(revision) { review.current }
     val dataStatus = remember(revision, analysisRun) { dataManager.commonDataStatus() }
     val reviewSettings = remember(revision, analysisRun) { settingsStore.reviewAnalysisSettings() }
@@ -156,17 +164,18 @@ internal fun ReviewScreen(
         analysisResult = null
         if (!analysisRequested) return@LaunchedEffect
         when {
-            !dataStatus.nativeAvailable -> analysisMessage = "Edax解析エンジンを利用できません"
-            dataStatus.evaluationData == null -> analysisMessage = "解析用評価データが設定されていません"
+            !dataStatus.nativeAvailable -> analysisMessage = engineUnavailable
+            dataStatus.evaluationData == null -> analysisMessage = analysisDataNotSet
             else -> {
                 analysisRunning = true
-                analysisMessage = "解析中…"
+                analysisMessage = analyzing
                 val requestedPosition = positionKey
                 try {
                     val result = review.analyze(engine, settings)
                     if (analysisGuard.isCurrent(requestToken, review.current.stateHash()) && review.current.stateHash() == requestedPosition) {
                         analysisResult = result
-                        analysisMessage = result.message ?: "全${result.evaluations.size}合法手を解析しました"
+                        analysisMessage = localizeUserMessage(context, result.message)
+                            ?: context.getString(R.string.analysis_complete, result.evaluations.size)
                     }
                 } catch (_: CancellationException) {
                     // A newer ply/variation or explicit cancel owns the UI now.
@@ -187,17 +196,17 @@ internal fun ReviewScreen(
 
     val visibleEvaluations = if (showEvaluations) analysisResult?.evaluations.orEmpty() else emptyList()
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page), verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact)) {
-        ScreenHeader("棋譜レビュー", onBack)
-        Text("${record.result.userLabel()} / ${record.finishReason.userLabel()} / ${formatDate(record.finishedAtEpochMillis)}")
-        Text("手数 ${review.cursor}/${review.mainLineLastPly}${if (review.isInVariation) " / 変化手順" else ""}")
+        ScreenHeader(appString(R.string.review_title), onBack)
+        Text("${record.result.userLabel(context)} / ${record.finishReason.userLabel(context)} / ${formatDate(record.finishedAtEpochMillis)}")
+        Text(appString(R.string.ply_variation, review.cursor, review.mainLineLastPly, if (review.isInVariation) appString(R.string.variation_suffix) else ""))
         ReviewBoard(state, review.isInVariation, visibleEvaluations.associateBy { it.move }) { position ->
             if (review.playVariation(position)) revision++
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            OutlinedButton(onClick = { review.seek(0); revision++ }, enabled = !review.isInVariation) { Text("最初") }
-            OutlinedButton(onClick = { review.previous(); revision++ }, enabled = !review.isInVariation) { Text("前") }
-            OutlinedButton(onClick = { review.next(); revision++ }, enabled = !review.isInVariation) { Text("次") }
-            OutlinedButton(onClick = { review.seek(review.mainLineLastPly); revision++ }, enabled = !review.isInVariation) { Text("最後") }
+            OutlinedButton(onClick = { review.seek(0); revision++ }, enabled = !review.isInVariation) { Text(appString(R.string.first)) }
+            OutlinedButton(onClick = { review.previous(); revision++ }, enabled = !review.isInVariation) { Text(appString(R.string.previous)) }
+            OutlinedButton(onClick = { review.next(); revision++ }, enabled = !review.isInVariation) { Text(appString(R.string.next)) }
+            OutlinedButton(onClick = { review.seek(review.mainLineLastPly); revision++ }, enabled = !review.isInVariation) { Text(appString(R.string.last)) }
         }
         Slider(
             value = review.cursor.toFloat(),
@@ -207,11 +216,11 @@ internal fun ReviewScreen(
             enabled = !review.isInVariation,
         )
         if (!review.isInVariation) {
-            OutlinedButton(onClick = { review.beginVariation(); revision++ }, modifier = Modifier.fillMaxWidth()) { Text("この局面から変化を開始") }
+            OutlinedButton(onClick = { review.beginVariation(); revision++ }, modifier = Modifier.fillMaxWidth()) { Text(appString(R.string.start_variation)) }
         } else {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { review.cancelVariation(); revision++ }, modifier = Modifier.weight(1f)) { Text("変化を取消") }
-                OutlinedButton(onClick = { review.saveVariationAndReturn(); revision++ }, modifier = Modifier.weight(1f)) { Text("保存して実戦へ") }
+                OutlinedButton(onClick = { review.cancelVariation(); revision++ }, modifier = Modifier.weight(1f)) { Text(appString(R.string.cancel_variation)) }
+                OutlinedButton(onClick = { review.saveVariationAndReturn(); revision++ }, modifier = Modifier.weight(1f)) { Text(appString(R.string.save_to_game)) }
             }
         }
         OutlinedButton(
@@ -219,7 +228,7 @@ internal fun ReviewScreen(
                 if (analysisRunning) {
                     analysisRequested = false
                     engine.cancel()
-                    analysisMessage = "解析をキャンセルしました"
+                    analysisMessage = analysisCancelled
                 } else {
                     analysisRequested = true
                     analysisRun++
@@ -228,15 +237,15 @@ internal fun ReviewScreen(
             },
             enabled = dataStatus.nativeAvailable,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text(if (analysisRunning) "解析をキャンセル" else "全合法手を解析") }
+        ) { Text(appString(if (analysisRunning) R.string.cancel_analysis else R.string.analyze_all_legal_moves)) }
         if (analysisResult != null) {
             OutlinedButton(onClick = { showEvaluations = !showEvaluations }, modifier = Modifier.fillMaxWidth()) {
-                Text(if (showEvaluations) "評価を隠す" else "評価を表示")
+                Text(appString(if (showEvaluations) R.string.hide_evaluations else R.string.show_evaluations))
             }
         }
         Text(analysisMessage)
         if (analysisResult?.available == true) {
-            Text("値は現在手番から見た予測終局石差です。exactは完全読み、bookはインポートしたBook値、その他は深さ依存の推定値です。", style = MaterialTheme.typography.bodySmall)
+            Text(appString(R.string.evaluation_note), style = MaterialTheme.typography.bodySmall)
             visibleEvaluations.forEach { evaluation ->
                 val coordinate = evaluation.move.coordinateLabel()
                 Text("$coordinate  ${formatEvaluation(evaluation.score.value)}", style = MaterialTheme.typography.bodySmall)
@@ -247,7 +256,7 @@ internal fun ReviewScreen(
             participationRepository = researchParticipationRepository,
             positionRepository = researchPositionRepository,
         )
-        Text("実戦棋譜は不変です。保存済み変化: ${review.currentVariations.size}", style = MaterialTheme.typography.bodySmall)
+            Text(appString(R.string.saved_variations, review.currentVariations.size), style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -278,15 +287,15 @@ private fun ResearchReviewPanel(
 
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("研究データ", style = MaterialTheme.typography.titleMedium)
+            Text(appString(R.string.research_data), style = MaterialTheme.typography.titleMedium)
             val currentStatus = status
             when {
-                currentStatus == null -> Text("研究データの利用状態を確認中…")
+                currentStatus == null -> Text(appString(R.string.research_checking_status))
                 !currentStatus.canViewResearchData -> ResearchEligibilityMessage(currentStatus)
-                loading -> Text("研究データを読み込み中…")
+                loading -> Text(appString(R.string.research_loading))
                 result is ResearchPositionResult.Available -> {
                     val available = (result as ResearchPositionResult.Available).position
-                    Text("参加プレイヤーの選択傾向（${available.uniqueContributors}人以上）")
+                    Text(appString(R.string.research_choice_tendency, available.uniqueContributors))
                     available.moves.forEach { move ->
                         ResearchMoveRow(move) {
                             val child = move.childPositionToken ?: return@ResearchMoveRow
@@ -299,22 +308,22 @@ private fun ResearchReviewPanel(
                         OutlinedButton(onClick = {
                             token = history.last()
                             history = history.dropLast(1)
-                        }) { Text("親の局面へ戻る") }
+                        }) { Text(appString(R.string.parent_position)) }
                     }
                 }
                 result is ResearchPositionResult.Unavailable -> {
                     val unavailable = (result as ResearchPositionResult.Unavailable).reason
                     Text(
                         when (unavailable) {
-                            ResearchUnavailableReason.INSUFFICIENT_SAMPLE -> "この局面には十分な研究データがまだありません"
-                            ResearchUnavailableReason.NO_PUBLISHED_GENERATION -> "研究データは現在準備中です"
-                            ResearchUnavailableReason.UNSUPPORTED_SEGMENT -> "この研究データは利用できません"
-                            else -> "研究データを利用できません"
+                            ResearchUnavailableReason.INSUFFICIENT_SAMPLE -> appString(R.string.research_insufficient)
+                            ResearchUnavailableReason.NO_PUBLISHED_GENERATION -> appString(R.string.research_preparing)
+                            ResearchUnavailableReason.UNSUPPORTED_SEGMENT -> appString(R.string.research_unavailable)
+                            else -> appString(R.string.research_unavailable)
                         },
                     )
                 }
                 result is ResearchPositionResult.Failed ->
-                    Text("研究データを取得できませんでした", color = MaterialTheme.colorScheme.error)
+                    Text(appString(R.string.research_failed), color = MaterialTheme.colorScheme.error)
             }
         }
     }
@@ -323,14 +332,14 @@ private fun ResearchReviewPanel(
 @Composable
 private fun ResearchEligibilityMessage(status: ResearchParticipationStatus) {
     when {
-        status.reconsentRequired -> Text("研究参加の再同意が必要です。設定から内容を確認してください")
-        !status.participationOn -> Text("研究参加がOFFのため、研究データを表示できません")
-        !status.collectionEnabled -> Text("研究データは現在準備中です")
+        status.reconsentRequired -> Text(appString(R.string.research_reconsent_required))
+        !status.participationOn -> Text(appString(R.string.research_off_unavailable))
+        !status.collectionEnabled -> Text(appString(R.string.research_not_ready))
         status.qualifyingGameCount < status.requiredGameCount -> {
             val remaining = (status.requiredGameCount - status.qualifyingGameCount).coerceAtLeast(0)
-            Text("研究データを見るには、直近${status.windowDays}日であと${remaining}局の提供が必要です")
+            Text(appString(R.string.research_remaining, status.windowDays, remaining))
         }
-        else -> Text("研究データを表示できません")
+        else -> Text(appString(R.string.research_cannot_display))
     }
 }
 
@@ -339,16 +348,16 @@ private fun ResearchMoveRow(move: ResearchMove, onExplore: (() -> Unit)?) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (move.kind == ResearchMoveKind.OTHER) "その他" else move.coordinate?.lowercase(Locale.ROOT) ?: "手",
+                if (move.kind == ResearchMoveKind.OTHER) appString(R.string.other_move) else move.coordinate?.lowercase(Locale.ROOT) ?: appString(R.string.move_fallback),
                 modifier = Modifier.weight(1f),
             )
             Text(formatResearchPercent(move.choiceRate))
             onExplore?.let {
-                OutlinedButton(onClick = it, enabled = move.canExplore) { Text("次へ") }
+                OutlinedButton(onClick = it, enabled = move.canExplore) { Text(appString(R.string.next)) }
             }
         }
         Text(
-            "勝 ${formatResearchPercent(move.winRate)} / 引分 ${formatResearchPercent(move.drawRate)} / 負 ${formatResearchPercent(move.lossRate)}",
+            appString(R.string.research_move_result, formatResearchPercent(move.winRate), formatResearchPercent(move.drawRate), formatResearchPercent(move.lossRate)),
             style = MaterialTheme.typography.bodySmall,
         )
     }
@@ -363,24 +372,25 @@ internal fun AccountDeletionScreen(
     onBack: () -> Unit,
     onRequested: () -> Unit,
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var confirmed by remember { mutableStateOf(false) }
     var requested by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ScreenHeader("アカウントを削除", onBack)
-        Text("削除リクエスト後、信頼されたサーバー処理が認証情報・アカウント管理用の内部データ・レーティングを削除します。対戦相手の棋譜は匿名化して保持される場合があります。")
-        Text("進行中の対局がある場合は受け付けません。受付後は安全のためログアウトし、処理完了まで再ログインできません。", style = MaterialTheme.typography.bodySmall)
+        ScreenHeader(appString(R.string.account_delete_title), onBack)
+        Text(appString(R.string.account_delete_description))
+        Text(appString(R.string.account_delete_warning), style = MaterialTheme.typography.bodySmall)
         when {
-            requested -> Text("削除リクエストを受け付けました")
-            !confirmed -> OutlinedButton(onClick = { confirmed = true }) { Text("削除手続きへ進む") }
+            requested -> Text(appString(R.string.delete_request_received))
+            !confirmed -> OutlinedButton(onClick = { confirmed = true }) { Text(appString(R.string.proceed_delete)) }
             else -> ChanrivaDangerButton(onClick = {
                 scope.launch {
                     runCatching { repository.requestDeletion() }
                         .onSuccess { requested = true; error = null; onRequested() }
-                        .onFailure { error = it.message ?: "削除リクエストを送信できませんでした" }
+                        .onFailure { error = it.message ?: context.getString(R.string.delete_request_failed) }
                 }
-            }) { Text("削除リクエストを送信") }
+            }) { Text(appString(R.string.send_delete_request)) }
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }
@@ -388,7 +398,7 @@ internal fun AccountDeletionScreen(
 
 @Composable
 private fun ScreenHeader(title: String, onBack: () -> Unit) {
-    ChanrivaScreenHeader(title, onBack)
+    ChanrivaScreenHeader(title, onBack, backLabel = appString(R.string.back))
 }
 
 @Composable
@@ -398,6 +408,7 @@ private fun ReviewBoard(
     evaluations: Map<Position, com.example.othello.analysis.api.MoveEvaluation>,
     onMove: (Position) -> Unit,
 ) {
+    val context = LocalContext.current
     val bestScore = evaluations.maxOfOrNull { it.value.score.value }
     CoordinateBoard { position, cellModifier ->
         val disc = state.board[position]
@@ -414,11 +425,11 @@ private fun ReviewBoard(
                     contentDescription = buildString {
                         append("${position.coordinateLabel()}、")
                         append(when (disc) {
-                            Disc.BLACK -> "黒石"
-                            Disc.WHITE -> "白石"
-                            Disc.EMPTY -> if (position in state.legalMoves) "合法手" else "空き"
+                            Disc.BLACK -> context.getString(R.string.black_stone)
+                            Disc.WHITE -> context.getString(R.string.white_stone)
+                            Disc.EMPTY -> if (position in state.legalMoves) context.getString(R.string.legal_move) else context.getString(R.string.empty_square)
                         })
-                        evaluation?.let { append("、評価 ${formatEvaluation(it.score.value)}") }
+                        evaluation?.let { append(context.getString(R.string.evaluation_value, formatEvaluation(it.score.value))) }
                     }
                 }
                 .clickable(enabled = legal) { onMove(position) },
@@ -440,27 +451,27 @@ private fun ReviewBoard(
 
 private fun formatEvaluation(value: Int): String = if (value > 0) "+$value" else value.toString()
 
-private fun MatchResult.labelFor(localIsBlack: Boolean): String {
+private fun MatchResult.labelFor(localIsBlack: Boolean, context: android.content.Context? = null): String {
     val localWon = (this == MatchResult.BLACK_WIN && localIsBlack) || (this == MatchResult.WHITE_WIN && !localIsBlack)
     return when {
-        this == MatchResult.DRAW -> "引き分け"
-        localWon -> "勝ち"
-        else -> "負け"
+        this == MatchResult.DRAW -> context?.getString(R.string.result_draw) ?: "引き分け"
+        localWon -> context?.getString(R.string.result_win) ?: "勝ち"
+        else -> context?.getString(R.string.result_loss) ?: "負け"
     }
 }
 
-private fun MatchResult.userLabel(): String = when (this) {
-    MatchResult.BLACK_WIN -> "黒勝ち"
-    MatchResult.WHITE_WIN -> "白勝ち"
-    MatchResult.DRAW -> "引き分け"
+private fun MatchResult.userLabel(context: android.content.Context? = null): String = when (this) {
+    MatchResult.BLACK_WIN -> context?.getString(R.string.black_win) ?: "黒勝ち"
+    MatchResult.WHITE_WIN -> context?.getString(R.string.white_win) ?: "白勝ち"
+    MatchResult.DRAW -> context?.getString(R.string.result_draw) ?: "引き分け"
 }
 
-private fun FinishReason.userLabel(): String = when (this) {
-    FinishReason.NORMAL -> "通常終局"
-    FinishReason.RESIGNATION -> "投了"
-    FinishReason.TIMEOUT -> "時間切れ"
-    FinishReason.DISCONNECT -> "切断"
-    FinishReason.DISPUTED -> "結果不一致"
+private fun FinishReason.userLabel(context: android.content.Context? = null): String = when (this) {
+    FinishReason.NORMAL -> context?.getString(R.string.finish_normal) ?: "通常終局"
+    FinishReason.RESIGNATION -> context?.getString(R.string.finish_resignation) ?: "投了"
+    FinishReason.TIMEOUT -> context?.getString(R.string.finish_timeout) ?: "時間切れ"
+    FinishReason.DISCONNECT -> context?.getString(R.string.finish_disconnect) ?: "切断"
+    FinishReason.DISPUTED -> context?.getString(R.string.finish_disputed) ?: "結果不一致"
 }
 
 private fun formatDate(epochMillis: Long): String = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
@@ -475,6 +486,7 @@ internal fun OnlineRecordsScreen(
     onBack: () -> Unit,
     onReview: (ReviewInput) -> Unit,
 ) {
+    val context = LocalContext.current
     var records by remember { mutableStateOf<List<GameRecord>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -483,26 +495,26 @@ internal fun OnlineRecordsScreen(
     LaunchedEffect(userId, repository) {
         runCatching { repository.recent(userId, 50) }
             .onSuccess { records = it; error = null }
-            .onFailure { error = it.message ?: "オンライン棋譜を読み込めませんでした" }
+            .onFailure { error = it.message ?: context.getString(R.string.online_records_load_failed) }
     }
     Box(Modifier.fillMaxSize()) {
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
             verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
         ) {
-            ScreenHeader("オンライン棋譜", onBack)
-            Text("この画面では最新50局を表示します", style = MaterialTheme.typography.bodySmall)
+            ScreenHeader(appString(R.string.online_records), onBack)
+            Text(appString(R.string.online_records_note), style = MaterialTheme.typography.bodySmall)
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             when {
-                records == null -> Text("読み込み中…")
-                records.orEmpty().isEmpty() -> Text("オンライン棋譜はありません")
+                records == null -> Text(appString(R.string.loading))
+                records.orEmpty().isEmpty() -> Text(appString(R.string.online_records_none))
                 else -> records.orEmpty().forEach { record ->
                     val localIsBlack = record.players.first() == userId
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("${record.result.labelFor(localIsBlack)} / ${if (localIsBlack) "黒" else "白"}")
-                            Text("${record.finishReason.userLabel()} / ${formatDate(record.finishedAtEpochMillis)}")
-                            Text("${record.moves.size}手 / ${CanonicalMoves.encode(record.moves)}", style = MaterialTheme.typography.bodySmall)
+                            Text("${record.result.labelFor(localIsBlack, context)} / ${appString(if (localIsBlack) R.string.black else R.string.white)}")
+                            Text("${record.finishReason.userLabel(context)} / ${formatDate(record.finishedAtEpochMillis)}")
+                            Text("${appString(R.string.move_count, record.moves.size)} / ${CanonicalMoves.encode(record.moves)}", style = MaterialTheme.typography.bodySmall)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedButton(
                                     onClick = {
@@ -510,23 +522,23 @@ internal fun OnlineRecordsScreen(
                                             ReviewInput(
                                                 id = record.matchId,
                                                 moves = record.moves,
-                                                title = "オンライン棋譜",
+                                                title = context.getString(R.string.online_records),
                                                 result = record.result,
                                                 finishReason = record.finishReason,
                                                 finishedAtEpochMillis = record.finishedAtEpochMillis,
                                             ),
                                         )
                                     },
-                                ) { Text("棋譜を開く") }
+                                ) { Text(appString(R.string.open_record)) }
                                 OutlinedButton(
                                     onClick = {
                                         scope.launch {
                                             runCatching { localStore.save(record.toLocalCopy(userId)) }
-                                                .onSuccess { snackbar.showSnackbar("端末に保存しました") }
-                                                .onFailure { snackbar.showSnackbar(it.message ?: "端末に保存できませんでした") }
+                                                .onSuccess { snackbar.showSnackbar(context.getString(R.string.saved_to_device)) }
+                                                .onFailure { snackbar.showSnackbar(it.message ?: context.getString(R.string.save_to_device_failed)) }
                                         }
                                     },
-                                ) { Text("端末に保存") }
+                                ) { Text(appString(R.string.save_to_device)) }
                             }
                         }
                     }
@@ -543,6 +555,7 @@ internal fun OfflineRecordsScreen(
     onBack: () -> Unit,
     onReview: (ReviewInput) -> Unit,
 ) {
+    val context = LocalContext.current
     var records by remember { mutableStateOf<List<LocalGameRecord>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var readWarning by remember { mutableStateOf<String?>(null) }
@@ -558,14 +571,14 @@ internal fun OfflineRecordsScreen(
                     records = result.records
                     readWarning = result.corruptLineCount.takeIf { it > 0 }?.let {
                         if (result.recoveryCompleted) {
-                            "一部のオフライン棋譜を読み込めませんでした（${it}件を隔離しました）"
+                            context.getString(R.string.offline_records_warning_quarantine, it)
                         } else {
-                            "一部のオフライン棋譜を読み込めませんでした（${it}件の復旧待ち）"
+                            context.getString(R.string.offline_records_warning_recovery, it)
                         }
                     }
                     error = null
                 }
-                .onFailure { error = it.message ?: "オフライン棋譜を読み込めませんでした" }
+                .onFailure { error = it.message ?: context.getString(R.string.offline_records_load_failed) }
         }
     }
 
@@ -574,18 +587,18 @@ internal fun OfflineRecordsScreen(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
     ) {
-        ScreenHeader("オフライン棋譜", onBack)
-        Text("この端末に保存した棋譜です", style = MaterialTheme.typography.bodySmall)
+        ScreenHeader(appString(R.string.offline_records), onBack)
+        Text(appString(R.string.offline_records_note), style = MaterialTheme.typography.bodySmall)
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         readWarning?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         when {
-            records == null -> Text("読み込み中…")
-            records.orEmpty().isEmpty() -> Text("オフライン棋譜はありません")
+            records == null -> Text(appString(R.string.loading))
+            records.orEmpty().isEmpty() -> Text(appString(R.string.offline_records_none))
             else -> records.orEmpty().forEach { record ->
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("${record.type.displayLabel()} / ${record.result?.userLabel() ?: "研究棋譜"}")
-                        Text("${formatDate(record.createdAtEpochMillis)} / ${record.moves.size}手")
+                        Text("${record.type.displayLabel(context)} / ${record.result?.userLabel(context) ?: appString(R.string.research_record)}")
+                        Text("${formatDate(record.createdAtEpochMillis)} / ${appString(R.string.move_count, record.moves.size)}")
                         Text(record.canonicalMoves, style = MaterialTheme.typography.bodySmall)
                         record.memo?.takeIf { it.isNotBlank() }?.let { memo ->
                             Text(memo.replace("\n", " "), style = MaterialTheme.typography.bodySmall, maxLines = 2)
@@ -597,7 +610,7 @@ internal fun OfflineRecordsScreen(
                                         ReviewInput(
                                             id = record.localId,
                                             moves = record.moves,
-                                            title = record.type.reviewTitle(),
+                                            title = record.type.reviewTitle(context),
                                             result = record.result,
                                             finishReason = record.finishReason,
                                             finishedAtEpochMillis = record.createdAtEpochMillis,
@@ -606,11 +619,11 @@ internal fun OfflineRecordsScreen(
                                         ),
                                     )
                                 },
-                            ) { Text("棋譜を開く") }
+                            ) { Text(appString(R.string.open_record)) }
                             TextButton(onClick = { memoTarget = record; memoDraft = record.memo.orEmpty() }) {
-                                Text(if (record.memo.isNullOrBlank()) "メモを追加" else "メモを編集")
+                                Text(appString(if (record.memo.isNullOrBlank()) R.string.add_memo else R.string.edit_memo))
                             }
-                            OutlinedButton(onClick = { deleteTarget = record }) { Text("削除") }
+                            OutlinedButton(onClick = { deleteTarget = record }) { Text(appString(R.string.delete)) }
                         }
                     }
                 }
@@ -620,31 +633,31 @@ internal fun OfflineRecordsScreen(
     deleteTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text("オフライン棋譜を削除しますか？") },
-            text = { Text("この操作は取り消せません。") },
+            title = { Text(appString(R.string.delete_offline_record_confirm)) },
+            text = { Text(appString(R.string.irreversible)) },
             confirmButton = {
                 ChanrivaDangerButton(onClick = {
                     deleteTarget = null
                     scope.launch {
                         runCatching { localStore.delete(target.localId) }
                             .onSuccess { reload() }
-                            .onFailure { error = it.message ?: "オフライン棋譜を削除できませんでした" }
+                            .onFailure { error = it.message ?: context.getString(R.string.offline_records_delete_failed) }
                     }
-                }) { Text("削除する") }
+                }) { Text(appString(R.string.delete)) }
             },
-            dismissButton = { OutlinedButton(onClick = { deleteTarget = null }) { Text("キャンセル") } },
+            dismissButton = { OutlinedButton(onClick = { deleteTarget = null }) { Text(appString(R.string.cancel)) } },
         )
     }
     memoTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { memoTarget = null },
-            title = { Text(if (target.memo.isNullOrBlank()) "メモを追加" else "メモを編集") },
+            title = { Text(appString(if (target.memo.isNullOrBlank()) R.string.add_memo else R.string.edit_memo)) },
             text = {
                 TextField(
                     value = memoDraft,
                     onValueChange = { memoDraft = it },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("この棋譜について") },
+                    placeholder = { Text(appString(R.string.memo_about_record)) },
                     minLines = 3,
                     maxLines = 8,
                 )
@@ -655,11 +668,11 @@ internal fun OfflineRecordsScreen(
                     scope.launch {
                         runCatching { localStore.updateMemo(target.localId, memoDraft) }
                             .onSuccess { reload() }
-                            .onFailure { error = it.message ?: "メモを保存できませんでした" }
+                            .onFailure { error = it.message ?: context.getString(R.string.memo_save_failed) }
                     }
-                }) { Text("保存") }
+                }) { Text(appString(R.string.save)) }
             },
-            dismissButton = { OutlinedButton(onClick = { memoTarget = null }) { Text("キャンセル") } },
+            dismissButton = { OutlinedButton(onClick = { memoTarget = null }) { Text(appString(R.string.cancel)) } },
         )
     }
 }
@@ -678,6 +691,12 @@ internal fun ReviewScreenV2(
     onOpenCommonSettings: () -> Unit,
     onSaveMemo: ((String?) -> Unit)? = null,
 ) {
+    val context = LocalContext.current
+    val analysisNotStarted = appString(R.string.analysis_not_started)
+    val edaxUnavailable = appString(R.string.edax_engine_unavailable)
+    val analysisDataNotSet = appString(R.string.analysis_data_not_set)
+    val analyzing = appString(R.string.analyzing)
+    val analysisCancelled = appString(R.string.analysis_cancelled)
     val guard = remember(input.id) { AnalysisRequestGuard() }
     val scope = rememberCoroutineScope()
     var revision by remember { mutableIntStateOf(0) }
@@ -685,7 +704,7 @@ internal fun ReviewScreenV2(
     var requested by remember { mutableStateOf(false) }
     var running by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<AnalysisResult?>(null) }
-    var message by remember { mutableStateOf("解析は開始されていません") }
+    var message by remember { mutableStateOf(analysisNotStarted) }
     var saveMessage by remember { mutableStateOf<String?>(null) }
     var showMemoDialog by remember { mutableStateOf(false) }
     var memoDraft by remember { mutableStateOf(input.localMemo.orEmpty()) }
@@ -696,8 +715,8 @@ internal fun ReviewScreenV2(
     val settings = remember(revision, analysisRun) { dataManager.analysisSettings(reviewSettings) }
     val positionKey = state.stateHash()
     val analysisIssue = when {
-        !status.nativeAvailable -> "Edaxを利用できません"
-        status.evaluationData == null -> "評価データを設定してください"
+        !status.nativeAvailable -> edaxUnavailable
+        status.evaluationData == null -> analysisDataNotSet
         else -> null
     }
 
@@ -721,12 +740,13 @@ internal fun ReviewScreenV2(
             return@LaunchedEffect
         }
         running = true
-        message = "解析中…"
+        message = analyzing
         try {
             val analyzed = review.analyze(engine, settings)
             if (guard.isCurrent(token, review.current.stateHash())) {
                 result = analyzed
-                message = analyzed.message ?: "合法手 ${analyzed.evaluations.size} 件を解析しました"
+                message = localizeUserMessage(context, analyzed.message)
+                    ?: context.getString(R.string.legal_moves_analyzed, analyzed.evaluations.size)
             }
         } catch (_: CancellationException) {
         } finally {
@@ -736,57 +756,57 @@ internal fun ReviewScreenV2(
     DisposableEffect(engine) { onDispose { guard.invalidate(); engine.cancel() } }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page), verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact)) {
-        ScreenHeader("棋譜レビュー", onBack)
+        ScreenHeader(appString(R.string.review_title), onBack)
         Text(input.title)
         if (input.localRecordId != null && onSaveMemo != null) {
             currentMemo?.takeIf { it.isNotBlank() }?.let { memo ->
                 Text(memo.replace("\n", " "), style = MaterialTheme.typography.bodySmall, maxLines = 2)
             }
             TextButton(onClick = { memoDraft = currentMemo.orEmpty(); showMemoDialog = true }) {
-                Text(if (currentMemo.isNullOrBlank()) "メモを追加" else "メモを編集")
+                Text(appString(if (currentMemo.isNullOrBlank()) R.string.add_memo else R.string.edit_memo))
             }
         }
         input.result?.let { resultValue ->
             Text(
                 listOfNotNull(
-                    resultValue.userLabel(),
-                    input.finishReason?.userLabel(),
+                    resultValue.userLabel(context),
+                    input.finishReason?.userLabel(context),
                     input.finishedAtEpochMillis?.let(::formatDate),
                 ).joinToString(" / "),
             )
         }
-        Text("手数 ${review.cursor}/${review.mainLineLastPly}${if (review.isInVariation) " / 変化" else ""}")
+        Text(appString(R.string.ply_variation, review.cursor, review.mainLineLastPly, if (review.isInVariation) appString(R.string.variation_suffix) else ""))
         ReviewBoard(state, review.isInVariation, result?.evaluations.orEmpty().associateBy { it.move }) { position ->
             if (review.playVariation(position)) revision++
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            OutlinedButton(onClick = { review.seek(0); revision++ }, enabled = !review.isInVariation) { Text("最初") }
-            OutlinedButton(onClick = { review.previous(); revision++ }, enabled = !review.isInVariation) { Text("前") }
-            OutlinedButton(onClick = { review.next(); revision++ }, enabled = !review.isInVariation) { Text("次") }
-            OutlinedButton(onClick = { review.seek(review.mainLineLastPly); revision++ }, enabled = !review.isInVariation) { Text("最後") }
+            OutlinedButton(onClick = { review.seek(0); revision++ }, enabled = !review.isInVariation) { Text(appString(R.string.first)) }
+            OutlinedButton(onClick = { review.previous(); revision++ }, enabled = !review.isInVariation) { Text(appString(R.string.previous)) }
+            OutlinedButton(onClick = { review.next(); revision++ }, enabled = !review.isInVariation) { Text(appString(R.string.next)) }
+            OutlinedButton(onClick = { review.seek(review.mainLineLastPly); revision++ }, enabled = !review.isInVariation) { Text(appString(R.string.last)) }
         }
         Slider(value = review.cursor.toFloat(), onValueChange = { review.seek(it.toInt()); revision++ }, valueRange = 0f..review.mainLineLastPly.coerceAtLeast(1).toFloat(), steps = (review.mainLineLastPly - 1).coerceAtLeast(0), enabled = !review.isInVariation)
         if (!review.isInVariation) {
-            OutlinedButton(onClick = { review.beginVariation(); revision++ }, modifier = Modifier.fillMaxWidth()) { Text("この局面から変化を開始") }
+            OutlinedButton(onClick = { review.beginVariation(); revision++ }, modifier = Modifier.fillMaxWidth()) { Text(appString(R.string.start_variation)) }
         } else {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { review.cancelVariation(); revision++ }, modifier = Modifier.weight(1f)) { Text("変化を破棄") }
+                OutlinedButton(onClick = { review.cancelVariation(); revision++ }, modifier = Modifier.weight(1f)) { Text(appString(R.string.discard_variation)) }
                 OutlinedButton(onClick = {
                     val completeLine = review.saveVariationAndReturn()
                     revision++
                     if (completeLine != null) scope.launch {
                         runCatching {
                             localStore.save(LocalGameRecord(java.util.UUID.randomUUID().toString(), completeLine, System.currentTimeMillis(), LocalRecordType.RESEARCH_LINE))
-                        }.onSuccess { saveMessage = "研究棋譜をローカルに保存しました" }.onFailure { saveMessage = it.message ?: "研究棋譜を保存できませんでした" }
+                        }.onSuccess { saveMessage = context.getString(R.string.research_record_saved) }.onFailure { saveMessage = it.message ?: context.getString(R.string.research_record_save_failed) }
                     }
-                }, modifier = Modifier.weight(1f)) { Text("変化をローカル棋譜に保存") }
+                }, modifier = Modifier.weight(1f)) { Text(appString(R.string.save_variation_local)) }
             }
         }
         analysisIssue?.let { issue ->
             Text(issue, color = MaterialTheme.colorScheme.error)
             if (status.nativeAvailable || status.evaluationData == null) {
                 OutlinedButton(onClick = onOpenCommonSettings, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (status.evaluationData == null) "評価データを設定する" else "解析設定を開く")
+                    Text(appString(if (status.evaluationData == null) R.string.set_evaluation_data else R.string.open_analysis_settings))
                 }
             }
         }
@@ -794,7 +814,7 @@ internal fun ReviewScreenV2(
             onClick = { requested = !running; analysisRun++ },
             enabled = status.nativeAvailable && analysisIssue == null,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text(if (running) "解析をキャンセル" else "全合法手を解析") }
+        ) { Text(appString(if (running) R.string.cancel_analysis else R.string.analyze_all_legal_moves)) }
         Text(message)
         saveMessage?.let { Text(it) }
         result?.evaluations.orEmpty().forEach { evaluation -> Text("${evaluation.move.coordinateLabel()} ${formatEvaluation(evaluation.score.value)}", style = MaterialTheme.typography.bodySmall) }
@@ -803,7 +823,7 @@ internal fun ReviewScreenV2(
     if (showMemoDialog) {
         AlertDialog(
             onDismissRequest = { showMemoDialog = false },
-            title = { Text(if (currentMemo.isNullOrBlank()) "メモを追加" else "メモを編集") },
+            title = { Text(appString(if (currentMemo.isNullOrBlank()) R.string.add_memo else R.string.edit_memo)) },
             text = {
                 TextField(value = memoDraft, onValueChange = { memoDraft = it }, minLines = 3, maxLines = 8)
             },
@@ -812,21 +832,21 @@ internal fun ReviewScreenV2(
                     showMemoDialog = false
                     currentMemo = memoDraft.trim().takeIf { it.isNotEmpty() }
                     onSaveMemo?.invoke(memoDraft)
-                }) { Text("保存") }
+                }) { Text(appString(R.string.save)) }
             },
-            dismissButton = { OutlinedButton(onClick = { showMemoDialog = false }) { Text("キャンセル") } },
+            dismissButton = { OutlinedButton(onClick = { showMemoDialog = false }) { Text(appString(R.string.cancel)) } },
         )
     }
 }
 
-private fun LocalRecordType.displayLabel(): String = when (this) {
-    LocalRecordType.LOCAL_HUMAN -> "対人"
+private fun LocalRecordType.displayLabel(context: android.content.Context? = null): String = when (this) {
+    LocalRecordType.LOCAL_HUMAN -> context?.getString(R.string.human_record) ?: "対人"
     LocalRecordType.LOCAL_AI -> "AI"
-    LocalRecordType.RESEARCH_LINE -> "研究"
-    LocalRecordType.ONLINE_SAVED -> "オンライン対局"
+    LocalRecordType.RESEARCH_LINE -> context?.getString(R.string.research_record) ?: "研究"
+    LocalRecordType.ONLINE_SAVED -> context?.getString(R.string.online_records) ?: "オンライン対局"
 }
 
-private fun LocalRecordType.reviewTitle(): String = when (this) {
-    LocalRecordType.ONLINE_SAVED -> "オンライン対局（端末保存）"
-    else -> "オフライン棋譜"
+private fun LocalRecordType.reviewTitle(context: android.content.Context? = null): String = when (this) {
+    LocalRecordType.ONLINE_SAVED -> context?.getString(R.string.online_match_saved) ?: "オンライン対局（端末保存）"
+    else -> context?.getString(R.string.offline_record) ?: "オフライン棋譜"
 }

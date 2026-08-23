@@ -94,7 +94,7 @@ internal fun VersionGate(
         VersionGateState.Supported -> supportedContent()
         is VersionGateState.Unsupported -> VersionGateUnsupportedScreen()
         VersionGateState.Error -> VersionGateMessageScreen(
-            message = "サーバーに接続できませんでした。\n通信環境を確認して、もう一度お試しください。",
+            message = appString(R.string.version_server_error),
             onRetry = owner::retry,
         )
     }
@@ -113,19 +113,19 @@ private fun VersionGateUnsupportedScreen() {
                     ImageView(context).apply {
                         setImageResource(R.mipmap.ic_launcher)
                         scaleType = ImageView.ScaleType.FIT_CENTER
-                        contentDescription = "ちゃんりば アプリアイコン"
+                        contentDescription = context.getString(R.string.app_icon_description)
                     }
                 },
                 modifier = Modifier.size(96.dp),
             )
             Text(
-                text = "アプリの更新が必要です",
+                text = appString(R.string.update_required),
                 style = MaterialTheme.typography.headlineSmall,
                 color = ChanrivaColors.accent,
                 textAlign = TextAlign.Center,
             )
             Text(
-                text = "このバージョンは利用できません。\n最新版へ更新してから、もう一度起動してください。",
+                text = appString(R.string.unsupported_version),
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
             )
@@ -154,7 +154,7 @@ private fun VersionGateMessageScreen(
                     onClick = it,
                     modifier = Modifier.padding(top = ChanrivaSpacing.section),
                 ) {
-                    Text("再試行")
+                    Text(appString(R.string.retry))
                 }
             }
         }

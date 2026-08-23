@@ -31,13 +31,14 @@ fun ChanrivaScreenHeader(
     title: String,
     onBack: (() -> Unit)? = null,
     backEnabled: Boolean = true,
+    backLabel: String = "Back",
 ) {
     Row(
         Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (onBack != null) {
-            OutlinedButton(onClick = onBack, enabled = backEnabled) { Text("戻る") }
+            OutlinedButton(onClick = onBack, enabled = backEnabled) { Text(backLabel) }
             Spacer(Modifier.weight(1f))
         }
         Row(verticalAlignment = Alignment.CenterVertically) {

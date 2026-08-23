@@ -32,24 +32,24 @@ class GuiInformationArchitectureContractTest {
 
     @Test
     fun settingsAndDataActionsUseTheNewHierarchy() {
-        assertTrue(analysis.contains("AI対局設定"))
-        assertTrue(analysis.contains("対局共通設定"))
+        assertTrue(analysis.contains("R.string.ai_match_settings"))
+        assertTrue(analysis.contains("R.string.match_common_settings"))
         assertTrue(analysis.contains("if (status.evaluationData != null)"))
         assertTrue(analysis.contains("if (status.openingBook != null)"))
-        assertTrue(analysis.contains("評価データを削除します。削除すると"))
-        assertTrue(analysis.contains("削除後は通常探索を使用します"))
+        assertTrue(analysis.contains("R.string.delete_eval_confirm_text"))
+        assertTrue(analysis.contains("R.string.delete_book_confirm_text"))
         assertFalse(analysis.contains("詳しい説明を見る"))
-        assertTrue(analysis.contains("手元の book.dat を選ぶ"))
+        assertTrue(analysis.contains("R.string.choose_book"))
     }
 
     @Test
     fun webRowsAreMarkedAndResearchSettingsAvoidInternalModelTerms() {
         val components = File("../core/designsystem/src/main/java/com/example/othello/designsystem/ChanrivaComponents.kt").readText()
         assertTrue(components.contains("trailingLabel: String?"))
-        assertTrue(analysis.contains("Edaxについて"))
+        assertTrue(analysis.contains("R.string.edax_about"))
         assertTrue(analysis.contains("trailingLabel = \"Web\""))
         assertFalse(research.contains("研究subject:"))
         assertFalse(research.contains("参加period:"))
-        assertTrue(research.contains("研究データとの連携"))
+        assertTrue(research.contains("R.string.research_link"))
     }
 }

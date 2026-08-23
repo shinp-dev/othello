@@ -25,6 +25,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.othello.designsystem.ChanrivaSpacing
 import com.example.othello.research.ResearchConsent
@@ -37,6 +38,7 @@ internal fun ResearchSettingsScreen(
     repository: ResearchParticipationRepository,
     onBack: () -> Unit,
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf<ResearchParticipationStatus?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -57,7 +59,7 @@ internal fun ResearchSettingsScreen(
                 status = it
                 consentChecked = false
             }.onFailure {
-                error = it.message ?: "研究参加状態を更新できませんでした"
+                error = it.message ?: context.getString(R.string.research_update_failed)
             }
             busy = false
         }
@@ -66,14 +68,14 @@ internal fun ResearchSettingsScreen(
     LaunchedEffect(repository) {
         runCatching { repository.status() }
             .onSuccess { status = it }
-            .onFailure { error = it.message ?: "研究参加状態を取得できませんでした" }
+            .onFailure { error = it.message ?: context.getString(R.string.research_load_failed) }
     }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
     ) {
-        SettingsHeader("研究参加", onBack)
+        SettingsHeader(appString(R.string.research_participation), onBack)
         when {
             status == null && error == null -> CircularProgressIndicator()
             status != null -> ResearchStatus(status = requireNotNull(status))
@@ -85,7 +87,7 @@ internal fun ResearchSettingsScreen(
         val appHasCurrentConsent = current == null || current.currentConsentVersion == ResearchConsent.version
         if (!appHasCurrentConsent) {
             Text(
-                "新しい同意内容があります。アプリを更新して確認してください。",
+                appString(R.string.new_consent_available),
                 color = MaterialTheme.colorScheme.error,
             )
         }
@@ -95,7 +97,7 @@ internal fun ResearchSettingsScreen(
                 onClick = { update(false) },
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("研究参加をOFFにする") }
+            ) { Text(appString(R.string.research_off)) }
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(
@@ -103,20 +105,20 @@ internal fun ResearchSettingsScreen(
                     onCheckedChange = { consentChecked = it },
                     enabled = !busy && appHasCurrentConsent,
                 )
-                Text("上記の内容を確認し、研究参加に同意します")
+                Text(appString(R.string.confirm_consent))
             }
             Button(
                 onClick = { showConsentDialog = true },
                 enabled = !busy && appHasCurrentConsent && current != null,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (current?.reconsentRequired == true) "再同意して研究参加をONにする" else "研究参加をONにする")
+                Text(appString(if (current?.reconsentRequired == true) R.string.reconsent_on else R.string.research_on))
             }
         }
 
         if (current?.participationOn == true) {
             TextButton(onClick = { showConsentDialog = true }, enabled = !busy) {
-                Text("同意内容を確認")
+                Text(appString(R.string.review_consent))
             }
         }
     }
@@ -124,14 +126,14 @@ internal fun ResearchSettingsScreen(
     if (showConsentDialog) {
         AlertDialog(
             onDismissRequest = { showConsentDialog = false; consentChecked = false },
-            title = { Text("研究参加への同意") },
+            title = { Text(appString(R.string.research_consent_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("同意内容：バージョン${ResearchConsent.version}", style = MaterialTheme.typography.titleSmall)
-                    ResearchConsent.statements.forEach { statement -> Text("・$statement") }
+                    Text(appString(R.string.consent_version, ResearchConsent.version), style = MaterialTheme.typography.titleSmall)
+                    localizedResearchConsentStatements().forEach { statement -> Text("• $statement") }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = consentChecked, onCheckedChange = { consentChecked = it })
-                        Text("内容を確認し、同意します")
+                        Text(appString(R.string.confirm_consent))
                     }
                 }
             },
@@ -139,9 +141,9 @@ internal fun ResearchSettingsScreen(
                 Button(
                     onClick = { showConsentDialog = false; consentChecked = false; update(true) },
                     enabled = consentChecked && !busy,
-                ) { Text("同意してONにする") }
+                ) { Text(appString(R.string.consent_on)) }
             },
-            dismissButton = { TextButton(onClick = { showConsentDialog = false; consentChecked = false }) { Text("キャンセル") } },
+            dismissButton = { TextButton(onClick = { showConsentDialog = false; consentChecked = false }) { Text(appString(R.string.cancel)) } },
         )
     }
 }
@@ -149,16 +151,28 @@ internal fun ResearchSettingsScreen(
 @Composable
 private fun ResearchStatus(status: ResearchParticipationStatus) {
     val stateText = when {
-        status.reconsentRequired -> "再同意が必要"
+        status.reconsentRequired -> appString(R.string.reconsent_required)
         status.participationOn -> "ON"
         else -> "OFF"
     }
-    Text("研究参加：$stateText", style = MaterialTheme.typography.titleMedium)
-    Text("同意内容：${status.agreedConsentVersion?.let { "バージョン$it" } ?: "未同意"}")
-    Text("研究データとの連携：${if (status.researchSubjectLinked) "完了" else "準備中"}")
+    Text(appString(R.string.research_status, stateText), style = MaterialTheme.typography.titleMedium)
+    Text(appString(R.string.consent_status, status.agreedConsentVersion?.let { appString(R.string.consent_version_short, it) } ?: appString(R.string.not_agreed)))
+    Text(appString(R.string.research_link, if (status.researchSubjectLinked) appString(R.string.status_complete) else appString(R.string.status_ready)))
     Text(
-        "研究データ閲覧まで：${status.qualifyingGameCount} / ${status.requiredGameCount}局（直近${status.windowDays}日）" +
-            if (status.canViewResearchData) "\n閲覧できます" else "",
+        appString(R.string.research_progress, status.qualifyingGameCount, status.requiredGameCount, status.windowDays) +
+            if (status.canViewResearchData) "\n${appString(R.string.research_viewable)}" else "",
     )
-    Text("データ提供：${if (status.collectionAllowed && status.collectionEnabled) "有効" else "停止中"}", style = MaterialTheme.typography.bodySmall)
+    Text(appString(R.string.data_provision, if (status.collectionAllowed && status.collectionEnabled) appString(R.string.status_enabled) else appString(R.string.status_disabled)), style = MaterialTheme.typography.bodySmall)
 }
+
+@Composable
+private fun localizedResearchConsentStatements(): List<String> = listOf(
+    appString(R.string.consent_statement_1),
+    appString(R.string.consent_statement_2),
+    appString(R.string.consent_statement_3),
+    appString(R.string.consent_statement_4),
+    appString(R.string.consent_statement_5),
+    appString(R.string.consent_statement_6),
+    appString(R.string.consent_statement_7),
+    appString(R.string.consent_statement_8),
+)

@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.ImeAction
@@ -64,6 +65,7 @@ internal fun AuthGate(
 
 @Composable
 private fun LoginRoute(sessionOwner: OnlineSessionViewModel) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var mode by remember { mutableStateOf(LoginMode.LOGIN) }
     var email by remember { mutableStateOf("") }
@@ -95,7 +97,7 @@ private fun LoginRoute(sessionOwner: OnlineSessionViewModel) {
                     busy = true
                     clearMessages()
                     sessionOwner.signIn(email, password)
-                        .onFailure { loginError = authErrorMessage(AuthOperation.LOGIN, it) }
+                        .onFailure { loginError = authErrorMessage(AuthOperation.LOGIN, it, context) }
                     busy = false
                 }
             },
@@ -112,11 +114,11 @@ private fun LoginRoute(sessionOwner: OnlineSessionViewModel) {
                             if (result == SignUpResult.EmailConfirmationRequired) {
                                 mode = LoginMode.LOGIN
                                 password = ""
-                                notice = "確認メールを送信しました。メール内のリンクを開いてからログインしてください。"
+                                notice = context.getString(R.string.confirmation_email_sent)
                             }
                         }
                         .onFailure {
-                            notice = authErrorMessage(AuthOperation.SIGN_UP, it)
+                            notice = authErrorMessage(AuthOperation.SIGN_UP, it, context)
                             noticeIsError = true
                         }
                     busy = false
@@ -132,10 +134,10 @@ private fun LoginRoute(sessionOwner: OnlineSessionViewModel) {
                     clearMessages()
                     sessionOwner.requestPasswordReset(email)
                         .onSuccess {
-                            notice = "再設定メールを送信しました。登録済みの場合はメールをご確認ください。"
+                            notice = context.getString(R.string.reset_email_sent)
                         }
                         .onFailure {
-                            notice = "再設定メールを送信できませんでした。しばらく時間をおいてお試しください。"
+                            notice = context.getString(R.string.reset_email_failed)
                             noticeIsError = true
                         }
                     busy = false
@@ -162,6 +164,7 @@ private fun LoginScreen(
     onBackToLogin: () -> Unit,
     onPasswordReset: () -> Unit,
 ) {
+    val iconDescription = appString(R.string.app_icon_description)
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
@@ -172,22 +175,22 @@ private fun LoginScreen(
                 ImageView(context).apply {
                     setImageResource(R.mipmap.ic_launcher)
                     scaleType = ImageView.ScaleType.FIT_CENTER
-                    contentDescription = "ちゃんりば アプリアイコン"
+                    contentDescription = iconDescription
                 }
             },
             modifier = Modifier.size(96.dp),
         )
-        Text("ちゃんりば", style = MaterialTheme.typography.headlineMedium, color = ChanrivaColors.accent)
-        Text("ちゃんと残る、ちゃんと振り返れるリバーシ", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(appString(R.string.app_name), style = MaterialTheme.typography.headlineMedium, color = ChanrivaColors.accent)
+        Text(appString(R.string.login_tagline), color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
-            if (mode == LoginMode.LOGIN) "ログイン" else "アカウント作成",
+            appString(if (mode == LoginMode.LOGIN) R.string.login else R.string.create_account),
             style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.fillMaxWidth(),
         )
         OutlinedTextField(
             value = email,
             onValueChange = onEmailChange,
-            label = { Text("メールアドレス") },
+            label = { Text(appString(R.string.account_email)) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
             singleLine = true,
             enabled = !busy,
@@ -196,7 +199,7 @@ private fun LoginScreen(
         OutlinedTextField(
             value = password,
             onValueChange = onPasswordChange,
-            label = { Text(if (mode == LoginMode.LOGIN) "パスワード" else "ちゃんりば用パスワード") },
+            label = { Text(appString(if (mode == LoginMode.LOGIN) R.string.password else R.string.chanriva_password)) },
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
             singleLine = true,
@@ -205,7 +208,7 @@ private fun LoginScreen(
         )
         if (mode == LoginMode.SIGN_UP) {
             Text(
-                "Gmailなどで使っているパスワードとは別のものを設定してください。",
+                appString(R.string.password_guidance),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
@@ -225,11 +228,11 @@ private fun LoginScreen(
                 onClick = onLogin,
                 enabled = !busy && email.isNotBlank() && password.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("ログイン") }
+            ) { Text(appString(R.string.login)) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                TextButton(onClick = onOpenSignUp, enabled = !busy) { Text("アカウント作成") }
+                TextButton(onClick = onOpenSignUp, enabled = !busy) { Text(appString(R.string.create_account)) }
                 TextButton(onClick = onPasswordReset, enabled = !busy && email.isNotBlank()) {
-                    Text("パスワードを忘れた場合")
+                    Text(appString(R.string.forgot_password))
                 }
             }
         } else {
@@ -237,8 +240,8 @@ private fun LoginScreen(
                 onClick = onSignUp,
                 enabled = !busy && email.isNotBlank() && password.length >= 8,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("アカウントを作成") }
-            TextButton(onClick = onBackToLogin, enabled = !busy) { Text("ログインに戻る") }
+            ) { Text(appString(R.string.create_account_action)) }
+            TextButton(onClick = onBackToLogin, enabled = !busy) { Text(appString(R.string.back_to_login)) }
         }
     }
 }
@@ -252,7 +255,7 @@ private fun AuthCheckingScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             CircularProgressIndicator()
-            Text("ログイン状態を確認しています", modifier = Modifier.padding(top = 16.dp))
+            Text(appString(R.string.login_checking), modifier = Modifier.padding(top = 16.dp))
         }
     }
 }
@@ -266,13 +269,13 @@ private fun AuthStartupErrorScreen(state: AuthState.Error, onRetry: (() -> Unit)
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                if (state.kind == AuthStartupErrorKind.CONFIGURATION) "アプリ設定エラー" else "ログイン状態の確認エラー",
+                appString(if (state.kind == AuthStartupErrorKind.CONFIGURATION) R.string.app_configuration_error else R.string.session_check_error),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.error,
             )
             Text(state.message, modifier = Modifier.padding(top = 12.dp))
             onRetry?.let {
-                OutlinedButton(onClick = it, modifier = Modifier.padding(top = 16.dp)) { Text("再試行") }
+                OutlinedButton(onClick = it, modifier = Modifier.padding(top = 16.dp)) { Text(appString(R.string.retry)) }
             }
         }
     }

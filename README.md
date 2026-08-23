@@ -10,6 +10,20 @@
 - Android NDK `27.3.13750724` (r27d LTS) / CMake `3.22.1`
 - Kotlin 2.2.10 / Compose Compiler plugin / Compose 1.6.8
 
+## Android language support
+
+The Android app supports Japanese and English. The initial choice follows
+Android's system language (`System default`); users can override it from
+`Settings -> Language` with `日本語` or `English`. The explicit choice is
+retained across restarts and takes precedence over the system language. IP
+address, country, and region information are not used for language selection.
+
+Locale metadata is in `app/src/main/res/xml/locales_config.xml`; localized
+strings are in `app/src/main/res/values/strings.xml` and
+`app/src/main/res/values-en/strings.xml`. To add a language, add its BCP 47
+locale, create the matching `values-<locale>` directory, translate the existing
+resources, and add the choice to `AppLanguage` and the Settings dialog.
+
 ## ビルドとテスト
 
 ```powershell
