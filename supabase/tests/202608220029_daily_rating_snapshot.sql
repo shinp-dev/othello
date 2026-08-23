@@ -1,4 +1,4 @@
--- Daily rating snapshot contract, security, cutoff, and ranking tests.
+-- Daily rating snapshot 029 contract, security, cutoff, and ranking tests.
 begin;
 select plan(40);
 

@@ -90,7 +90,7 @@ select public.cleanup_expired_started_matches();
 select public.cleanup_terminal_matches();
 ```
 
-日次順位は既存のmaintenance pathに分散させず、Asia/Tokyoの日付境界後に`select public.refresh_rating_daily_snapshot();`を1日1回実行します。関数は`SECURITY DEFINER`かつ空の`search_path`で、`PUBLIC` / `anon` / `authenticated`からEXECUTEを剥奪し、`service_role`または明示的に権限を持つDB ownerのCronだけが実行します。migrationは関数と最新snapshot用tableを追加するだけで、本番Cronの有効化は行いません。
+日次順位は既存のmaintenance pathに分散させず、Asia/Tokyoの日付境界後に`select public.refresh_rating_daily_snapshot();`を1日1回実行します。関数は`SECURITY DEFINER`かつ空の`search_path`で、`PUBLIC` / `anon` / `authenticated`からEXECUTEを剥奪し、`service_role`または明示的に権限を持つDB ownerのCronだけが実行します。正式なmigrationは`202608220029_daily_rating_snapshot.sql`です。028は本番未適用の永久欠番であり、適用してはいけません。migrationは関数と最新snapshot用tableを追加するだけで、本番Cronの有効化は行いません。適用前監査とscheduler方針は[`docs/DAILY_RATING_SNAPSHOT_ROLLOUT.md`](docs/DAILY_RATING_SNAPSHOT_ROLLOUT.md)を参照してください。
 
 ## Edax / OSS
 

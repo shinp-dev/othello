@@ -1,4 +1,6 @@
--- Additive daily ranking snapshot. Only the latest snapshot is retained;
+-- Migration 028 is intentionally unused. This additive daily ranking snapshot
+-- is the canonical migration numbered 029 after the final production audit.
+-- Only the latest snapshot is retained;
 -- no existing rating table, RPC, RLS policy, or client contract is changed.
 
 create table public.rating_daily_snapshot (
