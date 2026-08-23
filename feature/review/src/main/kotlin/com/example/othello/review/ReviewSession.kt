@@ -21,6 +21,8 @@ data class ReviewInput(
     val result: MatchResult? = null,
     val finishReason: FinishReason? = null,
     val finishedAtEpochMillis: Long? = null,
+    val localRecordId: String? = null,
+    val localMemo: String? = null,
 )
 
 class ReviewSession(private val input: ReviewInput) {

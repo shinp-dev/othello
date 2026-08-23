@@ -60,6 +60,8 @@ data class LocalGameRecord(
     val finishReason: FinishReason? = null,
     val playerDisc: Disc? = null,
     val sourceMatchId: String? = null,
+    /** Optional device-only study memo. It is never sent to Supabase or Research. */
+    val memo: String? = null,
 ) {
     init {
         require(localId.isNotBlank())
@@ -100,6 +102,7 @@ private data class LocalGameRecordDto(
     @SerialName("finish_reason") val finishReason: String? = null,
     @SerialName("player_disc") val playerDisc: String? = null,
     @SerialName("source_match_id") val sourceMatchId: String? = null,
+    val memo: String? = null,
 )
 
 /** Stable, dependency-free-on-Android representation for the private local store. */
@@ -116,6 +119,7 @@ object LocalGameRecordJson {
             finishReason = record.finishReason?.name,
             playerDisc = record.playerDisc?.name,
             sourceMatchId = record.sourceMatchId,
+            memo = record.memo,
         ),
     )
 
@@ -130,6 +134,7 @@ object LocalGameRecordJson {
             finishReason = dto.finishReason?.let(FinishReason::valueOf),
             playerDisc = dto.playerDisc?.let(Disc::valueOf),
             sourceMatchId = dto.sourceMatchId,
+            memo = dto.memo,
         )
     }
 
@@ -190,4 +195,10 @@ interface LocalGameRecordStore {
         LocalGameRecordReadResult(list(limit))
     suspend fun save(record: LocalGameRecord)
     suspend fun delete(localId: String)
+
+    suspend fun updateMemo(localId: String, memo: String?) {
+        val record = list(Int.MAX_VALUE).firstOrNull { it.localId == localId }
+            ?: error("local record not found: $localId")
+        save(record.copy(memo = memo?.trim()?.takeIf { it.isNotEmpty() }))
+    }
 }

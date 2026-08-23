@@ -10,11 +10,12 @@ import kotlin.test.assertTrue
 class LocalGameRecordTest {
     @Test
     fun jsonRoundTripKeepsCanonicalCompleteLineAndMetadata() {
-        val record = LocalGameRecord("local-1", listOf(Position(2, 3), Position(2, 2)), 42, LocalRecordType.LOCAL_AI, MatchResult.WHITE_WIN, FinishReason.RESIGNATION, Disc.WHITE)
+        val record = LocalGameRecord("local-1", listOf(Position(2, 3), Position(2, 2)), 42, LocalRecordType.LOCAL_AI, MatchResult.WHITE_WIN, FinishReason.RESIGNATION, Disc.WHITE, memo = "見返す候補")
         val decoded = LocalGameRecordJson.decode(LocalGameRecordJson.encode(record))
         assertEquals(record, decoded)
         assertEquals("d3c3", decoded.canonicalMoves)
         assertEquals(3, LocalGameRecord.replay(decoded.moves).size)
+        assertEquals("見返す候補", decoded.memo)
     }
 
     @Test
@@ -46,6 +47,19 @@ class LocalGameRecordTest {
         assertEquals(LocalRecordType.LOCAL_AI, decoded.type)
         assertEquals("d3", decoded.canonicalMoves)
         assertNull(decoded.sourceMatchId)
+        assertNull(decoded.memo)
+    }
+
+    @Test
+    fun memoCanBeAddedEditedAndClearedWithoutChangingTheRecordLine() = kotlinx.coroutines.runBlocking {
+        val store = FakeLocalStore()
+        val record = LocalGameRecord("memo", listOf(Position(2, 3)), 1, LocalRecordType.LOCAL_HUMAN)
+        store.save(record)
+        store.updateMemo(record.localId, "  次は角を意識する  ")
+        assertEquals("次は角を意識する", store.list().single().memo)
+        store.updateMemo(record.localId, " ")
+        assertNull(store.list().single().memo)
+        assertEquals(record.moves, store.list().single().moves)
     }
 
     @Test

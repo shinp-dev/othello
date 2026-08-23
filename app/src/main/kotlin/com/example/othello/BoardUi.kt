@@ -54,6 +54,7 @@ internal fun CoordinateBoard(
                         textAlign = TextAlign.Center,
                     )
                 }
+                Spacer(Modifier.width(CoordinateGutter))
             }
             repeat(BOARD_SIZE) { row ->
                 Row(Modifier.fillMaxWidth().weight(1f, fill = true)) {
@@ -73,7 +74,13 @@ internal fun CoordinateBoard(
                                 .border(0.5.dp, ChanrivaColors.boardGrid),
                         )
                     }
+                    Spacer(Modifier.width(CoordinateGutter))
                 }
+            }
+            Row(Modifier.fillMaxWidth().height(CoordinateGutter)) {
+                Spacer(Modifier.width(CoordinateGutter))
+                Spacer(Modifier.weight(1f))
+                Spacer(Modifier.width(CoordinateGutter))
             }
         }
     }

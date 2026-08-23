@@ -19,7 +19,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
@@ -72,7 +71,7 @@ internal fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
     ) {
         ChanrivaScreenHeader("設定")
-        ChanrivaNavigationRow("対局時設定", onMatchSettings)
+        ChanrivaNavigationRow("対局設定", onMatchSettings)
         ChanrivaNavigationRow("検討設定", onReviewSettings)
         ChanrivaNavigationRow("共通設定", onCommonSettings)
         ChanrivaNavigationRow("研究参加", onResearch)
@@ -82,10 +81,58 @@ internal fun SettingsScreen(
 @Composable
 internal fun MatchSettingsScreen(
     onBack: () -> Unit,
-    audioSettings: AudioSettingsStore,
+    onAiSettings: () -> Unit,
+    onCommonMatchSettings: () -> Unit,
+) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
+        verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
+    ) {
+        SettingsHeader("対局設定", onBack)
+        ChanrivaNavigationRow("AI対局設定", onAiSettings)
+        ChanrivaNavigationRow("対局共通設定", onCommonMatchSettings)
+    }
+}
+
+@Composable
+internal fun AiMatchSettingsScreen(
+    onBack: () -> Unit,
     edaxSettings: EdaxSettingsStore,
 ) {
     var aiSettings by remember(edaxSettings) { mutableStateOf(edaxSettings.aiMatchSettings()) }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
+        verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
+    ) {
+        SettingsHeader("AI対局設定", onBack)
+        Text("AI対局レベル: Level ${aiSettings.level}")
+        Slider(
+            value = aiSettings.level.toFloat(),
+            onValueChange = {
+                aiSettings = aiSettings.copy(level = it.roundToInt().coerceIn(AiMatchSettings.MIN_LEVEL, AiMatchSettings.MAX_LEVEL))
+            },
+            onValueChangeFinished = { edaxSettings.setAiMatchLevel(aiSettings.level) },
+            valueRange = AiMatchSettings.MIN_LEVEL.toFloat()..AiMatchSettings.MAX_LEVEL.toFloat(),
+            steps = 6,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text("1着手あたり思考時間: ${aiSettings.moveTimeMs}ms")
+        Slider(
+            value = aiSettings.moveTimeMs.toFloat(),
+            onValueChange = { aiSettings = aiSettings.copy(moveTimeMs = snapAnalysisTime(it)) },
+            onValueChangeFinished = { edaxSettings.setAiMatchMoveTimeMs(aiSettings.moveTimeMs) },
+            valueRange = EdaxSettingsStore.MIN_ANALYSIS_TIME_MS.toFloat()..EdaxSettingsStore.MAX_ANALYSIS_TIME_MS.toFloat(),
+            steps = analysisTimeSliderSteps,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+internal fun MatchCommonSettingsScreen(
+    onBack: () -> Unit,
+    audioSettings: AudioSettingsStore,
+) {
     var timeWarningEnabled by remember { mutableStateOf(audioSettings.timeWarningEnabled) }
     var focusSoundEnabled by remember { mutableStateOf(audioSettings.focusSoundEnabled) }
     var focusSoundVolume by remember { mutableStateOf(audioSettings.focusSoundVolume) }
@@ -132,37 +179,7 @@ internal fun MatchSettingsScreen(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
     ) {
-        SettingsHeader("対局時設定", onBack)
-        Text("AI対局", style = MaterialTheme.typography.titleMedium)
-        Text("AI対局レベル: Level ${aiSettings.level}")
-        Slider(
-            value = aiSettings.level.toFloat(),
-            onValueChange = {
-                aiSettings = aiSettings.copy(
-                    level = it.roundToInt().coerceIn(
-                        AiMatchSettings.MIN_LEVEL,
-                        AiMatchSettings.MAX_LEVEL,
-                    ),
-                )
-            },
-            onValueChangeFinished = { edaxSettings.setAiMatchLevel(aiSettings.level) },
-            valueRange = AiMatchSettings.MIN_LEVEL.toFloat()..AiMatchSettings.MAX_LEVEL.toFloat(),
-            steps = 6,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Text("1着手あたり思考時間: ${aiSettings.moveTimeMs}ms")
-        Slider(
-            value = aiSettings.moveTimeMs.toFloat(),
-            onValueChange = {
-                val moveTimeMs = snapAnalysisTime(it)
-                aiSettings = aiSettings.copy(moveTimeMs = moveTimeMs)
-            },
-            onValueChangeFinished = { edaxSettings.setAiMatchMoveTimeMs(aiSettings.moveTimeMs) },
-            valueRange = EdaxSettingsStore.MIN_ANALYSIS_TIME_MS.toFloat()..EdaxSettingsStore.MAX_ANALYSIS_TIME_MS.toFloat(),
-            steps = analysisTimeSliderSteps,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        HorizontalDivider()
+        SettingsHeader("対局共通設定", onBack)
         Text("対局中の音", style = MaterialTheme.typography.titleMedium)
         SettingSwitchRow(
             title = "時間警告音",
@@ -342,8 +359,8 @@ internal fun CommonSettingsScreen(
     var message by remember { mutableStateOf<String?>(null) }
     var messageIsError by remember { mutableStateOf(false) }
     var busyMessage by remember { mutableStateOf("検証・コピー中…") }
-    val uriHandler = LocalUriHandler.current
-
+    var deleteEvaluationConfirmation by remember { mutableStateOf(false) }
+    var deleteBookConfirmation by remember { mutableStateOf(false) }
     fun refresh() { status = manager.commonDataStatus(); onDataChanged() }
     fun importEvaluation(uri: android.net.Uri) {
         busy = true
@@ -413,30 +430,23 @@ internal fun CommonSettingsScreen(
             enabled = status.nativeAvailable && !busy,
             modifier = Modifier.fillMaxWidth(),
         ) { Text("手元の eval.dat を選ぶ") }
-        OutlinedButton(
-            onClick = {
-                runCatching { uriHandler.openUri(EDAX_GUIDE_URL) }
-                    .onFailure { message = "Edax説明ページを開けませんでした。ブラウザを確認してください。"; messageIsError = true }
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("詳しい説明を見る") }
-        OutlinedButton(
-            onClick = { manager.deleteEvaluationData(); message = "評価データを削除しました"; refresh() },
-            enabled = status.evaluationData != null && !busy,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("評価データを削除") }
+        if (status.evaluationData != null) {
+            TextButton(onClick = { deleteEvaluationConfirmation = true }, enabled = !busy) {
+                Text("評価データを削除")
+            }
+        }
 
         AnalysisFileStatus("オープニングブック", status.openingBook, required = false)
         OutlinedButton(
             onClick = { bookPicker.launch(arrayOf("application/octet-stream", "*/*")) },
             enabled = status.nativeAvailable && !busy,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("オープニングブックをインポート") }
-        OutlinedButton(
-            onClick = { manager.deleteOpeningBook(); message = "オープニングブックを削除しました"; refresh() },
-            enabled = status.openingBook != null && !busy,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("オープニングブックを削除") }
+        ) { Text("手元の book.dat を選ぶ") }
+        if (status.openingBook != null) {
+            TextButton(onClick = { deleteBookConfirmation = true }, enabled = !busy) {
+                Text("オープニングブックを削除")
+            }
+        }
 
         if (busy) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
@@ -444,6 +454,40 @@ internal fun CommonSettingsScreen(
             Text("処理が完了するまで、この画面を閉じずにお待ちください。", style = MaterialTheme.typography.bodySmall)
         }
         message?.let { Text(it, color = if (messageIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface) }
+    }
+    if (deleteEvaluationConfirmation) {
+        AlertDialog(
+            onDismissRequest = { deleteEvaluationConfirmation = false },
+            title = { Text("評価データを削除しますか？") },
+            text = { Text("評価データを削除します。削除すると、再設定するまで対局後の解析を利用できなくなります。") },
+            confirmButton = {
+                Button(onClick = {
+                    deleteEvaluationConfirmation = false
+                    manager.deleteEvaluationData()
+                    message = "評価データを削除しました"
+                    messageIsError = false
+                    refresh()
+                }) { Text("削除する") }
+            },
+            dismissButton = { OutlinedButton(onClick = { deleteEvaluationConfirmation = false }) { Text("キャンセル") } },
+        )
+    }
+    if (deleteBookConfirmation) {
+        AlertDialog(
+            onDismissRequest = { deleteBookConfirmation = false },
+            title = { Text("オープニングブックを削除しますか？") },
+            text = { Text("オープニングブックを削除します。削除後は通常探索を使用します。") },
+            confirmButton = {
+                Button(onClick = {
+                    deleteBookConfirmation = false
+                    manager.deleteOpeningBook()
+                    message = "オープニングブックを削除しました"
+                    messageIsError = false
+                    refresh()
+                }) { Text("削除する") }
+            },
+            dismissButton = { OutlinedButton(onClick = { deleteBookConfirmation = false }) { Text("キャンセル") } },
+        )
     }
 }
 
@@ -456,33 +500,80 @@ internal fun AboutScreen(onBack: () -> Unit, onLicenses: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
     ) {
         SettingsHeader("このアプリについて", onBack)
-        Text("ちゃんりば", style = MaterialTheme.typography.titleMedium, color = ChanrivaColors.accent)
-        Text("ちゃんとリバーシ。軽く一局打っても、その一局がちゃんと残り、振り返りが次につながるリバーシアプリです。")
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .background(ChanrivaColors.background)
+                .padding(vertical = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("ちゃんりば", style = MaterialTheme.typography.labelLarge, color = ChanrivaColors.accent)
+            Text("ちゃんとリバーシ。", style = MaterialTheme.typography.displaySmall, color = ChanrivaColors.textPrimary)
+            Spacer(Modifier.size(4.dp))
+            Text("軽く一局打っても、\nその一局がちゃんと残る。\n振り返りが、次の一手につながる。", style = MaterialTheme.typography.bodyLarge, color = ChanrivaColors.textPrimary)
+        }
         Text("対局後レビューの解析エンジンとしてEdaxを使用します。Edax公式・公認アプリではありません。")
-        Text("ちゃんりばAndroidアプリ: GNU GPLv3", style = MaterialTheme.typography.bodySmall)
-        ChanrivaNavigationRow("ちゃんりば公式サイト", onClick = { uriHandler.openUri(CHANRIVA_SITE_URL) })
-        ChanrivaNavigationRow("ソースコード（GitHub）", onClick = { uriHandler.openUri(CHANRIVA_SOURCE_URL) })
+        ChanrivaNavigationRow("Edaxについて", onClick = { uriHandler.openUri(EDAX_GUIDE_URL) }, trailingLabel = "Web")
+        ChanrivaNavigationRow("ちゃんりば公式サイト", onClick = { uriHandler.openUri(CHANRIVA_SITE_URL) }, trailingLabel = "Web")
+        ChanrivaNavigationRow("ソースコード（GitHub）", onClick = { uriHandler.openUri(CHANRIVA_SOURCE_URL) }, trailingLabel = "Web")
         ChanrivaNavigationRow("オープンソースライセンス", onLicenses)
         BuildIdentityText()
     }
 }
 
 @Composable
-internal fun OpenSourceLicensesScreen(onBack: () -> Unit) {
+internal fun OpenSourceLicensesScreen(
+    onBack: () -> Unit,
+    onEdax: () -> Unit,
+    onOtherOss: () -> Unit,
+) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         SettingsHeader("オープンソースライセンス", onBack)
+        Text("ちゃんりば", style = MaterialTheme.typography.titleMedium)
+        Text("GNU GPLv3")
         Text("Edax 4.6", style = MaterialTheme.typography.titleMedium)
+        Text("GNU GPLv3")
+        ChanrivaNavigationRow("Edax 4.6の詳細", onEdax)
+        ChanrivaNavigationRow("その他のOSSライセンス", onOtherOss)
+    }
+}
+
+@Composable
+internal fun EdaxLicenseScreen(onBack: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        SettingsHeader("Edax 4.6の詳細", onBack)
         Text("Copyright © 1998–2024 Richard Delorme; source headers also credit Toshihiko Okuhara.")
-        Text("License: GNU General Public License version 3 (GPLv3)")
-        Text("Upstream source: https://github.com/abulmo/edax-reversi")
-        Text("このAndroidアプリの対応ソース: https://github.com/shinp-dev/othello")
+        Text("ライセンス：GNU General Public License version 3 (GPLv3)")
+        Text("upstream source: https://github.com/abulmo/edax-reversi")
+        Text("ちゃんりば側の対応ソース: https://github.com/shinp-dev/othello")
         Text("固定upstream commit: 14f048c05ddfa385b6bf954a9c2905bbe677e9d3")
         Text("GPLv3全文はrepositoryのLICENSEと、対応ソース内のthird_party/edax/upstream/LICENSEにあります。")
         Text("本アプリはEdax projectまたは作者による公式・公認配布物ではありません。", color = ChanrivaColors.accent)
-        Text("AndroidX / Kotlin / Ktor / Supabase SDK / WebRTCなど、その他の依存関係の表示はrepositoryのNOTICE.mdを参照してください。", style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable
+internal fun OtherOssLicensesScreen(onBack: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        SettingsHeader("その他のOSSライセンス", onBack)
+        Text("AndroidX / Jetpack / Compose：Apache License 2.0")
+        Text("Kotlin / kotlinx.coroutines / kotlinx.serialization：Apache License 2.0")
+        Text("Ktor：Apache License 2.0")
+        Text("supabase-kt：MIT License")
+        Text("WebRTC SDK：BSD 3-Clause License")
+        Text("OkHttpおよびその他の依存関係：各ライセンス条件に従います")
+        Text("Apache Commons Compress：Apache License 2.0")
+        Text("XZ for Java：0BSD License")
+        Text("詳細なNOTICEはリポジトリのNOTICE.mdに記載しています。")
     }
 }
 

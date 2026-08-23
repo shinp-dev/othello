@@ -66,13 +66,14 @@ internal fun AccountScreen(
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
     ) {
         ChanrivaScreenHeader("アカウント", onBack)
+        Text("現在レート", style = MaterialTheme.typography.titleMedium)
         Text(
-            "レート ${when {
+            when {
                 loading -> "取得中…"
                 ratingSummary != null -> ratingSummary!!.currentRating.toString()
                 else -> "---"
-            }}",
-            style = MaterialTheme.typography.headlineSmall,
+            },
+            style = MaterialTheme.typography.displaySmall,
         )
         if (ratingLoadFailed) {
             Text("レートを取得できませんでした", style = MaterialTheme.typography.bodySmall)
@@ -82,18 +83,24 @@ internal fun AccountScreen(
             Text("前日順位", style = MaterialTheme.typography.titleMedium)
             when {
                 loading -> Text("取得中…", style = MaterialTheme.typography.bodySmall)
-                ratingSummary?.yesterdayRanking != null -> Text(
-                    formatYesterdayRanking(requireNotNull(ratingSummary?.yesterdayRanking)),
-                )
+                ratingSummary?.yesterdayRanking != null -> {
+                    val ranking = requireNotNull(ratingSummary?.yesterdayRanking)
+                    Text(
+                        "${String.format(java.util.Locale.ROOT, "%,d", ranking.rank)} / ${String.format(java.util.Locale.ROOT, "%,d", ranking.activeUserCount)}位",
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                    Text("上位 ${formatTopPercentile(ranking.topPercentile)}")
+                }
                 else -> Text("順位データはまだありません", style = MaterialTheme.typography.bodySmall)
             }
             Text("※日本時間の前日終了時点のレートをもとに算出", style = MaterialTheme.typography.bodySmall)
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact)) {
-            Text("この端末で確認した最高の前日順位", style = MaterialTheme.typography.titleMedium)
+            Text("この端末の最高記録", style = MaterialTheme.typography.titleMedium)
             localBest?.let { best ->
-                Text("上位 ${formatTopPercentile(best.topPercentile)}　${formatAchievementDate(best.achievedDate)}")
+                Text("上位 ${formatTopPercentile(best.topPercentile)}", style = MaterialTheme.typography.headlineSmall)
+                Text(formatAchievementDate(best.achievedDate), style = MaterialTheme.typography.bodyMedium)
             } ?: Text("まだ記録がありません", style = MaterialTheme.typography.bodySmall)
             Text("※この画面を開いて確認した前日順位のみ記録されます", style = MaterialTheme.typography.bodySmall)
         }

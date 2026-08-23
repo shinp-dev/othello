@@ -25,6 +25,8 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -545,6 +547,8 @@ internal fun OfflineRecordsScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var readWarning by remember { mutableStateOf<String?>(null) }
     var deleteTarget by remember { mutableStateOf<LocalGameRecord?>(null) }
+    var memoTarget by remember { mutableStateOf<LocalGameRecord?>(null) }
+    var memoDraft by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
     fun reload() {
@@ -583,6 +587,9 @@ internal fun OfflineRecordsScreen(
                         Text("${record.type.displayLabel()} / ${record.result?.userLabel() ?: "研究棋譜"}")
                         Text("${formatDate(record.createdAtEpochMillis)} / ${record.moves.size}手")
                         Text(record.canonicalMoves, style = MaterialTheme.typography.bodySmall)
+                        record.memo?.takeIf { it.isNotBlank() }?.let { memo ->
+                            Text(memo.replace("\n", " "), style = MaterialTheme.typography.bodySmall, maxLines = 2)
+                        }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
                                 onClick = {
@@ -594,10 +601,15 @@ internal fun OfflineRecordsScreen(
                                             result = record.result,
                                             finishReason = record.finishReason,
                                             finishedAtEpochMillis = record.createdAtEpochMillis,
+                                            localRecordId = record.localId,
+                                            localMemo = record.memo,
                                         ),
                                     )
                                 },
                             ) { Text("棋譜を開く") }
+                            TextButton(onClick = { memoTarget = record; memoDraft = record.memo.orEmpty() }) {
+                                Text(if (record.memo.isNullOrBlank()) "メモを追加" else "メモを編集")
+                            }
                             OutlinedButton(onClick = { deleteTarget = record }) { Text("削除") }
                         }
                     }
@@ -623,6 +635,33 @@ internal fun OfflineRecordsScreen(
             dismissButton = { OutlinedButton(onClick = { deleteTarget = null }) { Text("キャンセル") } },
         )
     }
+    memoTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { memoTarget = null },
+            title = { Text(if (target.memo.isNullOrBlank()) "メモを追加" else "メモを編集") },
+            text = {
+                TextField(
+                    value = memoDraft,
+                    onValueChange = { memoDraft = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("この棋譜について") },
+                    minLines = 3,
+                    maxLines = 8,
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    memoTarget = null
+                    scope.launch {
+                        runCatching { localStore.updateMemo(target.localId, memoDraft) }
+                            .onSuccess { reload() }
+                            .onFailure { error = it.message ?: "メモを保存できませんでした" }
+                    }
+                }) { Text("保存") }
+            },
+            dismissButton = { OutlinedButton(onClick = { memoTarget = null }) { Text("キャンセル") } },
+        )
+    }
 }
 
 @Composable
@@ -637,6 +676,7 @@ internal fun ReviewScreenV2(
     researchPositionRepository: ResearchPositionRepository?,
     onBack: () -> Unit,
     onOpenCommonSettings: () -> Unit,
+    onSaveMemo: ((String?) -> Unit)? = null,
 ) {
     val guard = remember(input.id) { AnalysisRequestGuard() }
     val scope = rememberCoroutineScope()
@@ -647,6 +687,9 @@ internal fun ReviewScreenV2(
     var result by remember { mutableStateOf<AnalysisResult?>(null) }
     var message by remember { mutableStateOf("解析は開始されていません") }
     var saveMessage by remember { mutableStateOf<String?>(null) }
+    var showMemoDialog by remember { mutableStateOf(false) }
+    var memoDraft by remember { mutableStateOf(input.localMemo.orEmpty()) }
+    var currentMemo by remember(input.id) { mutableStateOf(input.localMemo) }
     val state = remember(revision) { review.current }
     val status = remember(revision, analysisRun) { dataManager.commonDataStatus() }
     val reviewSettings = remember(revision, analysisRun) { settingsStore.reviewAnalysisSettings() }
@@ -695,6 +738,14 @@ internal fun ReviewScreenV2(
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page), verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact)) {
         ScreenHeader("棋譜レビュー", onBack)
         Text(input.title)
+        if (input.localRecordId != null && onSaveMemo != null) {
+            currentMemo?.takeIf { it.isNotBlank() }?.let { memo ->
+                Text(memo.replace("\n", " "), style = MaterialTheme.typography.bodySmall, maxLines = 2)
+            }
+            TextButton(onClick = { memoDraft = currentMemo.orEmpty(); showMemoDialog = true }) {
+                Text(if (currentMemo.isNullOrBlank()) "メモを追加" else "メモを編集")
+            }
+        }
         input.result?.let { resultValue ->
             Text(
                 listOfNotNull(
@@ -748,6 +799,23 @@ internal fun ReviewScreenV2(
         saveMessage?.let { Text(it) }
         result?.evaluations.orEmpty().forEach { evaluation -> Text("${evaluation.move.coordinateLabel()} ${formatEvaluation(evaluation.score.value)}", style = MaterialTheme.typography.bodySmall) }
         if (researchParticipationRepository != null && researchPositionRepository != null) ResearchReviewPanel(state, researchParticipationRepository, researchPositionRepository)
+    }
+    if (showMemoDialog) {
+        AlertDialog(
+            onDismissRequest = { showMemoDialog = false },
+            title = { Text(if (currentMemo.isNullOrBlank()) "メモを追加" else "メモを編集") },
+            text = {
+                TextField(value = memoDraft, onValueChange = { memoDraft = it }, minLines = 3, maxLines = 8)
+            },
+            confirmButton = {
+                Button(onClick = {
+                    showMemoDialog = false
+                    currentMemo = memoDraft.trim().takeIf { it.isNotEmpty() }
+                    onSaveMemo?.invoke(memoDraft)
+                }) { Text("保存") }
+            },
+            dismissButton = { OutlinedButton(onClick = { showMemoDialog = false }) { Text("キャンセル") } },
+        )
     }
 }
 

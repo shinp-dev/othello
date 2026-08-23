@@ -299,6 +299,14 @@ private fun AuthenticatedApp(
                             commonSettingsBackDestination = AppDestination.REVIEW
                             destination = AppDestination.COMMON_SETTINGS
                         },
+                        onSaveMemo = { memo ->
+                            selectedReviewInput?.localRecordId?.let { localId ->
+                                scope.launch {
+                                    runCatching { localRecordStore.updateMemo(localId, memo) }
+                                        .onFailure { /* The review screen remains usable; list reload reports store errors. */ }
+                                }
+                            }
+                        },
                     )
                     destination == AppDestination.ACCOUNT -> AccountScreen(
                         userId = session.userId,
@@ -341,8 +349,16 @@ private fun AuthenticatedApp(
                     )
                     destination == AppDestination.MATCH_SETTINGS -> MatchSettingsScreen(
                         onBack = { destination = AppDestination.SETTINGS },
-                        audioSettings = audioSettings,
+                        onAiSettings = { destination = AppDestination.AI_MATCH_SETTINGS },
+                        onCommonMatchSettings = { destination = AppDestination.MATCH_COMMON_SETTINGS },
+                    )
+                    destination == AppDestination.AI_MATCH_SETTINGS -> AiMatchSettingsScreen(
+                        onBack = { destination = AppDestination.MATCH_SETTINGS },
                         edaxSettings = edaxSettings,
+                    )
+                    destination == AppDestination.MATCH_COMMON_SETTINGS -> MatchCommonSettingsScreen(
+                        onBack = { destination = AppDestination.MATCH_SETTINGS },
+                        audioSettings = audioSettings,
                     )
                     destination == AppDestination.REVIEW_SETTINGS -> ReviewSettingsScreen(
                         settingsStore = edaxSettings,
@@ -388,6 +404,14 @@ private fun AuthenticatedApp(
                     )
                     destination == AppDestination.OSS_LICENSES -> OpenSourceLicensesScreen(
                         onBack = { destination = AppDestination.ABOUT },
+                        onEdax = { destination = AppDestination.EDAX_LICENSE },
+                        onOtherOss = { destination = AppDestination.OTHER_OSS_LICENSES },
+                    )
+                    destination == AppDestination.EDAX_LICENSE -> EdaxLicenseScreen(
+                        onBack = { destination = AppDestination.OSS_LICENSES },
+                    )
+                    destination == AppDestination.OTHER_OSS_LICENSES -> OtherOssLicensesScreen(
+                        onBack = { destination = AppDestination.OSS_LICENSES },
                     )
                     else -> PlayScreen(
                         state = matchmakingState,
@@ -580,6 +604,7 @@ private fun com.example.othello.match.MatchStatus.userLabel(): String = when (th
     com.example.othello.match.MatchStatus.CONFIRMED -> "結果確定"
     com.example.othello.match.MatchStatus.DISPUTED -> "結果不一致"
     com.example.othello.match.MatchStatus.DISCONNECTED -> "切断"
+    com.example.othello.match.MatchStatus.SIGNALING_FAILED -> "エラー"
     com.example.othello.match.MatchStatus.FAILED -> "エラー"
     else -> name
 }
@@ -635,8 +660,6 @@ private fun PlayScreen(
         horizontalAlignment = Alignment.Start,
     ) {
         ChanrivaScreenHeader("対局")
-        Text("ちゃんりば", style = MaterialTheme.typography.headlineSmall, color = ChanrivaColors.accent)
-        Text("ちゃんと残る、ちゃんと振り返れるリバーシ", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("オンライン対局", style = MaterialTheme.typography.titleMedium)
         Button(
             onClick = onOnlineStart,
@@ -748,7 +771,7 @@ private fun LocalMatchScreen(
             Spacer(Modifier.weight(1f))
             Text(if (mode == LocalMatchMode.AI) "AIと対局" else "ふたりで対局", style = MaterialTheme.typography.titleLarge)
         }
-        ScoreHeader(viewState.game, if (mode == LocalMatchMode.AI) "AI対局" else "ローカル")
+        ScoreHeader(viewState.game)
         LocalOthelloBoard(viewState, controller)
         Text(viewState.message, style = MaterialTheme.typography.titleMedium, modifier = Modifier.align(Alignment.CenterHorizontally))
         if (viewState.aiThinking) Text("AI思考中…", modifier = Modifier.align(Alignment.CenterHorizontally))
@@ -859,16 +882,16 @@ private fun LocalOthelloBoard(viewState: LocalMatchViewState, controller: LocalM
 }
 
 @Composable
-private fun ScoreHeader(viewState: LocalMatchViewState) = ScoreHeader(viewState.game, "ローカル")
+private fun ScoreHeader(viewState: LocalMatchViewState) = ScoreHeader(viewState.game)
 
 @Composable
-private fun ScoreHeader(game: com.example.othello.game.GameState, status: String) {
+private fun ScoreHeader(game: com.example.othello.game.GameState, status: String? = null) {
     Card(Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth().padding(ChanrivaSpacing.card), horizontalArrangement = Arrangement.SpaceEvenly) {
-            Text("黒 ${game.board.count(Disc.BLACK)}")
-            Text("白 ${game.board.count(Disc.WHITE)}")
-            Text("手数 ${game.ply}")
-            Text(status)
+        Row(Modifier.fillMaxWidth().padding(ChanrivaSpacing.card)) {
+            Text("黒 ${game.board.count(Disc.BLACK)}", modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text("白 ${game.board.count(Disc.WHITE)}", modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text("手数 ${game.ply}", modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text(status.orEmpty(), modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         }
     }
 }

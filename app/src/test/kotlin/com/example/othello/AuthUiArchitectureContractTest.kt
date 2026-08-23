@@ -77,7 +77,7 @@ class AuthUiArchitectureContractTest {
         assertFalse("\"昨日\"" in accountScreen)
         assertTrue("前日順位" in accountScreen)
         assertTrue("※日本時間の前日終了時点のレートをもとに算出" in accountScreen)
-        assertTrue("この端末で確認した最高の前日順位" in accountScreen)
+        assertTrue("この端末の最高記録" in accountScreen)
         assertTrue("※この画面を開いて確認した前日順位のみ記録されます" in accountScreen)
         assertTrue("recordIfBetter" in accountScreen)
         assertFalse("recordIfBetter" in mainActivity)

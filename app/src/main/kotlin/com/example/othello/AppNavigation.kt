@@ -18,7 +18,9 @@ internal enum class AppDestination(val label: String, val shortLabel: String? = 
     REVIEW("棋譜レビュー"),
     ACCOUNT("アカウント"),
     ACCOUNT_DELETION("アカウント削除"),
-    MATCH_SETTINGS("対局時設定"),
+    MATCH_SETTINGS("対局設定"),
+    AI_MATCH_SETTINGS("AI対局設定"),
+    MATCH_COMMON_SETTINGS("対局共通設定"),
     REVIEW_SETTINGS("検討設定"),
     COMMON_SETTINGS("共通設定"),
     LOCAL_AI_SETUP("AIと対局"),
@@ -26,6 +28,8 @@ internal enum class AppDestination(val label: String, val shortLabel: String? = 
     RESEARCH_INFO("研究データについて"),
     ABOUT("このアプリについて"),
     OSS_LICENSES("オープンソースライセンス"),
+    EDAX_LICENSE("Edaxライセンス"),
+    OTHER_OSS_LICENSES("その他のOSSライセンス"),
 }
 
 internal val topLevelDestinations = listOf(
@@ -56,10 +60,14 @@ internal fun backDestination(
     AppDestination.ACCOUNT -> AppDestination.MORE
     AppDestination.ACCOUNT_DELETION -> AppDestination.ACCOUNT
     AppDestination.MATCH_SETTINGS -> AppDestination.SETTINGS
+    AppDestination.AI_MATCH_SETTINGS,
+    AppDestination.MATCH_COMMON_SETTINGS -> AppDestination.MATCH_SETTINGS
     AppDestination.REVIEW_SETTINGS -> AppDestination.SETTINGS
     AppDestination.RESEARCH_SETTINGS -> researchSettingsParent
     AppDestination.COMMON_SETTINGS -> commonSettingsParent
     AppDestination.OSS_LICENSES -> AppDestination.ABOUT
+    AppDestination.EDAX_LICENSE,
+    AppDestination.OTHER_OSS_LICENSES -> AppDestination.OSS_LICENSES
 }
 
 @Composable

@@ -53,6 +53,7 @@ fun ChanrivaNavigationRow(
     title: String,
     onClick: (() -> Unit)?,
     supportingText: String? = null,
+    trailingLabel: String? = null,
 ) {
     val enabled = onClick != null
     Column {
@@ -79,6 +80,13 @@ fun ChanrivaNavigationRow(
                         color = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else ChanrivaColors.textDisabled,
                     )
                 }
+            }
+            trailingLabel?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else ChanrivaColors.textDisabled,
+                )
             }
             Text(
                 "›",

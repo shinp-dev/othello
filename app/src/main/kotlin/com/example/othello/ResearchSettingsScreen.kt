@@ -9,11 +9,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,10 +28,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.othello.designsystem.ChanrivaSpacing
 import com.example.othello.research.ResearchConsent
-import com.example.othello.research.RESEARCH_PUBLICATION_PRIVACY_COPY
 import com.example.othello.research.ResearchParticipationRepository
 import com.example.othello.research.ResearchParticipationStatus
-import com.example.othello.research.collectionStatusCopy
 import kotlinx.coroutines.launch
 
 @Composable
@@ -42,6 +42,7 @@ internal fun ResearchSettingsScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var consentChecked by remember { mutableStateOf(false) }
+    var showConsentDialog by remember { mutableStateOf(false) }
 
     fun update(enabled: Boolean) {
         busy = true
@@ -73,17 +74,12 @@ internal fun ResearchSettingsScreen(
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
     ) {
         SettingsHeader("研究参加", onBack)
-        Text("人間が実際に選んだ手を、個人単位では公開せず、集合・統計データとして研究に役立てます。")
-
         when {
             status == null && error == null -> CircularProgressIndicator()
             status != null -> ResearchStatus(status = requireNotNull(status))
         }
 
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-
-        Text("同意内容（version ${ResearchConsent.version}）", style = MaterialTheme.typography.titleMedium)
-        ResearchConsent.statements.forEach { statement -> Text("・$statement") }
 
         val current = status
         val appHasCurrentConsent = current == null || current.currentConsentVersion == ResearchConsent.version
@@ -110,19 +106,43 @@ internal fun ResearchSettingsScreen(
                 Text("上記の内容を確認し、研究参加に同意します")
             }
             Button(
-                onClick = { update(true) },
-                enabled = !busy && consentChecked && appHasCurrentConsent && current != null,
+                onClick = { showConsentDialog = true },
+                enabled = !busy && appHasCurrentConsent && current != null,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(if (current?.reconsentRequired == true) "再同意して研究参加をONにする" else "研究参加をONにする")
             }
         }
 
-        current?.collectionStatusCopy()?.let { collectionCopy ->
-            Text(collectionCopy.status, style = MaterialTheme.typography.titleSmall)
-            Text(collectionCopy.explanation, style = MaterialTheme.typography.bodySmall)
+        if (current?.participationOn == true) {
+            TextButton(onClick = { showConsentDialog = true }, enabled = !busy) {
+                Text("同意内容を確認")
+            }
         }
-        Text(RESEARCH_PUBLICATION_PRIVACY_COPY, style = MaterialTheme.typography.bodySmall)
+    }
+
+    if (showConsentDialog) {
+        AlertDialog(
+            onDismissRequest = { showConsentDialog = false; consentChecked = false },
+            title = { Text("研究参加への同意") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("同意内容：バージョン${ResearchConsent.version}", style = MaterialTheme.typography.titleSmall)
+                    ResearchConsent.statements.forEach { statement -> Text("・$statement") }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = consentChecked, onCheckedChange = { consentChecked = it })
+                        Text("内容を確認し、同意します")
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showConsentDialog = false; consentChecked = false; update(true) },
+                    enabled = consentChecked && !busy,
+                ) { Text("同意してONにする") }
+            },
+            dismissButton = { TextButton(onClick = { showConsentDialog = false; consentChecked = false }) { Text("キャンセル") } },
+        )
     }
 }
 
@@ -133,15 +153,12 @@ private fun ResearchStatus(status: ResearchParticipationStatus) {
         status.participationOn -> "ON"
         else -> "OFF"
     }
-    Text("現在の状態: $stateText", style = MaterialTheme.typography.titleMedium)
-    Text("現在のConsent version: ${status.currentConsentVersion}")
-    Text("同意済みversion: ${status.agreedConsentVersion ?: "なし"}")
-    Text("研究subject: ${if (status.researchSubjectLinked) "link済み" else "未作成"}")
-    val periodText = when {
-        !status.currentPeriodExists -> "なし"
-        status.reconsentRequired -> "open（再同意まで無効）"
-        else -> "進行中"
-    }
-    Text("参加period: $periodText")
-    Text("集合研究データ閲覧資格: 未達（${status.qualifyingGameCount}/${status.requiredGameCount}局・直近${status.windowDays}日）")
+    Text("研究参加：$stateText", style = MaterialTheme.typography.titleMedium)
+    Text("同意内容：${status.agreedConsentVersion?.let { "バージョン$it" } ?: "未同意"}")
+    Text("研究データとの連携：${if (status.researchSubjectLinked) "完了" else "準備中"}")
+    Text(
+        "研究データ閲覧まで：${status.qualifyingGameCount} / ${status.requiredGameCount}局（直近${status.windowDays}日）" +
+            if (status.canViewResearchData) "\n閲覧できます" else "",
+    )
+    Text("データ提供：${if (status.collectionAllowed && status.collectionEnabled) "有効" else "停止中"}", style = MaterialTheme.typography.bodySmall)
 }
