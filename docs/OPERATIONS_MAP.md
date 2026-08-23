@@ -3,9 +3,9 @@
 この文書は、ちゃんりばの実行基盤、運用主体、Cron / schedule、Secret境界、障害確認先、本番導入状態を機能単位で追うための正本です。詳細な手順や設計根拠はリンク先の個別文書を正本とし、ここでは「何がどこで動き、問題時にどこを見るか」を一元化します。
 
 - 基準日: 2026-08-23（Asia/Tokyo）
-- 基準commit: `de5ae6b3aaaaf2186be475953df83690d8858395`
+- 本番導入基準commit: `86a7d334716c5e924c6b2d6ff73a148b990abdca`
 - 本番状態は、リポジトリ設定と本番監査で確認できた範囲を区別して記載します。
-- 本番Supabaseには`202608180027_account_lifecycle.sql`までの関連機能が存在します。日次順位の正式migration `202608220029_daily_rating_snapshot.sql`は未適用です。
+- 本番Supabaseには`202608180027_account_lifecycle.sql`と日次順位の正式migration `202608220029_daily_rating_snapshot.sql`の関連機能が存在します。028は永久欠番であり、本番へ適用していません。
 
 ## 全体サマリ
 
@@ -17,7 +17,7 @@
 | オンライン対局 | matchmakingからP2P対局、確定結果、rating更新までを管理する | Android / Supabase PostgreSQL・Realtime / WebRTC | ユーザー操作、対局イベント | 稼働中 |
 | 着手傾向集計（Research） | 実プレイヤーの局面ごとの着手傾向を匿名集計し、レート帯別に分析する | Supabase PostgreSQL / GitHub Actions | 毎時17分・47分（UTC）、手動実行 | 稼働中（直近schedule run成功を確認） |
 | アカウント削除・休眠整理 | 本人要求、未確認7日、確認済み休眠365日のアカウントを安全に削除する | Android / public Worker / Supabase / trusted admin Worker | 要求時、Cloudflare Cronは10分ごと | 稼働設定あり。Cron実行履歴は継続監視対象 |
-| 前日順位 | 日本時間の前日終了時点の順位を日次確定し、AccountScreenへ表示する | Supabase PostgreSQL / Android | 将来は毎日00:10 JST | **未導入**（029未適用、Supabase Cron 0件） |
+| 前日順位 | 日本時間の前日終了時点の順位を日次確定し、AccountScreenへ表示する | Supabase PostgreSQL / Android | 毎日00:10 JST | 稼働設定あり。029適用・初回snapshot・Supabase Cron登録済み |
 | LP / Web account API | LP、法務・アカウント画面、client-facing HTTP APIを公開する | public Cloudflare Worker `chanriva` + Assets | HTTP request、main連携のWorkers Builds | 稼働中 |
 | CI | Android、admin Worker、SQL・境界・release内容を検証する | GitHub Actions | push / pull_request | 稼働中。deploy処理なし |
 
@@ -166,18 +166,18 @@ AndroidとWebはどちらも最終的に`request_account_deletion()`へ到達し
 | 機能名 | 前日順位と「この端末で確認した最高の前日順位」 |
 | 目的 | Asia/Tokyoの前日終了時点のrating順位を日次で確定し、本人のAccountScreenにだけ表示する |
 | 主な実行場所 | Supabase PostgreSQL、Android AccountScreen / device-local SharedPreferences |
-| 実行契機 | 将来のSupabase Cron / pg_cron。AndroidはAccountScreenを開いた時だけ本人rowを取得し、有効な前日分だけlocal bestと比較 |
-| 実行頻度 | **予定:** cron `10 15 * * *`（毎日15:10 UTC = 翌日00:10 JST） |
+| 実行契機 | Supabase Cron / pg_cron。AndroidはAccountScreenを開いた時だけ本人rowを取得し、有効な前日分だけlocal bestと比較 |
+| 実行頻度 | cron `10 15 * * *`（毎日15:10 UTC = 翌日00:10 JST） |
 | 主な読み取り先 | cutoff前の`rating_history`、未削除`profiles`、Androidは本人の`rating_daily_snapshot` |
 | 主な書き込み先 | 最新分だけの`rating_daily_snapshot`、UUIDごとのdevice-local best percentile / achieved date |
-| Secret / credential | Androidはpublishable（anon）key + user JWTで本人rowだけをSELECT。refreshは将来のDB owner Cronまたは`service_role`のEXECUTE権限。Androidへservice-roleを渡さない |
-| 失敗時の確認場所 | 導入前監査はSupabase migration catalog。導入後はSupabase Cron History / `cron.job_run_details`、Postgres logs、snapshot整合query。AndroidはAccountScreenの未生成表示 / Logcat |
+| Secret / credential | Androidはpublishable（anon）key + user JWTで本人rowだけをSELECT。refreshはDB owner `postgres`のCronが実行し、`service_role`にも明示的なEXECUTE権限がある。Androidへservice-roleを渡さない |
+| 失敗時の確認場所 | Supabase DashboardのCron job詳細 / Cron logs、`cron.job_run_details`、Postgres logs、snapshot整合query。AndroidはAccountScreenの未生成表示 / Logcat |
 | 関連migration | **正式:** `202608220029_daily_rating_snapshot.sql`。**028は永久欠番・本番未適用・適用禁止** |
 | 関連RPC | `refresh_rating_daily_snapshot(date default null)` |
-| 関連workflow / Worker | **予定:** Supabase Cron job `daily-rating-snapshot`、command `select public.refresh_rating_daily_snapshot();`。Cloudflare / GitHub Actionsでは動かさない |
-| 関連ドキュメント | [Daily rating snapshot rollout](DAILY_RATING_SNAPSHOT_ROLLOUT.md)、[Architecture](../ARCHITECTURE.md#daily-rating-position) |
-| 本番状態 | **未導入:** 029は本番未適用、`pg_cron`未導入、`cron.job`なし、Supabase Cron 0件 |
-| 注意事項 | 028を復活・適用しない。029適用とextension / job作成は別の本番操作。導入前にrollout文書の停止条件を再確認する |
+| 関連workflow / Worker | Supabase Cron job `daily-rating-snapshot`（job ID `1`）、command `select public.refresh_rating_daily_snapshot();`。Cloudflare / GitHub Actionsでは動かさない |
+| 関連ドキュメント | [Daily rating snapshot rollout](DAILY_RATING_SNAPSHOT_ROLLOUT.md)、[Production cutover 029](PRODUCTION_CUTOVER_202608230029.md)、[Architecture](../ARCHITECTURE.md#daily-rating-position) |
+| 本番状態 | 029適用済み。`pg_cron` 1.6.4を`pg_catalog`へ導入し、active job 1件を登録済み。2026-08-22分の初回snapshotは5行。初回scheduled runは2026-08-24 00:10 JST |
+| 注意事項 | 028を復活・適用しない。029、extension、jobは別々の本番操作として監査済み。Cron失敗時もAndroidは古いsnapshotを前日順位に使わない |
 
 029の完成仕様は次のとおりです。
 
@@ -240,13 +240,13 @@ AndroidとWebはどちらも最終的に`request_account_deletion()`へ到達し
 |---|---|---|---|---|---|
 | 着手傾向集計（Research） | GitHub Actions `Research batch` | `17,47 * * * *`（UTC、毎時17分・47分） | validationとposition / move aggregationをbounded batchで進める | 稼働中（直近schedule run成功） | GitHub Actions run / step logs、Research DB確認query |
 | アカウント削除・休眠整理 | Cloudflare Cron Trigger / Worker `othello-admin` | `*/10 * * * *`（10分ごと） | 期限対象をqueueし、pending requestをprepare / Research unlink / Auth delete / completeする | 稼働設定あり。実行履歴は継続確認対象 | Cloudflare Worker logs / Cron trigger履歴、Supabase request状態 |
-| 前日順位 | **予定:** Supabase Cron / pg_cron | `10 15 * * *`（15:10 UTC = 00:10 JST） | `select public.refresh_rating_daily_snapshot();`を1日1回実行 | **未導入**（029未適用、extension / jobなし） | 導入後のSupabase Cron History / `cron.job_run_details` / Postgres logs |
+| 前日順位 | Supabase Cron / pg_cron | `10 15 * * *`（15:10 UTC = 00:10 JST） | `select public.refresh_rating_daily_snapshot();`を1日1回実行 | 稼働設定あり。job ID `1`、active | Supabase Cron job詳細 / Cron logs、`cron.job_run_details`、Postgres logs |
 
 Cloudflare側で定期実行するコードは`othello-admin`のaccount deletion maintenanceだけです。public Worker `chanriva`にはscheduled handler / Cron Triggerがありません。GitHub Actionsのscheduleは`Research batch`だけです。
 
 ### Supabase内の定期処理
 
-本番監査時点では`cron.job`は存在せず、`pg_cron` extensionは未導入、Supabase DashboardのCron jobは0件です。したがって、前日順位も、READMEに候補として記載されたmatch lifecycle cleanup関数群も現在はSupabase Cronで定期実行されていません。029用Cronを本番導入した時点で、この節、全体サマリ、前日順位、定期処理一覧を同じ変更で更新してください。
+本番には`pg_cron` 1.6.4が`pg_catalog`へ導入され、`cron.job`には前日順位用のactive job `daily-rating-snapshot`（job ID `1`）だけが存在します。登録commandは`select public.refresh_rating_daily_snapshot();`だけです。READMEに候補として記載されたmatch lifecycle cleanup関数群を呼ぶSupabase Cron jobはありません。実行履歴はjob詳細のCron logsまたは`cron.job_run_details`で確認します。
 
 ## 11. Secret / credential boundary
 
@@ -260,7 +260,7 @@ Secretの実値はrepository、issue、運用ログ、この文書へ記録し�
 | `SUPABASE_SERVICE_ROLE_KEY` | `othello-admin`がtrusted削除RPCとAuth Admin APIを実行 | Cloudflare Worker `othello-admin` secret | **不可**。Android、browser、public Worker、GitHub batchへ渡さない |
 | `ADMIN_TOKEN` | `othello-admin`の手動管理endpointをBearer認証 | Cloudflare Worker `othello-admin` secret | **不可**。operatorだけが必要時に使用し、ログへ出さない |
 | `RESEARCH_BATCH_DATABASE_URL` | DB role `research_batch`でwrapper functionだけを実行 | GitHub Environment `research-production` secret | **不可**。Android / Cloudflareへ渡さない |
-| Supabase DB owner credential | migration、DB owner限定操作、将来のCron管理 | Supabase / operatorのcredential store。repositoryや通常workflowへ保存しない | **不可** |
+| Supabase DB owner credential | migration、DB owner限定操作、Cron管理 | Supabase / operatorのcredential store。repositoryや通常workflowへ保存しない | **不可** |
 | Cloudflare Workers Builds連携credential | GitHub mainからWorkerをbuild / deploy | Cloudflare / GitHubの連携設定 | **不可**。アプリやrepositoryへ埋め込まない |
 | 自動`GITHUB_TOKEN` | workflow checkout等 | GitHub Actionsがrun単位で発行 | clientへ渡さない。workflow permissionsを最小化する |
 
@@ -273,7 +273,7 @@ Secretの実値はrepository、issue、運用ログ、この文書へ記録し�
 | Android client | ユーザー向けerror state、Logcat、match diagnostics | 対象repository / RPC / network layerの入力と時系列 |
 | Supabase Auth | Dashboard Auth logs | Redirect URL、Email provider、user / session状態。passwordやtokenは出力しない |
 | Supabase Data API / DB | Dashboard API / Postgres logs、SQL catalog | RLS / function ACL、migration履歴、対象rowの件数・状態をread-onlyで確認 |
-| Supabase Cron | 現在は未導入 | 導入後はCron History、`cron.job`、`cron.job_run_details`、Postgres logs |
+| Supabase Cron | Dashboardの`daily-rating-snapshot` job詳細 / Cron logs | `cron.job`、`cron.job_run_details`、Postgres logs、最新snapshotの日付・件数・値域 |
 | public Cloudflare Worker `chanriva` | Worker logs | Workers Buildsのbuild / deployment logs、下流Supabase Auth / API logs |
 | trusted Worker `othello-admin` | Worker logsとCron Trigger履歴 | `account_deletion_requests`、対象RPC、Supabase Auth Admin側の結果 |
 | GitHub Actions CI | `CI` workflow run / failed step | Android test report、admin Worker test、pgTAP output、境界check output |
@@ -287,7 +287,8 @@ Secretの実値はrepository、issue、運用ログ、この文書へ記録し�
 | 文書 | 役割 |
 |---|---|
 | [ARCHITECTURE.md](../ARCHITECTURE.md) | module / security / server responsibilityなど設計境界の正本 |
-| [DAILY_RATING_SNAPSHOT_ROLLOUT.md](DAILY_RATING_SNAPSHOT_ROLLOUT.md) | 029の本番適用前監査、停止条件、scheduler比較、planned Cron |
+| [DAILY_RATING_SNAPSHOT_ROLLOUT.md](DAILY_RATING_SNAPSHOT_ROLLOUT.md) | 029の本番適用前監査、停止条件、scheduler比較、導入結果 |
+| [PRODUCTION_CUTOVER_202608230029.md](PRODUCTION_CUTOVER_202608230029.md) | 029適用、初回snapshot、pg_cron / job登録の本番実績 |
 | [RESEARCH_OPERATIONS.md](RESEARCH_OPERATIONS.md) | 着手傾向集計（Research）のproduction credential、monitoring、recovery、rollback |
 | [RESEARCH_DATA_DESIGN.md](RESEARCH_DATA_DESIGN.md) | Researchのprivacy / consent / aggregation設計 |
 | [SUPABASE_HOSTED_SETUP.md](SUPABASE_HOSTED_SETUP.md) | hosted Supabase再構築、Auth、trusted Worker設定 |

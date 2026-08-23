@@ -2,11 +2,11 @@
 
 確認日: 2026-08-23 JST
 
-この文書は日次順位migrationとschedulerの本番適用前記録です。確認時点では本番DB、Cron、Cloudflare、GitHub Actionsのいずれにも変更を加えていません。
+この文書は日次順位migrationとschedulerの本番適用前監査、選定根拠、本番導入結果をまとめた記録です。2026-08-23 JSTに029、初回snapshot、Supabase Cronを本番導入しました。CloudflareとGitHub Actionsのschedulerには変更を加えていません。
 
 ## Production audit
 
-対象はSupabase project `othello`（project ref `zgzllmaoyymoeiqtybck`）です。OWNERが本番SQL Editorでread-only catalog queryを実行し、次を確認しました。
+対象はSupabase project `othello`（project ref `zgzllmaoyymoeiqtybck`）です。本番適用直前にSQL Editorでread-only catalog queryを実行し、次を確認しました。
 
 - `public.profiles.last_active_at`: 存在
 - `public.touch_last_active()`: 存在
@@ -97,7 +97,7 @@ GitHubの公式仕様: <https://docs.github.com/en/actions/reference/workflows-a
 
 pg_cronが本番planやPostgres versionで利用不能、または将来処理が外部API連携を必須にする場合だけ外部schedulerを再評価します。現要件ではSupabase Cron/pg_cronが最小で最も明確です。
 
-## Planned Cron after separate approval
+## Production Cron
 
 - extension/module: Supabase Cron (`pg_cron`)
 - job name: `daily-rating-snapshot`
@@ -108,3 +108,22 @@ pg_cronが本番planやPostgres versionで利用不能、または将来処理�
 - monitoring: Dashboard Cron Historyまたは`cron.job_run_details`
 
 job作成前に`cron.job`で同名jobと同function呼び出しの双方を検索し、重複があれば作成せず停止します。Cronにはcleanup、rating再計算、外部API呼び出しを追加しません。
+
+## Production rollout result
+
+本番導入基準はcommit `86a7d334716c5e924c6b2d6ff73a148b990abdca`です。GitHub Actions CI run `32608987199`が成功し、local Supabase pgTAPを含む全stepの成功を確認してから本番操作を開始しました。
+
+- 029全文をSupabase Dashboard SQL Editorから明示的な`begin` / `commit`の1 transactionで適用し、成功しました。migration history tableがないため`supabase db push`は使用していません。
+- `rating_daily_snapshot`、日付index、RLS、本人SELECT policy、`refresh_rating_daily_snapshot(date)`を確認しました。
+- tableは`authenticated`のSELECTだけを許可し、`anon` / `PUBLIC`はSELECT不可、`authenticated`はINSERT / UPDATE / DELETE不可です。
+- refresh functionはowner `postgres`、`SECURITY DEFINER`、`search_path=""`、default引数1個です。`PUBLIC` / `anon` / `authenticated`はEXECUTE不可、`service_role`はEXECUTE可です。
+- `ratings`、`rating_history`、`enqueue_or_match()`、`submit_match_result(uuid,text,text,text,text,jsonb)`、`finalize_match_v2(uuid)`が適用後も存在することを確認しました。
+- 初回実行はAsia/Tokyoの前日`2026-08-22`を対象に5行を生成しました。日付は1種類、`active_user_count`は全行5、rankは1〜5、percentileは20〜100、無効値と削除ユーザー混入は0でした。
+- 本番履歴から同じcutoff条件で再計算した期待値との差分は0でした。個人識別情報は検証出力へ含めていません。
+- 同日retryは5を返し、snapshotの行数とfingerprintが不変でした。
+- Dashboardから`pg_cron` 1.6.4を`pg_catalog`へ有効化しました。有効化直後の`cron.job`は0件で、同名・同commandの重複がないことを再確認しました。
+- job `daily-rating-snapshot`（job ID `1`）を1件だけ作成しました。scheduleは`10 15 * * *`、commandは`select public.refresh_rating_daily_snapshot();`、database / execution principalは`postgres`、activeです。
+- Dashboardのnext run表示は`24 Aug 2026 00:10:00 (+0900)`で、UTC 15:10からJST 00:10への換算と一致しました。
+- Cronと同じDB owner・同じSQLを手動retryし、5を返すことを確認しました。初回scheduled run前のため、`cron.job_run_details`のjob実行履歴はまだ0件です。
+
+詳細な時刻、schema / ACL確認、snapshot検証、未確認事項は[`PRODUCTION_CUTOVER_202608230029.md`](PRODUCTION_CUTOVER_202608230029.md)を参照してください。
