@@ -1,5 +1,7 @@
 # ちゃんりば Architecture
 
+実行基盤、Cron / schedule、Secret boundary、運用主体、障害確認先などの運用責務は[`docs/OPERATIONS_MAP.md`](docs/OPERATIONS_MAP.md)を正本として参照します。Supabase / Cloudflare / GitHub Actions間で処理を追加・移動する場合は、設計変更前にこの台帳を確認し、変更後に必ず更新します。
+
 ## Scope
 
 This repository implements the Android-first Reversi product ちゃんりば. Authenticated local play, Supabase-backed matchmaking/finalization, WebRTC DataChannel play, immutable records, account-deletion processing, and post-game Edax review are implemented behind explicit domain boundaries.
