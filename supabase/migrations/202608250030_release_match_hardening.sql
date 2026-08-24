@@ -1724,7 +1724,7 @@ begin
      and s.negotiation_epoch = match_row.negotiation_epoch
      and s.sender_id = caller_id
      and s.signal_type = p_signal_type;
-  if signal_count >= case when p_signal_type = 'RESUME' then 1 else 4 end then
+  if signal_count >= (case when p_signal_type = 'RESUME' then 1 else 4 end) then
     raise exception 'signaling slot limit exceeded';
   end if;
   expiry_value := least(match_row.release_deadline, now() + interval '2 minutes');
