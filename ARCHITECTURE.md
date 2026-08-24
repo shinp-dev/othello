@@ -83,7 +83,7 @@ The refresh function is `SECURITY DEFINER` with an empty `search_path`. PostgreS
 
 The canonical migration for this boundary is `202608220029_daily_rating_snapshot.sql`; migration number 028 is intentionally and permanently unused because its unshipped candidate was retired after the production-state audit. The once-daily database-only invocation uses Supabase Cron/pg_cron rather than Cloudflare or GitHub Actions: it executes the schema-qualified function without an external network hop or an additional production database credential boundary and keeps job/run inspection beside the database. The migration deliberately does not enable the extension or create the job; those were performed and audited as separate production operations. See [`docs/DAILY_RATING_SNAPSHOT_ROLLOUT.md`](docs/DAILY_RATING_SNAPSHOT_ROLLOUT.md).
 
-`finalize_match_v2` writes one `rating_history` row for each player only on the confirmed, idempotent rating-update path, including a zero delta. The `(user_id, match_id)` unique index and terminal retry path prevent duplicate rated-game history; disputed and incomplete results do not write it. Existing pruning still retains the latest 100 rows per user. That remains sufficient for the 30-day activity predicate because a user who displaces older rows necessarily has newer rated games, and no broader ranking-history retention is introduced. Cutoff-rating reconstruction assumes the daily refresh runs before one user completes more than 100 post-cutoff rated games; changing retention for that implausible current-scale case is deliberately outside this feature.
+The confirmed, idempotent rating-finalization paths write one `rating_history` row for each player, including a zero delta. Protocol 2 performs this inside `release_finalize_result_v2` after server replay and evidence checks. The `(user_id, match_id)` unique index and terminal retry path prevent duplicate rated-game history; disputed and incomplete results do not write it. Existing pruning still retains the latest 100 rows per user. That remains sufficient for the 30-day activity predicate because a user who displaces older rows necessarily has newer rated games, and no broader ranking-history retention is introduced. Cutoff-rating reconstruction assumes the daily refresh runs before one user completes more than 100 post-cutoff rated games; changing retention for that implausible current-scale case is deliberately outside this feature.
 
 ## Game Core
 
@@ -91,7 +91,7 @@ The canonical migration for this boundary is `202608220029_daily_rating_snapshot
 
 ## Client Session State vs Server Persisted Match State
 
-The Android state machine (`IDLE`, `WAITING`, `SIGNALING`, `P2P_CONNECTED`, `PLAYING`, `FINISHING`, `CONFIRMED`, `PENDING_RESULT`, `DISPUTED`) describes one device's session. Supabase cannot observe the P2P channel continuously, so it does not mirror these states. The additive migration adds `matches.server_status` with only `CREATED`, `PENDING_RESULT`, `CONFIRMED`, `DISPUTED`, and `ABANDONED`; the legacy `matches.status` column is retained for rollback compatibility and is not authoritative for new clients.
+The Android state machine (`IDLE`, `WAITING`, `SIGNALING`, `P2P_CONNECTED`, `PLAYING`, `MOVE_CONFIRMING`, `SYNCHRONIZING`, `RECONNECTING`, `FINISHING`, and terminal states) describes one device's session. Supabase cannot observe the P2P channel continuously, so it does not mirror these states. Protocol 2 uses `matches.release_status` (`MATCHED`, `ACTIVE`, `RECONNECTING`, `RESULT_PENDING`, `CONFIRMED`, `DISPUTED`, `FORFEIT`, `EXPIRED`, `ABANDONED`) as its persisted lifecycle authority. The older `matches.server_status` and `matches.status` columns remain compatibility boundaries, not protocol 2 lifecycle authority.
 
 ## Client match state machine
 
@@ -105,16 +105,18 @@ The state machine is a pure reducer. UI observes state; it does not decide trans
 
 ## P2P flow
 
-1. A later queue participant gets a match. The database stores participant-scoped `match_notifications` rows; the waiting Android client observes its private row through Realtime and immediately calls `claim_waiting_match()`. The heartbeat/claim loop remains a fallback if notification delivery is delayed.
-2. The matched participant creates a non-trickle WebRTC offer and delivers it through participant-only `match_signaling` Realtime rows.
-3. The answer is returned and DataChannel opens. Each participant writes one start ACK; the client enters `PLAYING` only after the server reports both ACKs, then removes the signaling subscription.
+The rationale and current initial-connection sequence are documented in [`docs/ONLINE_MATCH_CONNECTION_DESIGN_STORY.md`](docs/ONLINE_MATCH_CONNECTION_DESIGN_STORY.md). Reconnect-specific failure handling is documented separately in [`docs/ONLINE_MATCH_RECONNECT_DESIGN_STORY.md`](docs/ONLINE_MATCH_RECONNECT_DESIGN_STORY.md).
+
+1. A later queue participant gets a match. The database stores participant-scoped `match_notifications` rows; the waiting Android client observes its private row through Realtime and immediately calls `claim_active_match_v2()`. The stable-request heartbeat/claim path remains a fallback if notification delivery is delayed or an RPC response is lost.
+2. The server-assigned BLACK participant creates a non-trickle WebRTC offer and delivers it through participant-only, epoch-scoped `match_signals_v2` rows using `publish_match_signal_v2`; WHITE returns the answer through the same boundary.
+3. DataChannel opens independently on each device. Each participant writes one epoch-aware start ACK; the client enters `PLAYING` only after the server reports both ACKs. The match-notification subscription ends after assignment, while the signaling subscription remains scoped to the `WebRtcMatchCoordinator` lifetime so reconnect signals can be observed.
 4. Each move is sent only on DataChannel. Every move command contains `matchId`, `ply`, `move`, `commandId`, and `previousStateHash`. Resignation/timeout/disconnect use a separate terminal DataChannel control message so both peers submit the same result; it cannot carry a move.
 5. Receiver validates the server-assigned remote disc, command fingerprint, idempotency, ply, legality and hash. A reused command id with a different payload is a protocol error.
 6. If the next player has no legal move, both sides apply a forced pass locally and append the same `--` canonical token; no pass button is shown in normal UI.
 
 ## Finalization and rating
 
-Both players submit immutable move history, result, final hash and finish reason. A server-side RPC compares submissions. Only matching submissions become `CONFIRMED`; then one idempotent transaction creates the record and applies the versioned `RatingPolicy`. Mismatches become `DISPUTED` and do not change rating. A single submission is `PENDING_RESULT`.
+Protocol 2 participants submit canonical move history, finish reason, loser disc when applicable, and bounded final-clock evidence through `submit_match_result_v2`; the Android adapter does not send a client-authoritative winner or final hash. The server deterministically replays NORMAL evidence, derives the result and final hash, and requires both participants to submit the same canonical history before one idempotent transaction creates the record and applies the versioned `RatingPolicy`. Mismatches become `DISPUTED` and do not change rating. A single NORMAL submission is `RESULT_PENDING`.
 
 New GameRecords persist the verified final-position hash and fixed `5m` product time control. Existing records created before migration 017 may have a null final hash; records remain immutable.
 
@@ -133,7 +135,7 @@ Android can only create an owner-scoped deletion request. The trusted Worker cal
 ## Security and forbidden dependencies
 
 - No moves or clocks are written to Supabase during a game.
-- Realtime Postgres Changes is used only for participant-scoped match-availability notification (`match_notifications`) and SDP signaling (`match_signaling`). Match notification observation ends after assignment; signaling observation ends after both start ACKs. Moves, clocks, board state, results, and rating never use Realtime.
+- Realtime Postgres Changes is used only for participant-scoped match-availability notification (`match_notifications`) and SDP signaling (`match_signals_v2` for protocol 2). Match notification observation ends after assignment; signaling observation is bounded by the `WebRtcMatchCoordinator` session because it also carries reconnect coordination. Moves, clocks, board state, results, and rating never use Realtime.
 - No service-role key is shipped to Android or browser.
 - Android cannot update rating, peak, or official result directly.
 - Match cannot reference Edax; review alone can reference `AnalysisEngine`.
@@ -141,8 +143,8 @@ Android can only create an owner-scoped deletion request. The trusted Worker cal
 - Game records are immutable after finalization.
 - SQL enables RLS and exposes narrow RPCs instead of client-owned status updates.
 - Matchmaking snapshots official `ratings.current_rating`, uses TTL queue rows and `FOR UPDATE SKIP LOCKED`; client rating input is not accepted.
-- `active_match_participants.user_id` is the database invariant for one active match per user. CREATED matches have a five-minute lease; `abandon_match` and stale cleanup release reservations without changing rating.
-- `submit_match_result` stores idempotently and auto-finalizes when both submissions exist; `finalize_match_v2` remains participant-scoped reconciliation. Payload enums, hashes, clock size, and canonical token format are checked in SQL.
+- `active_match_participants.user_id` is the database invariant for one active match per user. Protocol 2 `MATCHED` rows have a two-minute initial lease; abandon and bounded maintenance paths release reservations without changing rating.
+- `submit_match_result_v2` stores idempotent evidence and finalizes only after its server replay and evidence rules are satisfied. Payload enums, clock size, canonical token format, legal replay, terminal state, and server-derived result/hash are checked in SQL.
 - Terminal matches, records, and submissions have retention/cleanup RPCs. Internal pruning and cleanup functions have no execute permission for `anon`, `authenticated`, or `PUBLIC`; SECURITY DEFINER functions use an empty search path.
 - DataChannel move commands carry real moves only. Terminal control messages are a separate wire type. `TurnResolver` deterministically adds `--` locally on both peers; command IDs reserve their first payload even when that payload is rejected.
 

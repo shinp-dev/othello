@@ -98,22 +98,22 @@ Android reset mail要求
 | 項目 | 内容 |
 |---|---|
 | 機能名 | matchmaking・WebRTC対局・結果確定・rating更新 |
-| 目的 | participant限定の待機・signalingを経てP2P対局を行い、両者が一致して提出した確定結果だけを保存・rating反映する |
+| 目的 | participant限定の待機・signalingを経てP2P対局を行い、protocol 2では双方のcanonical evidenceをserver replayして確定した結果だけを保存・rating反映する |
 | 主な実行場所 | Android、Supabase PostgreSQL / Realtime、WebRTC DataChannel |
 | 実行契機 | 対局開始操作、queue heartbeat / notification、signaling、start ACK、両者のresult submission |
-| 実行頻度 | ユーザー対局ごと。foreground待機中heartbeatは10秒ごと |
-| 主な読み取り先 | `match_queue`、`matches`、`match_notifications`、`match_signaling`、`match_submissions`、`ratings`、`rating_history` |
-| 主な書き込み先 | queue、match lifecycle、notification / signaling、start ACK、submission、confirmed `game_records`、`ratings`、`rating_history` |
+| 実行頻度 | ユーザー対局ごと。foreground待機中のprotocol 2 heartbeat fallbackは75秒ごと |
+| 主な読み取り先 | `match_queue`、`matches`、`active_match_participants`、`match_notifications`、`match_signals_v2`、`match_result_claims_v2`、`ratings`、`rating_history` |
+| 主な書き込み先 | queue、match lifecycle、notification / signaling、`match_start_acks_v2`、`match_result_claims_v2`、`match_results_v2`、confirmed `game_records`、`ratings`、`rating_history` |
 | Secret / credential | Androidのpublishable（anon）keyとユーザーJWT。service-role / DB owner credentialは使わない |
 | 失敗時の確認場所 | Android match diagnostics / Logcat、Supabase Realtime logs、Postgres / API logs、対象RPCとRLSのcatalog |
-| 関連migration | `202608150025_private_match_rating.sql`ほかmatch lifecycle / Realtime / result関連migration |
-| 関連RPC | `enqueue_or_match()`、`cancel_waiting()`、`heartbeat_waiting()`、`claim_waiting_match()`、`reconcile_expired_active_match_for_user()`、`ack_match_started()`、`get_match_start_state()`、`abandon_match()`、`submit_match_result(...)`、`finalize_match_v2(...)` |
+| 関連migration | `202608250030_release_match_hardening.sql`ほかmatch lifecycle / Realtime / result関連migration |
+| 関連RPC | `enqueue_or_match_v2(uuid)`、`cancel_waiting_v2(uuid)`、`claim_active_match_v2()`、`publish_match_signal_v2(...)`、`ack_match_started_v2(uuid, integer)`、`get_release_match_state_v2(uuid)`、`resume_match_v2(uuid, integer)`、`abandon_match_v2(uuid)`、`submit_match_result_v2(...)`、`reconcile_match_v2(uuid)` |
 | 関連workflow / Worker | なし |
-| 関連ドキュメント | [Architecture](../ARCHITECTURE.md#client-session-state-vs-server-persisted-match-state)、[Reconnect design story](ONLINE_MATCH_RECONNECT_DESIGN_STORY.md)、[Device test](DEVICE_TEST.md) |
+| 関連ドキュメント | [Architecture](../ARCHITECTURE.md#client-session-state-vs-server-persisted-match-state)、[Connection design story](ONLINE_MATCH_CONNECTION_DESIGN_STORY.md)、[Reconnect design story](ONLINE_MATCH_RECONNECT_DESIGN_STORY.md)、[Device test](DEVICE_TEST.md) |
 | 本番状態 | 稼働中 |
 | 注意事項 | P2P成立後の盤面・着手・時計・結果をSupabase Realtimeへ送らない。Realtimeはparticipant限定のmatch notification / SDP signaling用。確定結果だけがratingを更新する |
 
-`matches.black_rating_at_start` / `white_rating_at_start`はmatch成立時のserver-owned snapshotで、各クライアントには相手ratingだけを返します。両者一致でCONFIRMEDになった確定レート対象対局は、両participantの`rating_history`を重複なく作成します。`rating_history`はrating監査だけでなく、着手傾向集計（Research）のrating帯判定と前日順位の時点復元にも利用されます。
+`matches.black_rating_at_start` / `white_rating_at_start`はmatch成立時のserver-owned snapshotで、各クライアントには相手ratingだけを返します。protocol 2では双方のcanonical evidenceが一致しserver replayでCONFIRMEDになった対局だけが、両participantの`rating_history`を重複なく作成します。`rating_history`はrating監査だけでなく、着手傾向集計（Research）のrating帯判定と前日順位の時点復元にも利用されます。
 
 ## 5. 着手傾向集計（Research）
 
@@ -287,6 +287,8 @@ Secretの実値はrepository、issue、運用ログ、この文書へ記録し�
 | 文書 | 役割 |
 |---|---|
 | [ARCHITECTURE.md](../ARCHITECTURE.md) | module / security / server responsibilityなど設計境界の正本 |
+| [ONLINE_MATCH_CONNECTION_DESIGN_STORY.md](ONLINE_MATCH_CONNECTION_DESIGN_STORY.md) | 通常のオンライン接続でP2Pとserver authorityを分けた理由と、PLAYINGまでのactual path |
+| [ONLINE_MATCH_RECONNECT_DESIGN_STORY.md](ONLINE_MATCH_RECONNECT_DESIGN_STORY.md) | 一度成立した接続が失われた後のepoch-aware recovery設計 |
 | [DAILY_RATING_SNAPSHOT_ROLLOUT.md](DAILY_RATING_SNAPSHOT_ROLLOUT.md) | 029の本番適用前監査、停止条件、scheduler比較、導入結果 |
 | [PRODUCTION_CUTOVER_202608230029.md](PRODUCTION_CUTOVER_202608230029.md) | 029適用、初回snapshot、pg_cron / job登録の本番実績 |
 | [RESEARCH_OPERATIONS.md](RESEARCH_OPERATIONS.md) | 着手傾向集計（Research）のproduction credential、monitoring、recovery、rollback |
