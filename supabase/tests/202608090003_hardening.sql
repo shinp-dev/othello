@@ -1,6 +1,6 @@
 -- Run with `supabase test db` against local Supabase/Postgres + pgTAP.
 begin;
-select plan(285);
+select plan(286);
 
 select ok(not has_function_privilege('anon', 'public.prune_user_game_records(uuid)', 'execute'), 'anon cannot execute prune_user_game_records');
 select ok(not has_function_privilege('authenticated', 'public.prune_user_game_records(uuid)', 'execute'), 'authenticated cannot execute prune_user_game_records');
@@ -912,8 +912,8 @@ select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000004
 select public.ack_match_started('00000000-0000-0000-0000-000000000104');
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
 select is((select public.submit_match_result('00000000-0000-0000-0000-000000000104', 'd3c3b3b2b1a1c4c1c2d2d1e1a2a3f5e2f1g1--f2--e3--b5b4a5a4c5a6f4f3g3g2h2h1h3h4g4c6g5h5b6c7d6e6f6g6h6h7a7--b7a8d7e7f7g7g8b8c8d8e8f8h8', 'WHITE_WIN', '712ca7384132c0b4:1:0:64', 'NORMAL', null)::text), 'PENDING_RESULT', 'authoritative result submit succeeds after both start acks');
-select ok((select result_expires_at > now() + interval '29 days' and result_expires_at <= now() + interval '30 days' from public.matches where id = '00000000-0000-0000-0000-000000000104'), 'legacy PENDING_RESULT retains its closed-test compatibility lease');
-select ok((select min(expires_at) > now() + interval '29 days' and max(expires_at) <= now() + interval '30 days' from public.active_match_participants where match_id = '00000000-0000-0000-0000-000000000104'), 'legacy PENDING_RESULT reservations use the same compatibility lease');
+select ok((select result_expires_at > now() + interval '4 minutes' and result_expires_at <= now() + interval '5 minutes' from public.matches where id = '00000000-0000-0000-0000-000000000104'), 'legacy PENDING_RESULT keeps the established five-minute result lease');
+select ok((select min(expires_at) > now() + interval '4 minutes' and max(expires_at) <= now() + interval '5 minutes' from public.active_match_participants where match_id = '00000000-0000-0000-0000-000000000104'), 'legacy PENDING_RESULT reservations keep the same five-minute lease');
 select is((select count(*)::int from public.active_match_participants where match_id = '00000000-0000-0000-0000-000000000104'), 2, 'PENDING_RESULT keeps both active reservations');
 update public.matches set result_expires_at = now() - interval '1 minute' where id = '00000000-0000-0000-0000-000000000104';
 select is((select public.cleanup_expired_pending_results()), 1, 'expired PENDING_RESULT becomes terminal');

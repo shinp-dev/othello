@@ -66,10 +66,13 @@ Leases use server time:
 - Temporary network loss / ICE `DISCONNECTED`: a 1.5-second client debounce first permits the
   existing candidate pair to return to `OPEN` without spending an epoch. If recovery is still
   required, gameplay and the local monotonic clock pause and the survivor enters `RECONNECTING`.
-  Before skipping renegotiation on an `OPEN` transport, the client reads server state. A server
-  `RECONNECTING` epoch still completes current-epoch signaling and bilateral ACK; an already
-  `ACTIVE` advanced epoch performs authoritative transcript synchronization instead of spending
-  another epoch.
+  Before skipping renegotiation on an `OPEN` transport, the client reads server state. If the
+  local Controller has already crossed the debounce but that read still sees `ACTIVE` at the same
+  epoch, the Coordinator calls `resume_match_v2` instead of synchronizing and exiting. The resume
+  RPC and the in-flight disconnect report lock the same match: whichever arrives first creates
+  exactly one next epoch, and the other joins `RECONNECTING`. A server `RECONNECTING` epoch still
+  completes current-epoch signaling and bilateral ACK; an already `ACTIVE` advanced epoch means
+  both ACKs completed and performs transcript synchronization without spending another epoch.
 - `FAILED`, process death, force stop or power loss: the surviving process follows the same
   45-second path. A relaunched process obtains its assignment with `claim_active_match_v2`, loads
   the app-private checkpoint, and starts a new signaling negotiation.
@@ -223,7 +226,9 @@ wake-up mechanism; the constrained row snapshot remains the recoverable fact.
 
 V1 direct insert stays granted only during coexistence. Its trigger permits only live, unstarted
 v1 matches, BLACK `OFFER`, WHITE `ANSWER`, four rows per sender and eight rows per match; existing
-maintenance removes started/terminal rows. The v2 table has no authenticated direct write grant.
+maintenance removes started/terminal rows. The existing Worker invokes the bounded service-only
+`run_legacy_match_maintenance_v1(100)` batch; no additional scheduler is introduced. The v2 table
+has no authenticated direct write grant.
 
 ## Matchmaking v2
 
@@ -264,21 +269,21 @@ peer is gone.
 
 ## Cleanup and retention
 
-`run_match_maintenance_v2(limit)` is service-role only and uses bounded batches with
-`FOR UPDATE SKIP LOCKED`:
+`run_match_maintenance_v2(limit)` and `run_legacy_match_maintenance_v1(limit)` are service-role
+only and use bounded batches with `FOR UPDATE SKIP LOCKED`:
 
-1. terminalize expired `MATCHED`, `ACTIVE`, `RECONNECTING` and `RESULT_PENDING` business state;
-2. remove expired signaling rows and queue rows in the same bounded batch;
+1. terminalize expired business state for the selected protocol;
+2. remove disposable signaling rows and expired queue rows in the same bounded batch;
 3. leave existing terminal/GameRecord retention to the established bounded retention policy.
 
 Foreground `reconcile_match_v2(match_id)` applies the same server-time rules to one participant's
 match. Thus a visible match can converge without waiting for cron, and cron still repairs process
 death where no client remains.
 
-The existing Worker invokes this RPC every ten minutes with `p_limit = 100`, enforces a 10-second
-Supabase request timeout, validates/logs the returned terminal/signal/queue counts, warns when the
-batch limit is reached, and rejects failed scheduled work after allowing independent maintenance
-tasks to finish. Deployment remains a separate cutover step.
+The existing Worker invokes both RPCs every ten minutes with `p_limit = 100`, enforces a 10-second
+Supabase request timeout, validates/logs each returned terminal/signal/queue count, warns when a
+batch limit is reached, and rejects failed scheduled work after allowing account deletion and the
+other protocol's maintenance to finish. Deployment remains a separate cutover step.
 
 ## Security boundary
 

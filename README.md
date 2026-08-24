@@ -114,14 +114,7 @@ Emulator A/Bの再現手順と、emulatorで完了できる項目・物理端末
 [`docs/DEVICE_TEST.md`](docs/DEVICE_TEST.md)を参照してください。`build/e2e/`には
 secretを含めないXML、スクリーンショット、対象tagのlogcatを保存できます。
 
-`matches`のCREATED leaseは5分のsignaling用です。DataChannel成立後、両participantが`ack_match_started`を一度呼び、クライアントが`get_match_start_state`で両者ACKを確認してからPLAYINGへ進みます。両者ACK後はP2P開始事実と24時間のbounded play leaseを記録します。PENDING_RESULTのactive reservationは5分で、30日保持の監査用submissionとは分離しています。期限切れはABANDONEDへ遷移してからreservationを解放します。matchmaking hot pathはcaller-scoped reconciliationとqueue expiryだけを行い、stale matchとterminal recordの全体cleanupはmaintenance pathで実行します。Supabase Cron/pg_cronを使う場合は、service role相当で次を1時間ごとに実行します。
-
-```sql
-select public.cleanup_stale_created_matches();
-select public.cleanup_expired_pending_results();
-select public.cleanup_expired_started_matches();
-select public.cleanup_terminal_matches();
-```
+`matches`のCREATED leaseは5分のsignaling用です。DataChannel成立後、両participantが`ack_match_started`を一度呼び、クライアントが`get_match_start_state`で両者ACKを確認してからPLAYINGへ進みます。両者ACK後はP2P開始事実と24時間のbounded play leaseを記録します。PENDING_RESULTのactive reservationは5分で、30日保持の監査用submissionとは分離しています。期限切れはABANDONEDへ遷移してからreservationを解放します。matchmaking hot pathはcaller-scoped reconciliationとqueue expiryだけを行い、stale matchとterminal recordの全体cleanupはmaintenance pathで実行します。オンライン対戦のschedulerは既存`cloudflare-admin` Cronへ集約し、10分ごとにservice roleで`run_match_maintenance_v2(100)`と`run_legacy_match_maintenance_v1(100)`を独立実行します。後者は期限切れlegacy business stateを先に永続化し、その後protocol 1 signaling / queueを各100行以下で削除します。online match cleanup用の追加Supabase Cron / pg_cronは作成しません。
 
 日次順位は既存のmaintenance pathに分散させず、Supabase Cron job `daily-rating-snapshot`がAsia/Tokyoの日付境界後の毎日00:10 JSTに`select public.refresh_rating_daily_snapshot();`を実行します。関数は`SECURITY DEFINER`かつ空の`search_path`で、`PUBLIC` / `anon` / `authenticated`からEXECUTEを剥奪し、`service_role`または明示的に権限を持つDB ownerのCronだけが実行します。正式なmigrationは`202608220029_daily_rating_snapshot.sql`です。028は本番未適用の永久欠番であり、適用してはいけません。migration自身は関数と最新snapshot用tableを追加するだけで、Cron extension / jobは別の本番操作として導入しています。適用監査、scheduler方針、導入結果は[`docs/DAILY_RATING_SNAPSHOT_ROLLOUT.md`](docs/DAILY_RATING_SNAPSHOT_ROLLOUT.md)を参照してください。
 

@@ -703,7 +703,12 @@ class OnlineMatchControllerTest {
     fun oneSidedTransientDisconnectReturnsToOpenWithoutConsumingServerReconnect() = runBlocking {
         val transport = FakeMatchTransport()
         val repository = FakeOnlineRepository().apply {
-            startState = MatchStartAck("ACTIVE", localAcked = true, bothAcked = true)
+            startState = MatchStartAck(
+                "ACTIVE",
+                localAcked = true,
+                bothAcked = true,
+                negotiationEpoch = 2,
+            )
         }
         val controller = OnlineMatchController(
             "transient-disconnect",
@@ -720,7 +725,9 @@ class OnlineMatchControllerTest {
         delay(75)
 
         assertEquals(0, repository.submitCalls)
+        assertEquals(0, repository.resumeCalls)
         assertEquals("ACTIVE", repository.startState.serverStatus)
+        assertEquals(2, repository.startState.negotiationEpoch)
         assertEquals(MatchStatus.PLAYING, controller.viewState.matchState.status)
         controller.close()
     }

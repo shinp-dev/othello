@@ -8,7 +8,9 @@ import org.junit.Test
 
 class AuthUiArchitectureContractTest {
     private val authGate = File("src/main/kotlin/com/example/othello/AuthGate.kt").readText()
-    private val mainActivity = File("src/main/kotlin/com/example/othello/MainActivity.kt").readText()
+    private val mainActivity = File("src/main/kotlin/com/example/othello/MainActivity.kt")
+        .readText()
+        .replace("\r\n", "\n")
     private val topLevelScreens = File("src/main/kotlin/com/example/othello/TopLevelScreens.kt").readText()
     private val accountScreen = File("src/main/kotlin/com/example/othello/AccountScreen.kt").readText()
     private val analysisScreens = File("src/main/kotlin/com/example/othello/AnalysisScreens.kt").readText()

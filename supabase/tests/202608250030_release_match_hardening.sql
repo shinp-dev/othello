@@ -94,6 +94,8 @@ select ok(position('p_negotiation_epoch integer' in
   'signaling publish requires the client expected negotiation epoch');
 select ok(to_regprocedure('public.run_match_maintenance_v2(integer)') is not null,
   'bounded maintenance RPC exists');
+select ok(to_regprocedure('public.run_legacy_match_maintenance_v1(integer)') is not null,
+  'bounded protocol-1 coexistence maintenance RPC exists');
 select ok(position('negotiation_epoch integer' in
   pg_get_function_result('public.enqueue_or_match_v2(uuid)'::regprocedure)) > 0,
   'enqueue assignment includes negotiation epoch');
@@ -142,7 +144,7 @@ select ok(not exists (
        'get_release_match_state_v2', 'ack_match_started_v2',
        'abandon_match_v2', 'resume_match_v2', 'reconcile_match_v2',
        'submit_match_result_v2', 'publish_match_signal_v2',
-       'run_match_maintenance_v2'
+       'run_match_maintenance_v2', 'run_legacy_match_maintenance_v1'
      )
      and (not p.prosecdef or not coalesce(p.proconfig, '{}') @> array['search_path=""'])
 ), 'every release helper and RPC is SECURITY DEFINER with an empty search path');
@@ -167,9 +169,13 @@ select ok(not has_function_privilege('authenticated',
   'execute'), 'authenticated clients cannot invoke authority helpers');
 select ok(has_function_privilege('service_role',
   'public.run_match_maintenance_v2(integer)', 'execute')
+  and has_function_privilege('service_role',
+  'public.run_legacy_match_maintenance_v1(integer)', 'execute')
   and not has_function_privilege('authenticated',
-  'public.run_match_maintenance_v2(integer)', 'execute'),
-  'only service_role can execute release maintenance');
+  'public.run_match_maintenance_v2(integer)', 'execute')
+  and not has_function_privilege('authenticated',
+  'public.run_legacy_match_maintenance_v1(integer)', 'execute'),
+  'only service_role can execute release and coexistence maintenance');
 select ok(not has_function_privilege('authenticated',
   'public.finalize_match_v2(uuid)', 'execute')
   and not has_function_privilege('authenticated',
@@ -257,7 +263,7 @@ insert into auth.users (
 select ('00000000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid,
        'authenticated', 'authenticated',
        'release-' || i::text || '@example.test', '', now(), '{}', '{}'
-  from generate_series(301, 338) i;
+  from generate_series(301, 342) i;
 
 create function pg_temp.create_release_match(
   p_match_id uuid,
@@ -502,6 +508,82 @@ select is((select count(*)::integer from public.match_signaling
   'existing protocol-1 maintenance removes disposable signaling rows');
 select set_config('request.jwt.claim.role', 'authenticated', false);
 
+insert into public.matches(
+  id, black_player, white_player, status, server_status, protocol_version,
+  created_expires_at
+) values
+  ('10000000-0000-4000-8000-000000000343',
+   '00000000-0000-4000-8000-000000000337',
+   '00000000-0000-4000-8000-000000000338', 'PLAYING', 'CREATED', 1,
+   now() + interval '2 minutes'),
+  ('10000000-0000-4000-8000-000000000344',
+   '00000000-0000-4000-8000-000000000337',
+   '00000000-0000-4000-8000-000000000338', 'PLAYING', 'CREATED', 1,
+   now() + interval '2 minutes');
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000337', false);
+insert into public.match_signaling(
+  match_id, sender_id, signal_type, sdp, protocol_version
+) values
+  ('10000000-0000-4000-8000-000000000343',
+   '00000000-0000-4000-8000-000000000337', 'OFFER', 'bounded-cleanup-1', 1),
+  ('10000000-0000-4000-8000-000000000344',
+   '00000000-0000-4000-8000-000000000337', 'OFFER', 'bounded-cleanup-2', 1);
+update public.matches set created_expires_at = now() - interval '1 second'
+ where id in (
+   '10000000-0000-4000-8000-000000000343',
+   '10000000-0000-4000-8000-000000000344'
+ );
+insert into public.match_queue(
+  user_id, current_rating, queued_at, expires_at, protocol_version
+) values
+  ('00000000-0000-4000-8000-000000000337', 1500,
+   now() - interval '2 minutes', now() - interval '1 second', 1),
+  ('00000000-0000-4000-8000-000000000338', 1500,
+   now() - interval '2 minutes', now() - interval '1 second', 1);
+select set_config('request.jwt.claim.role', 'service_role', false);
+create temporary table legacy_maintenance_first on commit drop as
+select * from public.run_legacy_match_maintenance_v1(1);
+select ok((select terminalized_matches = 1 and deleted_signals = 1
+  and deleted_queue_rows = 1 from legacy_maintenance_first)
+  and (select count(*) = 1 from public.matches
+    where id in (
+      '10000000-0000-4000-8000-000000000343',
+      '10000000-0000-4000-8000-000000000344'
+    ) and server_status = 'CREATED')
+  and (select count(*) = 1 from public.match_signaling
+    where match_id in (
+      '10000000-0000-4000-8000-000000000343',
+      '10000000-0000-4000-8000-000000000344'
+    ))
+  and (select count(*) = 1 from public.match_queue
+    where user_id in (
+      '00000000-0000-4000-8000-000000000337',
+      '00000000-0000-4000-8000-000000000338'
+    )),
+  'protocol-1 coexistence maintenance honors its one-row batch limit');
+create temporary table legacy_maintenance_second on commit drop as
+select * from public.run_legacy_match_maintenance_v1(1);
+select ok((select terminalized_matches = 1 and deleted_signals = 1
+  and deleted_queue_rows = 1 from legacy_maintenance_second)
+  and (select count(*) = 2 from public.matches
+    where id in (
+      '10000000-0000-4000-8000-000000000343',
+      '10000000-0000-4000-8000-000000000344'
+    ) and server_status = 'ABANDONED')
+  and (select count(*) = 0 from public.match_signaling
+    where match_id in (
+      '10000000-0000-4000-8000-000000000343',
+      '10000000-0000-4000-8000-000000000344'
+    ))
+  and (select count(*) = 0 from public.match_queue
+    where user_id in (
+      '00000000-0000-4000-8000-000000000337',
+      '00000000-0000-4000-8000-000000000338'
+    )),
+  'a second bounded coexistence batch drains the remaining legacy rows');
+select set_config('request.jwt.claim.role', 'authenticated', false);
+
 -- Matchmaking response loss, queue cancellation, and pool isolation ---------
 
 select set_config('request.jwt.claim.role', 'authenticated', false);
@@ -744,7 +826,7 @@ select throws_ok(
       (select match_id from mm_matched), auth.uid(), 'OFFER',
       'legacy-bypass', 1
     )$$,
-  '42501', 'new row violates row-level security policy for table "match_signaling"',
+  'P0001', 'legacy signaling participant required',
   'protocol-2 participant cannot bypass publish limits through legacy signaling'
 );
 reset role;
@@ -927,6 +1009,12 @@ select set_config('request.jwt.claim.sub',
 select * from public.submit_match_result_v2(
   '10000000-0000-4000-8000-000000000309',
   '30000000-0000-4000-8000-000000000309', 'd3', 'DISCONNECT', 'WHITE', null);
+create temporary table report_first_observed_state on commit drop as
+select * from public.get_release_match_state_v2(
+  '10000000-0000-4000-8000-000000000309');
+select ok((select lifecycle_status = 'RECONNECTING' and negotiation_epoch = 1
+  from report_first_observed_state),
+  'coordinator reading after the disconnect report adopts the authoritative reconnect epoch');
 select ok((select release_status = 'RECONNECTING'
   and reconnect_deadline <= now() + interval '45 seconds'
   and negotiation_epoch = 1
@@ -974,6 +1062,84 @@ update public.matches set release_deadline = now() - interval '1 second'
  where id = '10000000-0000-4000-8000-000000000309';
 select * from public.reconcile_match_v2(
   '10000000-0000-4000-8000-000000000309');
+
+-- The coordinator can read ACTIVE immediately before the Controller's disconnect
+-- report commits. Its subsequent resume must join that same epoch and complete it.
+select pg_temp.create_release_match(
+  '10000000-0000-4000-8000-000000000339',
+  '00000000-0000-4000-8000-000000000339',
+  '00000000-0000-4000-8000-000000000340');
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000339', false);
+create temporary table read_before_disconnect_report on commit drop as
+select * from public.get_release_match_state_v2(
+  '10000000-0000-4000-8000-000000000339');
+select ok((select lifecycle_status = 'ACTIVE' and negotiation_epoch = 0
+  from read_before_disconnect_report),
+  'race fixture observes ACTIVE at the old epoch before disconnect evidence commits');
+select * from public.submit_match_result_v2(
+  '10000000-0000-4000-8000-000000000339',
+  '30000000-0000-4000-8000-000000000339', 'd3', 'DISCONNECT', 'WHITE', null);
+create temporary table resume_after_disconnect_report on commit drop as
+select * from public.resume_match_v2(
+  '10000000-0000-4000-8000-000000000339');
+select ok((select lifecycle_status = 'RECONNECTING' and negotiation_epoch = 1
+  from resume_after_disconnect_report),
+  'resume after the raced report joins epoch one without a second increment');
+select * from public.publish_match_signal_v2(
+  '10000000-0000-4000-8000-000000000339', 'OFFER', 'race-report-first-offer', 2, 1);
+select * from public.ack_match_started_v2(
+  '10000000-0000-4000-8000-000000000339');
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000340', false);
+select * from public.publish_match_signal_v2(
+  '10000000-0000-4000-8000-000000000339', 'ANSWER', 'race-report-first-answer', 2, 1);
+select * from public.ack_match_started_v2(
+  '10000000-0000-4000-8000-000000000339');
+select ok((select release_status = 'ACTIVE' and negotiation_epoch = 1
+  from public.matches where id = '10000000-0000-4000-8000-000000000339')
+  and (select count(*) = 2 from public.match_start_acks_v2
+    where match_id = '10000000-0000-4000-8000-000000000339'
+      and negotiation_epoch = 1),
+  'read-before-report ordering completes fresh signaling and bilateral ACK at ACTIVE epoch one');
+
+-- The inverse arrival order is also one epoch: resume locks ACTIVE first, and the
+-- delayed disconnect report observes RECONNECTING rather than incrementing again.
+select pg_temp.create_release_match(
+  '10000000-0000-4000-8000-000000000341',
+  '00000000-0000-4000-8000-000000000341',
+  '00000000-0000-4000-8000-000000000342');
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000341', false);
+create temporary table read_before_resume on commit drop as
+select * from public.get_release_match_state_v2(
+  '10000000-0000-4000-8000-000000000341');
+select * from public.resume_match_v2(
+  '10000000-0000-4000-8000-000000000341');
+select * from public.submit_match_result_v2(
+  '10000000-0000-4000-8000-000000000341',
+  '30000000-0000-4000-8000-000000000341', 'd3', 'DISCONNECT', 'WHITE', null);
+select ok((select lifecycle_status = 'ACTIVE' and negotiation_epoch = 0
+  from read_before_resume)
+  and (select release_status = 'RECONNECTING' and negotiation_epoch = 1
+    from public.matches where id = '10000000-0000-4000-8000-000000000341'),
+  'resume-before-report ordering also creates exactly one reconnect epoch');
+select * from public.publish_match_signal_v2(
+  '10000000-0000-4000-8000-000000000341', 'OFFER', 'race-resume-first-offer', 2, 1);
+select * from public.ack_match_started_v2(
+  '10000000-0000-4000-8000-000000000341');
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000342', false);
+select * from public.publish_match_signal_v2(
+  '10000000-0000-4000-8000-000000000341', 'ANSWER', 'race-resume-first-answer', 2, 1);
+select * from public.ack_match_started_v2(
+  '10000000-0000-4000-8000-000000000341');
+select ok((select release_status = 'ACTIVE' and negotiation_epoch = 1
+  from public.matches where id = '10000000-0000-4000-8000-000000000341')
+  and (select count(*) = 2 from public.match_start_acks_v2
+    where match_id = '10000000-0000-4000-8000-000000000341'
+      and negotiation_epoch = 1),
+  'resume-before-report ordering returns to ACTIVE after bilateral current-epoch ACK');
 
 -- A match owns only epochs 0..3, even when both participants coordinate retries.
 select pg_temp.create_release_match(

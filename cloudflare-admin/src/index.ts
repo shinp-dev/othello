@@ -25,6 +25,7 @@ async function runScheduledMaintenance(env: Env): Promise<void> {
   const results = await Promise.allSettled([
     queueExpiredAccountDeletions(env).then(() => processPendingAccountDeletions(env)),
     runReleaseMatchMaintenance(env),
+    runLegacyMatchMaintenance(env),
   ]);
   const failures = results.flatMap((result, index) => result.status === "rejected"
     ? [{ index, reason: result.reason }]
@@ -54,6 +55,23 @@ async function runReleaseMatchMaintenance(env: Env): Promise<void> {
     `signals=${row.deleted_signals}, queue=${row.deleted_queue_rows}`,
   );
   if (row.terminalized_matches >= 100) console.warn("release match maintenance reached its batch limit; backlog may remain");
+}
+
+/** Bounded protocol-1 coexistence cleanup; no legacy client RPC is changed. */
+async function runLegacyMatchMaintenance(env: Env): Promise<void> {
+  const response = await supabase(env, "/rest/v1/rpc/run_legacy_match_maintenance_v1", {
+    method: "POST",
+    body: JSON.stringify({ p_limit: 100 }),
+  });
+  if (!response.ok) throw new Error(`legacy match maintenance failed: ${response.status}`);
+  const payload = await response.json() as unknown;
+  const row = Array.isArray(payload) ? payload[0] : payload;
+  if (!isMaintenanceResult(row)) throw new Error("legacy match maintenance returned an invalid response");
+  console.log(
+    `legacy match maintenance: terminalized=${row.terminalized_matches}, ` +
+    `signals=${row.deleted_signals}, queue=${row.deleted_queue_rows}`,
+  );
+  if (row.terminalized_matches >= 100) console.warn("legacy match maintenance reached its batch limit; backlog may remain");
 }
 
 interface MaintenanceResult {

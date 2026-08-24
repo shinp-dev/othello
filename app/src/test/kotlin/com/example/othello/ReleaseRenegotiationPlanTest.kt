@@ -21,7 +21,7 @@ class ReleaseRenegotiationPlanTest {
     }
 
     @Test
-    fun openTransportStillSignalsWhenServerAlreadyEnteredReconnectEpoch() {
+    fun reportBeforeServerReadSignalsTheAuthoritativeReconnectEpoch() {
         assertEquals(
             ReleaseRenegotiationAction.SIGNAL_CURRENT_EPOCH,
             planReleaseRenegotiation(
@@ -36,7 +36,7 @@ class ReleaseRenegotiationPlanTest {
     }
 
     @Test
-    fun activeServerEpochAheadOfOpenTransportForcesAuthoritativeSynchronization() {
+    fun alreadyRecoveredActiveEpochSynchronizesWithoutSpendingAnotherEpoch() {
         assertEquals(
             ReleaseRenegotiationAction.SYNCHRONIZE_CURRENT_EPOCH,
             planReleaseRenegotiation(
@@ -51,9 +51,9 @@ class ReleaseRenegotiationPlanTest {
     }
 
     @Test
-    fun activeServerWithReconnectingControllerCannotTakeTransientSkipPath() {
+    fun activeSameEpochReadAfterLocalDebounceStartsOneAuthoritativeReconnectEpoch() {
         assertEquals(
-            ReleaseRenegotiationAction.SYNCHRONIZE_CURRENT_EPOCH,
+            ReleaseRenegotiationAction.START_NEW_EPOCH,
             planReleaseRenegotiation(
                 force = false,
                 transportState = TransportState.OPEN,

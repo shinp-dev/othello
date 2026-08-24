@@ -145,6 +145,8 @@ $releaseRequiredPatterns = @(
     'RECONNECT_BUDGET_EXHAUSTED_UNRATED',
     'create function public\.run_match_maintenance_v2',
     'grant execute on function public\.run_match_maintenance_v2\(integer\) to service_role',
+    'create function public\.run_legacy_match_maintenance_v1',
+    'grant execute on function public\.run_legacy_match_maintenance_v1\(integer\) to service_role',
     'revoke all on table[\s\S]*public\.match_signals_v2[\s\S]*from public, anon, authenticated',
     'grant select on table public\.match_results_v2, public\.match_signals_v2 to authenticated',
     'game_records_v2_canonical_required[\s\S]*result_contract_version <> 2 or canonical_moves is not null',
@@ -178,7 +180,10 @@ $releaseTestPatterns = @(
     'duplicate NORMAL request never rates twice',
     'protocol-1 BLACK cannot submit an illegal canonical line for rating',
     'protocol-1 direct INSERT rejects signaling beyond the sender budget',
-    'protocol-1 terminal match rejects later direct signaling INSERT'
+    'protocol-1 terminal match rejects later direct signaling INSERT',
+    'protocol-1 coexistence maintenance honors its one-row batch limit',
+    'read-before-report ordering completes fresh signaling and bilateral ACK at ACTIVE epoch one',
+    'resume-before-report ordering returns to ACTIVE after bilateral current-epoch ACK'
 )
 $releaseTestMissing = $releaseTestPatterns | Where-Object { $releaseTestSql -notmatch [regex]::Escape($_) }
 if ($releaseTestMissing) { $releaseTestMissing | ForEach-Object { Write-Error "Missing release-v2 pgTAP boundary: $_" }; exit 1 }

@@ -2161,6 +2161,93 @@ begin
 end;
 $$;
 
+-- The existing Worker also owns the protocol-1 coexistence sweep. Keep the old
+-- no-argument cleanup functions available for operational compatibility, but give
+-- the scheduled path one explicitly bounded transaction with the same result shape
+-- as v2 maintenance.
+create function public.run_legacy_match_maintenance_v1(p_limit integer default 100)
+returns table(
+  terminalized_matches integer,
+  deleted_signals integer,
+  deleted_queue_rows integer
+)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  terminalized_count integer := 0;
+  signal_count integer := 0;
+  queue_count integer := 0;
+begin
+  if auth.role() <> 'service_role' then raise exception 'service role required'; end if;
+  if p_limit is null or p_limit not between 1 and 1000 then
+    raise exception 'maintenance limit out of range';
+  end if;
+
+  -- Persist terminal business state first. One ordered candidate set covers all
+  -- legacy lease classes without changing the public no-argument cleanup RPCs.
+  with cleanup_candidates as (
+    select m.id
+      from public.matches m
+     where m.protocol_version = 1
+       and (
+         (m.server_status = 'CREATED' and m.p2p_started_at is null
+           and m.created_expires_at <= now())
+         or (m.server_status = 'CREATED' and m.p2p_started_at is not null
+           and m.play_lease_expires_at <= now())
+         or (m.server_status = 'PENDING_RESULT' and m.result_expires_at <= now())
+       )
+     order by case
+       when m.server_status = 'PENDING_RESULT' then m.result_expires_at
+       when m.p2p_started_at is null then m.created_expires_at
+       else m.play_lease_expires_at
+     end, m.id
+     for update skip locked
+     limit p_limit
+  )
+  update public.matches m
+     set server_status = 'ABANDONED'
+    from cleanup_candidates c
+   where m.id = c.id;
+  get diagnostics terminalized_count = row_count;
+
+  with cleanup_candidates as (
+    select s.id
+      from public.match_signaling s
+      join public.matches m on m.id = s.match_id
+     where m.protocol_version = 1
+       and (
+         m.server_status <> 'CREATED'
+         or m.p2p_started_at is not null
+         or m.created_expires_at <= now()
+       )
+     order by s.created_at, s.id
+     for update of s skip locked
+     limit p_limit
+  )
+  delete from public.match_signaling s
+   using cleanup_candidates c
+   where s.id = c.id;
+  get diagnostics signal_count = row_count;
+
+  with cleanup_candidates as (
+    select q.user_id
+      from public.match_queue q
+     where q.protocol_version = 1 and q.expires_at <= now()
+     order by q.expires_at, q.user_id
+     for update skip locked
+     limit p_limit
+  )
+  delete from public.match_queue q
+   using cleanup_candidates c
+   where q.user_id = c.user_id and q.protocol_version = 1;
+  get diagnostics queue_count = row_count;
+
+  return query select terminalized_count, signal_count, queue_count;
+end;
+$$;
+
 do $$
 begin
   alter publication supabase_realtime add table public.match_signals_v2;
@@ -2591,6 +2678,8 @@ revoke all on function public.publish_match_signal_v2(uuid, text, text, integer,
   from public, anon;
 revoke all on function public.run_match_maintenance_v2(integer)
   from public, anon, authenticated;
+revoke all on function public.run_legacy_match_maintenance_v1(integer)
+  from public, anon, authenticated;
 revoke all on function public.get_match_start_state(uuid) from public, anon;
 
 grant execute on function public.enqueue_or_match_v2(uuid) to authenticated;
@@ -2606,6 +2695,7 @@ grant execute on function public.submit_match_result_v2(uuid, uuid, text, text, 
 grant execute on function public.publish_match_signal_v2(uuid, text, text, integer, integer)
   to authenticated;
 grant execute on function public.run_match_maintenance_v2(integer) to service_role;
+grant execute on function public.run_legacy_match_maintenance_v1(integer) to service_role;
 grant execute on function public.get_match_start_state(uuid) to authenticated;
 
 -- Reassert the unchanged protocol-1 grants after replacing the compatibility bodies.
@@ -2626,3 +2716,5 @@ grant execute on function public.cleanup_expired_pending_results() to service_ro
 
 comment on function public.run_match_maintenance_v2(integer) is
   'Bounded service-role safety sweep. Deploy its caller separately; this migration creates no production schedule.';
+comment on function public.run_legacy_match_maintenance_v1(integer) is
+  'Bounded service-role coexistence sweep for protocol-1 leases, signaling, and queue rows.';

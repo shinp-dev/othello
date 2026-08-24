@@ -46,8 +46,13 @@ internal fun planReleaseRenegotiation(
     serverStatus == "MATCHED" -> ReleaseRenegotiationAction.SIGNAL_CURRENT_EPOCH
     serverStatus == "ACTIVE" && transportState == TransportState.OPEN && serverEpoch != currentEpoch ->
         ReleaseRenegotiationAction.SYNCHRONIZE_CURRENT_EPOCH
-    serverStatus == "ACTIVE" && transportState == TransportState.OPEN && controllerReconnecting ->
-        ReleaseRenegotiationAction.SYNCHRONIZE_CURRENT_EPOCH
+    // Once the Controller has crossed its disconnect debounce, an ACTIVE same-epoch
+    // read is not enough to prove the disconnect report lost the race. Entering the
+    // resumable server transition is idempotent with that in-flight report: whichever
+    // request locks ACTIVE first creates the one next epoch and the other observes
+    // RECONNECTING without incrementing it again.
+    serverStatus == "ACTIVE" && controllerReconnecting ->
+        ReleaseRenegotiationAction.START_NEW_EPOCH
     serverStatus == "ACTIVE" && transportState == TransportState.OPEN && !force ->
         ReleaseRenegotiationAction.SKIP_TRANSIENT_RECOVERY
     serverStatus == "ACTIVE" -> ReleaseRenegotiationAction.START_NEW_EPOCH
