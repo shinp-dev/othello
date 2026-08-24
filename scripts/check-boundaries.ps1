@@ -33,17 +33,27 @@ if ($supabaseBuild -notmatch 'io\.ktor:ktor-client-okhttp' -or $supabaseBuild -m
     Write-Error 'Supabase Realtime requires a WebSocket-capable Ktor engine (OkHttp)'; exit 1
 }
 $supabaseSource = Get-Content 'data/supabase/src/main/kotlin/com/example/othello/data/supabase/SupabaseContracts.kt' -Raw
-$scalarRpcPatterns = @(
-    'rpc\("cancel_waiting"\)\.decodeAs<Boolean>\(\)',
-    'rpc\("heartbeat_waiting"\)\.decodeAs<Boolean>\(\)',
-    'rpc\("reconcile_expired_active_match_for_user"\)\.decodeAs<Int>\(\)',
-    'rpc\("ack_match_started", AckParams\(matchId\)\)\.decodeAs<String>\(\)',
-    'rpc\("abandon_match", AckParams\(matchId\)\)\.decodeAs<String>\(\)',
-    '(?s)rpc\(\s*"submit_match_result".{0,1000}?\)\.decodeAs<String>\(\)'
+$releaseRpcPatterns = @(
+    '(?s)rpc\("enqueue_or_match_v2".{0,200}?decodeList<EnqueueRow>\(\)\s*\.single\(\)',
+    '(?s)rpc\("cancel_waiting_v2".{0,200}?decodeList<ClaimRow>\(\)\s*\.singleOrNull\(\)',
+    '(?s)rpc\("claim_active_match_v2"\).{0,120}?decodeList<ClaimRow>\(\)\s*\.singleOrNull\(\)',
+    '(?s)rpc\("ack_match_started_v2".{0,180}?decodeList<ReleaseMatchStateRow>\(\)\s*\.single\(\)',
+    '(?s)rpc\("get_release_match_state_v2".{0,180}?decodeList<ReleaseMatchStateRow>\(\)\s*\.single\(\)',
+    '(?s)rpc\("abandon_match_v2".{0,160}?decodeAs<String>\(\)',
+    '(?s)rpc\(\s*"submit_match_result_v2".{0,800}?decodeList<ReleaseResultRow>\(\)\.single\(\)',
+    '(?s)rpc\(name, AckParams\(matchId\.requireUuid\(\)\)\).{0,120}?decodeList<ReleaseMatchStateRow>\(\)\s*\.single\(\)',
+    '"resume_match_v2"',
+    '"reconcile_match_v2"',
+    '"publish_match_signal_v2"'
 )
-$missingScalarDecoders = $scalarRpcPatterns | Where-Object { $supabaseSource -notmatch $_ }
-if ($missingScalarDecoders) {
-    $missingScalarDecoders | ForEach-Object { Write-Error "Scalar PostgREST RPC must use decodeAs, not decodeSingle: $_" }
+$missingReleaseContracts = $releaseRpcPatterns | Where-Object { $supabaseSource -notmatch $_ }
+if ($missingReleaseContracts) {
+    $missingReleaseContracts | ForEach-Object { Write-Error "Release-v2 PostgREST RPC/decode contract is missing: $_" }
+    exit 1
+}
+$legacyAndroidRpc = $supabaseSource | Select-String -Pattern '"(enqueue_or_match|claim_waiting_match|cancel_waiting|heartbeat_waiting|reconcile_expired_active_match_for_user|ack_match_started|abandon_match|submit_match_result|get_match_start_state)"'
+if ($legacyAndroidRpc) {
+    $legacyAndroidRpc | ForEach-Object { Write-Error "Android release client must not call a protocol-v1 RPC: $_" }
     exit 1
 }
 $appManifest = Get-Content 'app/src/main/AndroidManifest.xml' -Raw

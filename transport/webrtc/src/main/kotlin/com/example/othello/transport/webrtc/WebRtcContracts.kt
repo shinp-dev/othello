@@ -4,11 +4,16 @@ import android.content.Context
 import com.example.othello.network.MatchTransport
 import com.example.othello.network.FinishCommand
 import com.example.othello.network.FinishCommandJson
+import com.example.othello.network.MoveAck
+import com.example.othello.network.MoveAckJson
 import com.example.othello.network.MoveCommand
 import com.example.othello.network.MoveCommandJson
+import com.example.othello.network.SyncMessage
+import com.example.othello.network.SyncMessageJson
 import com.example.othello.network.TransportState
 import com.example.othello.network.TransportDiagnostics
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.webrtc.DataChannel
 import org.webrtc.IceCandidate
@@ -51,15 +56,19 @@ class AndroidWebRtcTransport(
     private val stateListeners = CopyOnWriteArraySet<(TransportState) -> Unit>()
     private val commandListeners = CopyOnWriteArraySet<(MoveCommand) -> Unit>()
     private val finishListeners = CopyOnWriteArraySet<(FinishCommand) -> Unit>()
+    private val moveAckListeners = CopyOnWriteArraySet<(MoveAck) -> Unit>()
+    private val syncListeners = CopyOnWriteArraySet<(SyncMessage) -> Unit>()
     private val factory: PeerConnectionFactory
     private val peerConnection: PeerConnection
-    private var dataChannel: DataChannel? = null
+    @Volatile private var dataChannel: DataChannel? = null
     private var state: TransportState = TransportState.NEW
     private var iceState = "NEW"
     private var peerConnectionState = "NEW"
     private var dataChannelState = "NEW"
-    private val dataChannelOpen = kotlinx.coroutines.CompletableDeferred<Unit>()
-    private val iceGatheringComplete = kotlinx.coroutines.CompletableDeferred<Unit>()
+    @Volatile private var dataChannelOpen = kotlinx.coroutines.CompletableDeferred<Unit>()
+    @Volatile private var iceGatheringComplete = kotlinx.coroutines.CompletableDeferred<Unit>()
+    @Volatile private var negotiationGeneration = 0
+    @Volatile private var iceGatheringStartedGeneration = -1
     private val closed = AtomicBoolean(false)
 
     init {
@@ -109,11 +118,39 @@ class AndroidWebRtcTransport(
         }
     }
 
-    suspend fun awaitDataChannelOpen() { dataChannelOpen.await() }
+    suspend fun awaitDataChannelOpen() {
+        withTimeout(DATA_CHANNEL_OPEN_TIMEOUT_MILLIS) { dataChannelOpen.await() }
+    }
 
+    @Synchronized
     fun provideOffererDataChannel() {
         check(!closed.get()) { "WebRTC transport is closed" }
-        if (dataChannel == null) dataChannel = peerConnection.createDataChannel("othello", DataChannel.Init()).also { attach(it) }
+        if (dataChannel == null) {
+            val channel = peerConnection.createDataChannel("othello", DataChannel.Init())
+            dataChannel = channel
+            attach(channel, negotiationGeneration)
+        }
+    }
+
+    /** Starts a bounded v2 renegotiation without replacing the controller or its transcript. */
+    @Synchronized
+    fun prepareForRenegotiation(offerer: Boolean) {
+        check(!closed.get()) { "WebRTC transport is closed" }
+        val superseded = CancellationException("WebRTC negotiation superseded")
+        dataChannelOpen.completeExceptionally(superseded)
+        iceGatheringComplete.completeExceptionally(superseded)
+        negotiationGeneration += 1
+        iceGatheringStartedGeneration = -1
+        dataChannel?.unregisterObserver()
+        dataChannel?.close()
+        dataChannel?.dispose()
+        dataChannel = null
+        dataChannelState = "NEW"
+        dataChannelOpen = kotlinx.coroutines.CompletableDeferred()
+        iceGatheringComplete = kotlinx.coroutines.CompletableDeferred()
+        peerConnection.restartIce()
+        updateState(TransportState.CONNECTING)
+        if (offerer) provideOffererDataChannel()
     }
 
     override suspend fun send(command: MoveCommand) {
@@ -124,6 +161,14 @@ class AndroidWebRtcTransport(
         sendPayload(FinishCommandJson.encode(command))
     }
 
+    override suspend fun sendMoveAck(ack: MoveAck) {
+        sendPayload(MoveAckJson.encode(ack))
+    }
+
+    override suspend fun sendSync(message: SyncMessage) {
+        sendPayload(SyncMessageJson.encode(message))
+    }
+
     override fun observe(onCommand: (MoveCommand) -> Unit): AutoCloseable {
         commandListeners += onCommand
         return AutoCloseable { commandListeners -= onCommand }
@@ -132,6 +177,16 @@ class AndroidWebRtcTransport(
     override fun observeFinish(onCommand: (FinishCommand) -> Unit): AutoCloseable {
         finishListeners += onCommand
         return AutoCloseable { finishListeners -= onCommand }
+    }
+
+    override fun observeMoveAck(onAck: (MoveAck) -> Unit): AutoCloseable {
+        moveAckListeners += onAck
+        return AutoCloseable { moveAckListeners -= onAck }
+    }
+
+    override fun observeSync(onMessage: (SyncMessage) -> Unit): AutoCloseable {
+        syncListeners += onMessage
+        return AutoCloseable { syncListeners -= onMessage }
     }
 
     override fun observeState(onState: (TransportState) -> Unit): AutoCloseable {
@@ -161,6 +216,8 @@ class AndroidWebRtcTransport(
         factory.dispose()
         commandListeners.clear()
         finishListeners.clear()
+        moveAckListeners.clear()
+        syncListeners.clear()
         updateState(TransportState.CLOSED)
         stateListeners.clear()
     }
@@ -200,7 +257,7 @@ class AndroidWebRtcTransport(
         return SessionDescriptionPayload(gathered.type.canonicalForm(), gathered.description)
     }
 
-    private fun attach(channel: DataChannel) {
+    private fun attach(channel: DataChannel, generation: Int) {
         if (closed.get()) {
             channel.close()
             channel.dispose()
@@ -209,28 +266,52 @@ class AndroidWebRtcTransport(
         channel.registerObserver(object : DataChannel.Observer {
             override fun onBufferedAmountChange(previousAmount: Long) = Unit
             override fun onStateChange() {
-                if (closed.get()) return
+                if (closed.get() || generation != negotiationGeneration || channel !== dataChannel) return
                 when (channel.state()) {
                     DataChannel.State.OPEN -> { dataChannelState = "OPEN"; updateState(TransportState.OPEN); dataChannelOpen.complete(Unit) }
                     DataChannel.State.CLOSING -> { dataChannelState = "CLOSING"; updateState(TransportState.CLOSING) }
-                    DataChannel.State.CLOSED -> { dataChannelState = "CLOSED"; updateState(TransportState.CLOSED) }
+                    DataChannel.State.CLOSED -> {
+                        dataChannelState = "CLOSED"
+                        failDataChannelOpen("DataChannel closed before opening")
+                        updateState(TransportState.CLOSED)
+                    }
                     else -> Unit
                 }
             }
             override fun onMessage(buffer: DataChannel.Buffer) {
-                if (closed.get() || buffer.binary || buffer.data.remaining() > MAX_PAYLOAD_BYTES) {
+                if (closed.get() || generation != negotiationGeneration || channel !== dataChannel) return
+                if (buffer.binary || buffer.data.remaining() > MAX_PAYLOAD_BYTES) {
                     updateState(TransportState.FAILED)
                     return
                 }
                 val payload = StandardCharsets.UTF_8.decode(buffer.data).toString()
-                MoveCommandJson.decode(payload).onSuccess { decodedCommand -> commandListeners.forEach { it(decodedCommand) } }
-                    .onFailure {
-                        FinishCommandJson.decode(payload)
-                            .onSuccess { decodedCommand -> finishListeners.forEach { it(decodedCommand) } }
-                            .onFailure { updateState(TransportState.FAILED) }
-                    }
+                if (!dispatchPayload(payload)) updateState(TransportState.FAILED)
             }
         })
+    }
+
+    private fun dispatchPayload(payload: String): Boolean {
+        MoveCommandJson.decode(payload).getOrNull()?.let { command ->
+            commandListeners.forEach { it(command) }
+            return true
+        }
+        FinishCommandJson.decode(payload).getOrNull()?.let { command ->
+            finishListeners.forEach { it(command) }
+            return true
+        }
+        MoveAckJson.decode(payload).getOrNull()?.let { ack ->
+            moveAckListeners.forEach { it(ack) }
+            return true
+        }
+        SyncMessageJson.decode(payload).getOrNull()?.let { message ->
+            syncListeners.forEach { it(message) }
+            return true
+        }
+        return false
+    }
+
+    private fun failDataChannelOpen(message: String) {
+        if (!dataChannelOpen.isCompleted) dataChannelOpen.completeExceptionally(IllegalStateException(message))
     }
 
     private fun updateState(next: TransportState) {
@@ -244,7 +325,19 @@ class AndroidWebRtcTransport(
         override fun onIceCandidatesRemoved(candidates: Array<IceCandidate>) = Unit
         override fun onIceGatheringChange(newState: PeerConnection.IceGatheringState) {
             if (closed.get()) return
-            if (newState == PeerConnection.IceGatheringState.COMPLETE) iceGatheringComplete.complete(Unit)
+            when (newState) {
+                PeerConnection.IceGatheringState.GATHERING -> {
+                    iceGatheringStartedGeneration = negotiationGeneration
+                }
+                PeerConnection.IceGatheringState.COMPLETE -> {
+                    // A COMPLETE callback queued by the previous generation must not
+                    // release the new offer before its own gathering cycle started.
+                    if (iceGatheringStartedGeneration == negotiationGeneration) {
+                        iceGatheringComplete.complete(Unit)
+                    }
+                }
+                else -> Unit
+            }
         }
         override fun onDataChannel(channel: DataChannel) {
             if (closed.get() || dataChannel != null) {
@@ -253,7 +346,7 @@ class AndroidWebRtcTransport(
                 return
             }
             dataChannel = channel
-            attach(channel)
+            attach(channel, negotiationGeneration)
         }
         override fun onSignalingChange(newState: PeerConnection.SignalingState) = Unit
         override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState) {
@@ -266,7 +359,24 @@ class AndroidWebRtcTransport(
                 PeerConnection.IceConnectionState.CLOSED -> "CLOSED"
                 else -> newState.name
             }
-            if (newState == PeerConnection.IceConnectionState.FAILED) updateState(TransportState.FAILED)
+            when (newState) {
+                PeerConnection.IceConnectionState.CONNECTED,
+                PeerConnection.IceConnectionState.COMPLETED,
+                -> {
+                    updateState(TransportState.CONNECTED)
+                    if (dataChannel?.state() == DataChannel.State.OPEN) updateState(TransportState.OPEN)
+                }
+                PeerConnection.IceConnectionState.DISCONNECTED -> updateState(TransportState.DISCONNECTED)
+                PeerConnection.IceConnectionState.FAILED -> {
+                    failDataChannelOpen("ICE connection failed before DataChannel opened")
+                    updateState(TransportState.FAILED)
+                }
+                PeerConnection.IceConnectionState.CLOSED -> {
+                    failDataChannelOpen("ICE connection closed before DataChannel opened")
+                    updateState(TransportState.CLOSED)
+                }
+                else -> Unit
+            }
         }
         override fun onIceConnectionReceivingChange(receiving: Boolean) = Unit
         override fun onAddStream(stream: org.webrtc.MediaStream) = Unit
@@ -278,6 +388,7 @@ class AndroidWebRtcTransport(
 
     private companion object {
         const val MAX_PAYLOAD_BYTES = 32 * 1024
+        const val DATA_CHANNEL_OPEN_TIMEOUT_MILLIS = 10_000L
         const val ICE_GATHERING_TIMEOUT_MILLIS = 10_000L
         val factoryInitialized = AtomicBoolean(false)
     }

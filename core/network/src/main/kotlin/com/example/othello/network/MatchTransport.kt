@@ -46,9 +46,9 @@ data class FinishCommand(
     val clockSnapshot: ClockSnapshot? = null,
 )
 
-const val CURRENT_PROTOCOL_VERSION: Int = 1
+const val CURRENT_PROTOCOL_VERSION: Int = 2
 
-enum class TransportState { NEW, CONNECTING, OPEN, CLOSING, CLOSED, FAILED }
+enum class TransportState { NEW, CONNECTING, CONNECTED, OPEN, DISCONNECTED, CLOSING, CLOSED, FAILED }
 
 data class TransportDiagnostics(
     val state: TransportState,
@@ -79,8 +79,16 @@ interface MatchTransport {
     suspend fun sendFinish(command: FinishCommand) {
         throw UnsupportedOperationException("finish commands are not supported")
     }
+    suspend fun sendMoveAck(ack: MoveAck) {
+        throw UnsupportedOperationException("move acknowledgements are not supported")
+    }
+    suspend fun sendSync(message: SyncMessage) {
+        throw UnsupportedOperationException("sync messages are not supported")
+    }
     fun observe(onCommand: (MoveCommand) -> Unit): AutoCloseable
     fun observeFinish(onCommand: (FinishCommand) -> Unit): AutoCloseable = AutoCloseable { }
+    fun observeMoveAck(onAck: (MoveAck) -> Unit): AutoCloseable = AutoCloseable { }
+    fun observeSync(onMessage: (SyncMessage) -> Unit): AutoCloseable = AutoCloseable { }
     fun observeState(onState: (TransportState) -> Unit): AutoCloseable = AutoCloseable { }
     fun diagnostics(): TransportDiagnostics = TransportDiagnostics(TransportState.NEW)
     fun close() { }

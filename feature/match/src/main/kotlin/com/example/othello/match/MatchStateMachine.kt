@@ -1,8 +1,9 @@
 package com.example.othello.match
 
 enum class MatchStatus {
-    IDLE, WAITING, SIGNALING, P2P_CONNECTED, PLAYING, FINISHING, CONFIRMED,
-    SIGNALING_FAILED, DISCONNECTED, PENDING_RESULT, DISPUTED, FAILED,
+    IDLE, WAITING, SIGNALING, P2P_CONNECTED, PLAYING, MOVE_CONFIRMING, SYNCHRONIZING,
+    RECONNECTING, FINISHING, PENDING_RESULT, CONFIRMED, FORFEIT, EXPIRED, ABANDONED,
+    SIGNALING_FAILED, DISCONNECTED, DISPUTED, FAILED,
 }
 
 sealed interface MatchCommand {
@@ -15,6 +16,15 @@ sealed interface MatchCommand {
     data object ResultConfirmed : MatchCommand
     data object ResultPending : MatchCommand
     data object ResultDisputed : MatchCommand
+    data object MoveSent : MatchCommand
+    data object MoveAcknowledged : MatchCommand
+    data object Synchronize : MatchCommand
+    data object Synchronized : MatchCommand
+    data object Reconnect : MatchCommand
+    data object Reconnected : MatchCommand
+    data object Forfeit : MatchCommand
+    data object Expire : MatchCommand
+    data object Abandon : MatchCommand
     data object SignalingFailed : MatchCommand
     data object Disconnected : MatchCommand
     data object Retry : MatchCommand
@@ -50,14 +60,40 @@ object MatchStateMachine {
                 else -> null
             }
             MatchStatus.PLAYING -> when (command) {
+                MatchCommand.MoveSent -> MatchStatus.MOVE_CONFIRMING
+                MatchCommand.Synchronize -> MatchStatus.SYNCHRONIZING
+                MatchCommand.Reconnect -> MatchStatus.RECONNECTING
                 MatchCommand.GameFinished -> MatchStatus.FINISHING
                 MatchCommand.Disconnected -> MatchStatus.DISCONNECTED
+                else -> null
+            }
+            MatchStatus.MOVE_CONFIRMING -> when (command) {
+                MatchCommand.MoveAcknowledged -> MatchStatus.PLAYING
+                MatchCommand.Synchronize -> MatchStatus.SYNCHRONIZING
+                MatchCommand.Reconnect -> MatchStatus.RECONNECTING
+                MatchCommand.GameFinished -> MatchStatus.FINISHING
+                else -> null
+            }
+            MatchStatus.SYNCHRONIZING -> when (command) {
+                MatchCommand.Synchronized -> MatchStatus.PLAYING
+                MatchCommand.Reconnect -> MatchStatus.RECONNECTING
+                MatchCommand.GameFinished -> MatchStatus.FINISHING
+                else -> null
+            }
+            MatchStatus.RECONNECTING -> when (command) {
+                MatchCommand.Reconnected -> MatchStatus.SYNCHRONIZING
+                MatchCommand.ResultConfirmed -> MatchStatus.CONFIRMED
+                MatchCommand.ResultDisputed -> MatchStatus.DISPUTED
+                MatchCommand.Forfeit -> MatchStatus.FORFEIT
+                MatchCommand.Expire -> MatchStatus.EXPIRED
                 else -> null
             }
             MatchStatus.FINISHING -> when (command) {
                 MatchCommand.ResultConfirmed -> MatchStatus.CONFIRMED
                 MatchCommand.ResultPending -> MatchStatus.PENDING_RESULT
                 MatchCommand.ResultDisputed -> MatchStatus.DISPUTED
+                MatchCommand.Forfeit -> MatchStatus.FORFEIT
+                MatchCommand.Expire -> MatchStatus.EXPIRED
                 else -> null
             }
             MatchStatus.SIGNALING_FAILED, MatchStatus.DISCONNECTED -> when (command) {
@@ -68,10 +104,13 @@ object MatchStateMachine {
             MatchStatus.PENDING_RESULT -> when (command) {
                 MatchCommand.ResultConfirmed -> MatchStatus.CONFIRMED
                 MatchCommand.ResultDisputed -> MatchStatus.DISPUTED
+                MatchCommand.Forfeit -> MatchStatus.FORFEIT
+                MatchCommand.Expire -> MatchStatus.EXPIRED
                 MatchCommand.Reset -> MatchStatus.IDLE
                 else -> null
             }
-            MatchStatus.DISPUTED, MatchStatus.CONFIRMED -> if (command === MatchCommand.Reset) MatchStatus.IDLE else null
+            MatchStatus.DISPUTED, MatchStatus.CONFIRMED, MatchStatus.FORFEIT,
+            MatchStatus.EXPIRED, MatchStatus.ABANDONED -> if (command === MatchCommand.Reset) MatchStatus.IDLE else null
             MatchStatus.FAILED -> if (command === MatchCommand.Reset) MatchStatus.IDLE else null
         }
         return if (next == null) MatchTransition.Rejected(state, "${command::class.simpleName} is not allowed from ${state.status}")

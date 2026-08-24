@@ -35,4 +35,32 @@ class MatchStateMachineTest {
         val disconnected = MatchState(MatchStatus.DISCONNECTED)
         assertEquals(MatchStatus.WAITING, (MatchStateMachine.reduce(disconnected, MatchCommand.Retry) as MatchTransition.Accepted).state.status)
     }
+
+    @Test fun terminalStatesRejectLateProtocolEventsWithoutMutation() {
+        val terminalStatuses = listOf(
+            MatchStatus.CONFIRMED,
+            MatchStatus.FORFEIT,
+            MatchStatus.EXPIRED,
+            MatchStatus.ABANDONED,
+            MatchStatus.DISPUTED,
+        )
+        val lateEvents = listOf(
+            MatchCommand.MoveAcknowledged,
+            MatchCommand.Synchronized,
+            MatchCommand.Reconnected,
+            MatchCommand.GameFinished,
+            MatchCommand.ResultConfirmed,
+            MatchCommand.ResultPending,
+            MatchCommand.ResultDisputed,
+            MatchCommand.Retry,
+        )
+
+        terminalStatuses.forEach { status ->
+            val terminal = MatchState(status)
+            lateEvents.forEach { event ->
+                val result = assertIs<MatchTransition.Rejected>(MatchStateMachine.reduce(terminal, event))
+                assertEquals(terminal, result.state)
+            }
+        }
+    }
 }

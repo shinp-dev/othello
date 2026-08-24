@@ -49,11 +49,14 @@ import io.github.jan.supabase.realtime.*
 import io.github.jan.supabase.SupabaseClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -65,13 +68,28 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.decodeFromJsonElement
 import java.time.Clock
 import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
 private const val EMAIL_CONFIRMATION_REDIRECT_URL = "https://chanriva.shinp-studio.com/signup-complete"
 private const val PASSWORD_RESET_REDIRECT_URL = "https://chanriva.shinp-studio.com/reset-password"
+internal const val RELEASE_NETWORK_TIMEOUT_MILLIS = 10_000L
+
+internal class ReleaseNetworkTimeoutException(cause: Throwable) :
+    IllegalStateException("Release match network operation timed out", cause)
+
+internal suspend fun <T> boundedReleaseNetwork(
+    timeoutMillis: Long = RELEASE_NETWORK_TIMEOUT_MILLIS,
+    block: suspend () -> T,
+): T = try {
+    withTimeout(timeoutMillis) { block() }
+} catch (error: TimeoutCancellationException) {
+    throw ReleaseNetworkTimeoutException(error)
+}
 
 data class SupabaseConfig(val url: String, val anonKey: String) {
     fun validate(): Result<SupabaseConfig> = if (url.isBlank() || anonKey.isBlank()) {
@@ -101,7 +119,24 @@ private data class EnqueueRow(
     @SerialName("opponent_id") val opponentId: String? = null,
     @SerialName("assigned_disc") val assignedDisc: String? = null,
     @SerialName("opponent_rating") val opponentRating: Int? = null,
-)
+    @SerialName("lifecycle_status") val lifecycleStatus: String? = null,
+    @SerialName("negotiation_epoch") val negotiationEpoch: Int? = null,
+) {
+    fun toDomain(): EnqueueResult = if (!matched) {
+        EnqueueResult.Waiting
+    } else {
+        EnqueueResult.Matched(
+            MatchAssignment(
+                matchId = requireNotNull(matchId),
+                opponentId = requireNotNull(opponentId),
+                assignedDisc = assignedDisc.toAssignedDisc(),
+                opponentRating = opponentRating,
+                lifecycleStatus = lifecycleStatus,
+                negotiationEpoch = requireNotNull(negotiationEpoch),
+            ),
+        )
+    }
+}
 
 @Serializable
 private data class ClaimRow(
@@ -109,7 +144,29 @@ private data class ClaimRow(
     @SerialName("opponent_id") val opponentId: String,
     @SerialName("assigned_disc") val assignedDisc: String,
     @SerialName("opponent_rating") val opponentRating: Int? = null,
+    @SerialName("lifecycle_status") val lifecycleStatus: String? = null,
+    @SerialName("negotiation_epoch") val negotiationEpoch: Int,
+) {
+    fun toDomain() = MatchAssignment(
+        matchId = matchId,
+        opponentId = opponentId,
+        assignedDisc = assignedDisc.toAssignedDisc(),
+        opponentRating = opponentRating,
+        lifecycleStatus = lifecycleStatus,
+        negotiationEpoch = negotiationEpoch,
+    )
+}
+
+@Serializable
+private data class MatchmakingRequestParams(
+    @SerialName("p_request_id") val requestId: String,
 )
+
+private fun String?.toAssignedDisc(): AssignedDisc = when (this) {
+    "BLACK" -> AssignedDisc.BLACK
+    "WHITE" -> AssignedDisc.WHITE
+    else -> error("invalid assigned disc")
+}
 
 @Serializable
 private data class MatchNotificationRow(
@@ -132,37 +189,29 @@ internal class SupabaseMatchmakingRepository(
     private val client: SupabaseClient,
     private val scope: CoroutineScope,
 ) : MatchmakingRepository {
-    override suspend fun enqueueOrMatch(): EnqueueResult {
-        val row = client.postgrest.rpc("enqueue_or_match").decodeList<EnqueueRow>().single()
-        return if (!row.matched) EnqueueResult.Waiting else EnqueueResult.Matched(
-            MatchAssignment(
-                matchId = requireNotNull(row.matchId),
-                opponentId = requireNotNull(row.opponentId),
-                assignedDisc = when (row.assignedDisc) {
-                    "BLACK" -> AssignedDisc.BLACK
-                    "WHITE" -> AssignedDisc.WHITE
-                    else -> error("invalid assigned disc")
-                },
-                opponentRating = row.opponentRating,
-            ),
-        )
+    override suspend fun enqueueOrMatch(requestId: String): EnqueueResult = boundedReleaseNetwork {
+        client.postgrest
+            .rpc("enqueue_or_match_v2", MatchmakingRequestParams(requestId.requireUuid()))
+            .decodeList<EnqueueRow>()
+            .single()
+            .toDomain()
     }
 
-    override suspend fun cancelWaiting(): Boolean = client.postgrest.rpc("cancel_waiting").decodeAs<Boolean>()
-    override suspend fun heartbeatWaiting(): Boolean = client.postgrest.rpc("heartbeat_waiting").decodeAs<Boolean>()
-    override suspend fun claimMatchedAssignment(): MatchAssignment? = client.postgrest.rpc("claim_waiting_match")
-        .decodeList<ClaimRow>().firstOrNull()?.let { row ->
-            MatchAssignment(
-                row.matchId,
-                row.opponentId,
-                when (row.assignedDisc) {
-                    "BLACK" -> AssignedDisc.BLACK
-                    "WHITE" -> AssignedDisc.WHITE
-                    else -> error("invalid assigned disc")
-                },
-                row.opponentRating,
-            )
-        }
+    override suspend fun cancelWaiting(requestId: String): MatchAssignment? = boundedReleaseNetwork {
+        client.postgrest
+            .rpc("cancel_waiting_v2", MatchmakingRequestParams(requestId.requireUuid()))
+            .decodeList<ClaimRow>()
+            .singleOrNull()
+            ?.toDomain()
+    }
+
+    override suspend fun claimActiveMatch(): MatchAssignment? = boundedReleaseNetwork {
+        client.postgrest
+            .rpc("claim_active_match_v2")
+            .decodeList<ClaimRow>()
+            .singleOrNull()
+            ?.toDomain()
+    }
     override fun subscribeToMatchNotifications(
         onMatchAvailable: () -> Unit,
         onError: (Throwable) -> Unit,
@@ -191,85 +240,130 @@ internal class SupabaseMatchmakingRepository(
         }
         return AutoCloseable { job.cancel() }
     }
-    override suspend fun reconcileCallerActiveMatch(): Boolean =
-        client.postgrest.rpc("reconcile_expired_active_match_for_user").decodeAs<Int>() > 0
 }
+
+private fun String.requireUuid(): String = also { UUID.fromString(it) }
 
 @Serializable
 private data class AckParams(@SerialName("p_match_id") val matchId: String)
 
 @Serializable
-private data class MatchStartStateRow(
-    @SerialName("server_status") val serverStatus: String,
+private data class ReleaseMatchStateRow(
+    @SerialName("lifecycle_status") val lifecycleStatus: String,
+    @SerialName("release_deadline") val releaseDeadline: String? = null,
+    @SerialName("reconnect_deadline") val reconnectDeadline: String? = null,
+    @SerialName("negotiation_epoch") val negotiationEpoch: Int,
     @SerialName("local_acked") val localAcked: Boolean,
     @SerialName("both_acked") val bothAcked: Boolean,
+    @SerialName("final_result") val finalResult: String? = null,
+    @SerialName("final_position_hash") val finalPositionHash: String? = null,
 ) {
-    fun toDomain() = MatchStartAck(serverStatus, localAcked, bothAcked)
+    private fun deadlineEpochMillis(): Long? = (reconnectDeadline ?: releaseDeadline)
+        ?.let(Instant::parse)
+        ?.toEpochMilli()
+
+    fun toStartAck() = MatchStartAck(
+        serverStatus = lifecycleStatus,
+        localAcked = localAcked,
+        bothAcked = bothAcked,
+        deadlineEpochMillis = deadlineEpochMillis(),
+        negotiationEpoch = negotiationEpoch,
+    )
+
+    fun toFinishResult() = MatchFinishResult(
+        serverStatus = lifecycleStatus,
+        finalResult = finalResult?.let(MatchResult::valueOf),
+        finalPositionHash = finalPositionHash,
+        deadlineEpochMillis = deadlineEpochMillis(),
+        negotiationEpoch = negotiationEpoch,
+    )
 }
 
 @Serializable
-private data class SubmitResultParams(
+private data class SubmitReleaseResultParams(
     @SerialName("p_match_id") val matchId: String,
+    @SerialName("p_request_id") val requestId: String,
     @SerialName("p_canonical_moves") val canonicalMoves: String,
-    @SerialName("p_result") val result: String,
-    @SerialName("p_final_position_hash") val finalPositionHash: String,
     @SerialName("p_finish_reason") val finishReason: String,
-    @SerialName("p_clock") val clock: String? = null,
+    @SerialName("p_loser_disc") val loserDisc: String? = null,
+    @SerialName("p_clock") val clock: JsonElement? = null,
 )
 
 @Serializable
-private data class MatchRatingHistoryRow(
-    val rating: Int,
-    val delta: Int,
-)
+private data class ReleaseResultRow(
+    @SerialName("server_status") val serverStatus: String,
+    @SerialName("rating_before") val ratingBefore: Int? = null,
+    @SerialName("rating_after") val ratingAfter: Int? = null,
+    @SerialName("rating_delta") val ratingDelta: Int? = null,
+    @SerialName("current_rating") val currentRating: Int? = null,
+    @SerialName("peak_rating") val peakRating: Int? = null,
+    @SerialName("final_result") val finalResult: String? = null,
+    @SerialName("final_position_hash") val finalPositionHash: String? = null,
+) {
+    fun toDomain() = MatchFinishResult(
+        serverStatus = serverStatus,
+        ratingBefore = ratingBefore,
+        ratingAfter = ratingAfter,
+        ratingDelta = ratingDelta,
+        currentRating = currentRating,
+        peakRating = peakRating,
+        finalResult = finalResult?.let(MatchResult::valueOf),
+        finalPositionHash = finalPositionHash,
+    )
+}
 
 internal class SupabaseOnlineMatchRepository(private val client: SupabaseClient) : OnlineMatchRepository {
-    override suspend fun ackMatchStarted(matchId: String): MatchStartAck {
-        client.postgrest.rpc("ack_match_started", AckParams(matchId)).decodeAs<String>()
-        return getMatchStartState(matchId)
+    override suspend fun ackMatchStarted(matchId: String): MatchStartAck = boundedReleaseNetwork {
+        client.postgrest.rpc("ack_match_started_v2", AckParams(matchId.requireUuid()))
+            .decodeList<ReleaseMatchStateRow>()
+            .single()
+            .toStartAck()
     }
 
-    override suspend fun getMatchStartState(matchId: String): MatchStartAck = client.postgrest
-        .rpc("get_match_start_state", AckParams(matchId))
-        .decodeList<MatchStartStateRow>()
-        .single()
-        .toDomain()
+    override suspend fun getMatchStartState(matchId: String): MatchStartAck = boundedReleaseNetwork {
+        client.postgrest.rpc("get_release_match_state_v2", AckParams(matchId.requireUuid()))
+            .decodeList<ReleaseMatchStateRow>()
+            .single()
+            .toStartAck()
+    }
 
-    override suspend fun abandonMatch(matchId: String): Boolean = client.postgrest.rpc("abandon_match", AckParams(matchId)).decodeAs<String>().isNotBlank()
+    override suspend fun abandonMatch(matchId: String): Boolean = boundedReleaseNetwork {
+        client.postgrest.rpc("abandon_match_v2", AckParams(matchId.requireUuid()))
+            .decodeAs<String>()
+            .isNotBlank()
+    }
 
-    override suspend fun submitMatchResult(submission: MatchSubmission): MatchFinishResult {
-        val serverStatus = client.postgrest.rpc(
-            "submit_match_result",
-            SubmitResultParams(
-                submission.matchId,
-                submission.canonicalMoves,
-                submission.result.name,
-                submission.finalPositionHash,
-                submission.finishReason.name,
-                submission.clockPayload,
+    override suspend fun resumeMatch(matchId: String): MatchFinishResult = releaseStateRpc(
+        "resume_match_v2",
+        matchId,
+    )
+
+    override suspend fun reconcileMatch(matchId: String): MatchFinishResult = releaseStateRpc(
+        "reconcile_match_v2",
+        matchId,
+    )
+
+    override suspend fun submitMatchResult(submission: MatchSubmission): MatchFinishResult = boundedReleaseNetwork {
+        client.postgrest.rpc(
+            "submit_match_result_v2",
+            SubmitReleaseResultParams(
+                matchId = submission.matchId.requireUuid(),
+                requestId = submission.requestId.requireUuid(),
+                canonicalMoves = submission.canonicalMoves,
+                finishReason = submission.finishReason.name,
+                loserDisc = submission.loserDisc?.name,
+                clock = submission.clockPayload?.let(Json::parseToJsonElement),
             ),
-        ).decodeAs<String>()
-        if (serverStatus != "CONFIRMED") return MatchFinishResult(serverStatus)
-        return try {
-            val history = client.from("rating_history").select {
-                filter { eq("match_id", submission.matchId) }
-                limit(1)
-            }.decodeSingle<MatchRatingHistoryRow>()
-            val current = client.from("ratings").select().decodeSingle<RatingRow>()
-            MatchFinishResult(
-                serverStatus = serverStatus,
-                ratingBefore = history.rating - history.delta,
-                ratingAfter = history.rating,
-                ratingDelta = history.delta,
-                currentRating = current.currentRating,
-                peakRating = current.peakRating,
-            )
-        } catch (error: CancellationException) {
-            throw error
-        } catch (_: Exception) {
-            MatchFinishResult(serverStatus)
-        }
+        ).decodeList<ReleaseResultRow>().single().toDomain()
     }
+
+    private suspend fun releaseStateRpc(name: String, matchId: String): MatchFinishResult =
+        boundedReleaseNetwork {
+            client.postgrest.rpc(name, AckParams(matchId.requireUuid()))
+                .decodeList<ReleaseMatchStateRow>()
+                .single()
+                .toFinishResult()
+        }
 }
 
 internal class SupabaseAuthGateway(private val client: SupabaseClient) : AuthGateway {
@@ -440,7 +534,16 @@ data class SignalingEnvelope(
     val type: String,
     val sdp: String,
     val protocolVersion: Int = CURRENT_PROTOCOL_VERSION,
+    val negotiationEpoch: Int = 0,
 )
+
+internal fun validateSignalingEnvelope(envelope: SignalingEnvelope) {
+    require(envelope.protocolVersion == CURRENT_PROTOCOL_VERSION)
+    require(envelope.negotiationEpoch >= 0)
+    require(envelope.matchId.isNotBlank() && envelope.senderUserId.isNotBlank())
+    require(envelope.type in setOf("OFFER", "ANSWER", "RESUME"))
+    require(envelope.sdp.length in 1..16_384)
+}
 
 @Serializable
 private data class SignalingRow(
@@ -450,18 +553,58 @@ private data class SignalingRow(
     @SerialName("signal_type") val type: String,
     val sdp: String,
     @SerialName("protocol_version") val protocolVersion: Int,
+    @SerialName("negotiation_epoch") val negotiationEpoch: Int,
 ) {
-    fun toEnvelope() = SignalingEnvelope(matchId, senderUserId, type, sdp, protocolVersion)
+    fun toEnvelope() = SignalingEnvelope(
+        matchId = matchId,
+        senderUserId = senderUserId,
+        type = type,
+        sdp = sdp,
+        protocolVersion = protocolVersion,
+        negotiationEpoch = negotiationEpoch,
+    )
+
+    fun deliveryKey() = SignalingDeliveryKey(id, senderUserId, type, sdp, protocolVersion, negotiationEpoch)
 }
 
 @Serializable
-private data class SignalingInsert(
-    @SerialName("match_id") val matchId: String,
-    @SerialName("sender_id") val senderUserId: String,
-    @SerialName("signal_type") val type: String,
-    val sdp: String,
-    @SerialName("protocol_version") val protocolVersion: Int,
+private data class PublishMatchSignalV2Params(
+    @SerialName("p_match_id") val matchId: String,
+    @SerialName("p_signal_type") val signalType: String,
+    @SerialName("p_sdp") val sdp: String,
+    @SerialName("p_protocol_version") val protocolVersion: Int,
+    @SerialName("p_negotiation_epoch") val negotiationEpoch: Int,
 )
+
+internal data class SignalingDeliveryKey(
+    val id: Long,
+    val senderUserId: String,
+    val type: String,
+    val sdp: String,
+    val protocolVersion: Int,
+    val negotiationEpoch: Int,
+)
+
+internal class SignalingDeliveryTracker(private val capacity: Int = 16) {
+    private val delivered = linkedSetOf<SignalingDeliveryKey>()
+
+    init {
+        require(capacity > 0)
+    }
+
+    fun observe(key: SignalingDeliveryKey): Boolean {
+        if (!delivered.add(key)) return false
+        while (delivered.size > capacity) {
+            delivered.iterator().run {
+                next()
+                remove()
+            }
+        }
+        return true
+    }
+
+    internal val size: Int get() = delivered.size
+}
 
 interface SupabaseSignalingDataSource {
     suspend fun publish(envelope: SignalingEnvelope)
@@ -481,10 +624,19 @@ internal class SupabaseRealtimeSignalingDataSource(
     private val jobs = mutableMapOf<String, Job>()
 
     override suspend fun publish(envelope: SignalingEnvelope) {
-        validate(envelope)
-        client.from("match_signaling").insert(
-            SignalingInsert(envelope.matchId, envelope.senderUserId, envelope.type, envelope.sdp, envelope.protocolVersion),
-        )
+        validateSignalingEnvelope(envelope)
+        boundedReleaseNetwork {
+            client.postgrest.rpc(
+                "publish_match_signal_v2",
+                PublishMatchSignalV2Params(
+                    envelope.matchId.requireUuid(),
+                    envelope.type,
+                    envelope.sdp,
+                    envelope.protocolVersion,
+                    envelope.negotiationEpoch,
+                ),
+            )
+        }
     }
 
     override fun subscribe(
@@ -494,45 +646,38 @@ internal class SupabaseRealtimeSignalingDataSource(
     ): AutoCloseable {
         jobs.remove(matchId)?.cancel()
         val job = scope.launch {
-            val delivered = mutableSetOf<String>()
+            val deliveryTracker = SignalingDeliveryTracker()
             val deliveryMutex = Mutex()
-            suspend fun deliver(envelope: SignalingEnvelope) {
+            suspend fun deliver(row: SignalingRow) {
+                val envelope = row.toEnvelope()
                 if (envelope.matchId != matchId) return
-                try { validate(envelope) } catch (_: IllegalArgumentException) { return }
-                val key = "${envelope.senderUserId}|${envelope.type}|${envelope.sdp}|${envelope.protocolVersion}"
-                if (deliveryMutex.withLock { delivered.add(key) }) onEnvelope(envelope)
+                try { validateSignalingEnvelope(envelope) } catch (_: IllegalArgumentException) { return }
+                if (deliveryMutex.withLock { deliveryTracker.observe(row.deliveryKey()) }) onEnvelope(envelope)
             }
             // selectAsFlow can miss a row inserted between its initial SELECT and channel join.
-            // Brief catch-up reads close that signaling-only race; moves never use this path.
+            // Its initial SELECT plus one delayed reconciliation bounds this path to two snapshots.
             val realtimeJob = launch {
-                client.from("match_signaling").selectAsFlow(
+                client.from("match_signals_v2").selectAsFlow(
                     SignalingRow::id,
                     channelName = "match-signaling:$matchId",
                     filter = FilterOperation("match_id", FilterOperator.EQ, matchId),
-                ).retryWhen { _, attempt ->
-                    if (attempt >= 2) false else {
-                        kotlinx.coroutines.delay(500L * (attempt + 1))
-                        true
-                    }
-                }.catch { onError(it) }
-                    .collect { rows -> rows.sortedBy(SignalingRow::id).forEach { deliver(it.toEnvelope()) } }
+                ).catch { onError(it) }
+                    .collect { rows -> rows.sortedBy(SignalingRow::id).forEach { deliver(it) } }
             }
             try {
-                // Keep a finite signaling-only fallback alive even if the realtime flow joins late
-                // or completes. Slow emulator boots can otherwise miss an ANSWER after four seconds.
-                repeat(20) { attempt ->
-                    try {
-                        val rows = client.from("match_signaling").select {
+                delay(500)
+                try {
+                    val rows = boundedReleaseNetwork {
+                        client.from("match_signals_v2").select {
                             filter { eq("match_id", matchId) }
                             order("id", Order.ASCENDING)
                         }.decodeList<SignalingRow>()
-                        rows.forEach { deliver(it.toEnvelope()) }
-                    } catch (error: CancellationException) {
-                        throw error
-                    } catch (_: Exception) {
-                        // Realtime remains active; a later catch-up attempt can recover.
                     }
-                    if (attempt < 19) kotlinx.coroutines.delay(500)
+                    rows.forEach { deliver(it) }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    // Realtime remains active after the one bounded reconciliation attempt.
                 }
                 realtimeJob.join()
             } finally {
@@ -551,12 +696,6 @@ internal class SupabaseRealtimeSignalingDataSource(
         jobs.clear()
     }
 
-    private fun validate(envelope: SignalingEnvelope) {
-        require(envelope.protocolVersion == CURRENT_PROTOCOL_VERSION)
-        require(envelope.matchId.isNotBlank() && envelope.senderUserId.isNotBlank())
-        require(envelope.type == "OFFER" || envelope.type == "ANSWER")
-        require(envelope.sdp.length in 1..16_384)
-    }
 }
 
 @Serializable

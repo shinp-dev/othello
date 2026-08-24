@@ -316,11 +316,27 @@
     <string name="error">エラー</string>
     <string name="match_status_connecting">接続確認中</string>
     <string name="match_status_playing">対局中</string>
+    <string name="match_status_move_confirming">着手確認待ち</string>
+    <string name="match_status_synchronizing">対局を同期中</string>
+    <string name="match_status_reconnecting">再接続中</string>
+    <string name="match_status_opponent_grace">相手の復帰を待っています</string>
     <string name="match_status_sending">結果送信中</string>
     <string name="match_status_waiting_result">相手の結果待ち</string>
     <string name="match_status_confirmed">結果確定</string>
     <string name="match_status_disputed">結果不一致</string>
     <string name="match_status_disconnected">切断</string>
+    <string name="match_status_forfeit">不戦による勝敗確定</string>
+    <string name="match_status_expired">無効対局として終了</string>
+    <string name="match_status_abandoned">対局をキャンセルしました</string>
+    <string name="retry_result">結果送信を再試行</string>
+    <string name="match_retry_connection">接続を再試行できます</string>
+    <string name="match_retry_start_confirmation">開始確認を再試行できます</string>
+    <string name="match_reconnect_check_failed">再接続を確認できませんでした</string>
+    <string name="match_disconnect_report_retrying">切断状態の保存を再試行しています</string>
+    <string name="match_protocol_error">対局状態を同期できませんでした</string>
+    <string name="match_state_recheck_available">対局状態を再確認できます</string>
+    <string name="match_retry_local_save">端末への対局状態保存を再試行できます</string>
+    <string name="match_move_resending">着手を再送しています</string>
     <string name="version_server_error">サーバーに接続できませんでした。
 通信環境を確認して、もう一度お試しください。</string>
     <string name="update_required">アプリの更新が必要です</string>

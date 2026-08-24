@@ -9,6 +9,7 @@ import com.example.othello.matchmaking.MatchAssignment
 import com.example.othello.matchmaking.MatchmakingController
 import com.example.othello.matchmaking.MatchmakingStatus
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 /** Retains the SDK component and one P2P owner across Activity recreation. */
@@ -16,6 +17,7 @@ class OnlineSessionViewModel(application: Application) : AndroidViewModel(applic
     val componentResult: Result<SupabaseComponent> = SupabaseModule.create(scope = viewModelScope)
     val component: SupabaseComponent? = componentResult.getOrNull()
     val matchmaking: MatchmakingController? = component?.let { MatchmakingController(it.matchmakingRepository) }
+    private val recoveryStore = OnlineMatchRecoveryStore(getApplication())
     var coordinator: WebRtcMatchCoordinator? = null
         private set
     private val authController = AuthSessionController(
@@ -25,12 +27,32 @@ class OnlineSessionViewModel(application: Application) : AndroidViewModel(applic
         onAuthenticatedSessionEnding = {
             matchmaking?.reset()
             leaveCoordinator()
+            recoveryStore.clear()
         },
     )
     internal val authState: StateFlow<AuthState> = authController.state
 
     init {
         viewModelScope.launch { authController.runSessionLifecycle() }
+        viewModelScope.launch {
+            authState.collectLatest { state ->
+                if (state is AuthState.Authenticated) {
+                    val checkpoint = recoveryStore.load()
+                    if (checkpoint == null || checkpoint.userId == state.session.userId) {
+                        try {
+                            matchmaking?.restoreActiveAssignment()
+                        } catch (error: kotlinx.coroutines.CancellationException) {
+                            throw error
+                        } catch (_: Exception) {
+                            // The online-play action calls the same idempotent v2 matcher and
+                            // can recover the assignment after an offline app launch.
+                        }
+                    } else {
+                        recoveryStore.clear()
+                    }
+                }
+            }
+        }
     }
 
     fun retrySessionRestore() {
@@ -52,15 +74,20 @@ class OnlineSessionViewModel(application: Application) : AndroidViewModel(applic
         coordinator?.takeIf { it.matchId == assignment.matchId }?.let { return it }
         coordinator?.close()
         val supabase = requireNotNull(component) { "Supabase is not configured" }
+        val recovered = recoveryStore.load()?.takeIf {
+            it.userId == userId && it.matchId == assignment.matchId
+        }
         return WebRtcMatchCoordinator(
-            getApplication(),
-            userId,
-            assignment,
-            supabase.signalingDataSource,
-            supabase.onlineMatchRepository,
-            viewModelScope,
-            debugAutoPlay,
-            debugTimeControlMillis,
+            context = getApplication(),
+            userId = userId,
+            assignment = assignment,
+            signaling = supabase.signalingDataSource,
+            repository = supabase.onlineMatchRepository,
+            recoveryStore = recoveryStore,
+            recoveredSnapshot = recovered,
+            scope = viewModelScope,
+            debugAutoPlay = debugAutoPlay,
+            debugTimeControlMillis = debugTimeControlMillis,
         ).also {
             coordinator = it
             it.start()
@@ -79,12 +106,18 @@ class OnlineSessionViewModel(application: Application) : AndroidViewModel(applic
 
     private suspend fun prepareForSignOut() {
         val controller = matchmaking
-        if (controller?.state?.status == MatchmakingStatus.WAITING) {
+        if (controller != null && controller.state.status in setOf(MatchmakingStatus.WAITING, MatchmakingStatus.FAILED)) {
             controller.cancel()
             val racedAssignment = controller.state.assignment
             controller.reset()
             if (racedAssignment != null) {
-                runCatching { component?.onlineMatchRepository?.abandonMatch(racedAssignment.matchId) }
+                try {
+                    component?.onlineMatchRepository?.abandonMatch(racedAssignment.matchId)
+                } catch (error: kotlinx.coroutines.CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    Unit
+                }
             }
         }
         leaveCoordinator()

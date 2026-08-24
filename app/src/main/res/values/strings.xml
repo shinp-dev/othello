@@ -314,11 +314,27 @@
     <string name="error">Error</string>
     <string name="match_status_connecting">Checking connection</string>
     <string name="match_status_playing">Playing</string>
+    <string name="match_status_move_confirming">Waiting for move confirmation</string>
+    <string name="match_status_synchronizing">Synchronizing the game</string>
+    <string name="match_status_reconnecting">Reconnecting</string>
+    <string name="match_status_opponent_grace">Waiting for the opponent to return</string>
     <string name="match_status_sending">Sending result</string>
     <string name="match_status_waiting_result">Waiting for opponent’s result</string>
     <string name="match_status_confirmed">Result confirmed</string>
     <string name="match_status_disputed">Result disputed</string>
     <string name="match_status_disconnected">Disconnected</string>
+    <string name="match_status_forfeit">Win/loss confirmed by forfeit</string>
+    <string name="match_status_expired">Match ended without a result</string>
+    <string name="match_status_abandoned">Match cancelled</string>
+    <string name="retry_result">Retry result submission</string>
+    <string name="match_retry_connection">You can retry the connection</string>
+    <string name="match_retry_start_confirmation">You can retry start confirmation</string>
+    <string name="match_reconnect_check_failed">Could not confirm the reconnection</string>
+    <string name="match_disconnect_report_retrying">Retrying disconnect state storage</string>
+    <string name="match_protocol_error">The game states could not be synchronized</string>
+    <string name="match_state_recheck_available">You can check the server state again</string>
+    <string name="match_retry_local_save">You can retry saving the game state on this device</string>
+    <string name="match_move_resending">Resending the move</string>
     <string name="version_server_error">Could not connect to the server.
 Check your connection and try again.</string>
     <string name="update_required">App update required</string>

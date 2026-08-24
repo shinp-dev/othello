@@ -24,10 +24,49 @@ export default {
 async function runScheduledMaintenance(env: Env): Promise<void> {
   const results = await Promise.allSettled([
     queueExpiredAccountDeletions(env).then(() => processPendingAccountDeletions(env)),
+    runReleaseMatchMaintenance(env),
   ]);
-  results.forEach((result, index) => {
-    if (result.status === "rejected") console.error(`scheduled maintenance task ${index} failed`);
+  const failures = results.flatMap((result, index) => result.status === "rejected"
+    ? [{ index, reason: result.reason }]
+    : []);
+  failures.forEach(({ index, reason }) => {
+    const detail = reason instanceof Error ? reason.message : String(reason);
+    console.error(`scheduled maintenance task ${index} failed: ${detail}`);
   });
+  if (failures.length > 0) throw new AggregateError(failures.map(({ reason }) => reason), "scheduled maintenance failed");
+}
+
+/**
+ * Terminalizes expired v2 matches before retention cleanup. The migration and this
+ * caller ship together, but production deployment remains a separate coordinated cutover.
+ */
+async function runReleaseMatchMaintenance(env: Env): Promise<void> {
+  const response = await supabase(env, "/rest/v1/rpc/run_match_maintenance_v2", {
+    method: "POST",
+    body: JSON.stringify({ p_limit: 100 }),
+  });
+  if (!response.ok) throw new Error(`match maintenance failed: ${response.status}`);
+  const payload = await response.json() as unknown;
+  const row = Array.isArray(payload) ? payload[0] : payload;
+  if (!isMaintenanceResult(row)) throw new Error("match maintenance returned an invalid response");
+  console.log(
+    `release match maintenance: terminalized=${row.terminalized_matches}, ` +
+    `signals=${row.deleted_signals}, queue=${row.deleted_queue_rows}`,
+  );
+  if (row.terminalized_matches >= 100) console.warn("release match maintenance reached its batch limit; backlog may remain");
+}
+
+interface MaintenanceResult {
+  terminalized_matches: number;
+  deleted_signals: number;
+  deleted_queue_rows: number;
+}
+
+function isMaintenanceResult(value: unknown): value is MaintenanceResult {
+  if (typeof value !== "object" || value === null) return false;
+  const row = value as Record<string, unknown>;
+  return ["terminalized_matches", "deleted_signals", "deleted_queue_rows"]
+    .every(key => Number.isInteger(row[key]) && (row[key] as number) >= 0);
 }
 
 async function queueExpiredAccountDeletions(env: Env): Promise<void> {
@@ -38,12 +77,21 @@ async function queueExpiredAccountDeletions(env: Env): Promise<void> {
   if (!response.ok) throw new Error(`expired account deletion queue failed: ${response.status}`);
 }
 
-function supabase(env: Env, path: string, init: RequestInit = {}): Promise<Response> {
-  return fetch(`${env.SUPABASE_URL}${path}`, {
-    ...init,
-    headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`, "content-type": "application/json", ...(init.headers ?? {}) },
-  });
+async function supabase(env: Env, path: string, init: RequestInit = {}): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort("Supabase request timed out"), SUPABASE_TIMEOUT_MILLIS);
+  try {
+    return await fetch(`${env.SUPABASE_URL}${path}`, {
+      ...init,
+      signal: init.signal ?? controller.signal,
+      headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`, "content-type": "application/json", ...(init.headers ?? {}) },
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 }
+
+const SUPABASE_TIMEOUT_MILLIS = 10_000;
 
 async function processPendingAccountDeletions(env: Env): Promise<void> {
   const response = await supabase(

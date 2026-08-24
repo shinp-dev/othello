@@ -190,7 +190,9 @@ private fun AuthenticatedApp(
         if (matchmakingState.status == MatchmakingStatus.WAITING) {
             lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 while (isActive) {
-                    delay(10_000)
+                    // V2 queue rows have a two-minute lease. Realtime delivers a match
+                    // immediately; this low-frequency renewal is only loss recovery.
+                    delay(75_000)
                     matchmaking.heartbeat()
                 }
             }
@@ -216,7 +218,13 @@ private fun AuthenticatedApp(
         }
     }
     fun requestOnlineLeave() {
-        if (p2pCoordinator?.controller?.viewState?.matchState?.status == com.example.othello.match.MatchStatus.PLAYING) {
+        if (p2pCoordinator?.controller?.viewState?.matchState?.status in setOf(
+                com.example.othello.match.MatchStatus.PLAYING,
+                com.example.othello.match.MatchStatus.MOVE_CONFIRMING,
+                com.example.othello.match.MatchStatus.SYNCHRONIZING,
+                com.example.othello.match.MatchStatus.RECONNECTING,
+            )
+        ) {
             confirmOnlineLeave = true
         } else {
             leaveOnlineMatch()
@@ -576,6 +584,36 @@ private fun OnlineMatchScreen(
             enabled = viewState.matchState.status == com.example.othello.match.MatchStatus.PLAYING,
             modifier = Modifier.fillMaxWidth(),
         ) { Text(appString(R.string.resign)) }
+        val recoveryActionAvailable = viewState.matchState.status in setOf(
+            com.example.othello.match.MatchStatus.PENDING_RESULT,
+            com.example.othello.match.MatchStatus.RECONNECTING,
+        ) || (viewState.error != null && viewState.matchState.status in setOf(
+            com.example.othello.match.MatchStatus.P2P_CONNECTED,
+            com.example.othello.match.MatchStatus.PLAYING,
+            com.example.othello.match.MatchStatus.MOVE_CONFIRMING,
+            com.example.othello.match.MatchStatus.SYNCHRONIZING,
+            com.example.othello.match.MatchStatus.FINISHING,
+        ))
+        if (recoveryActionAvailable) {
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        coordinator.retryCurrentOperation()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    appString(
+                        if (viewState.matchState.status in setOf(
+                                com.example.othello.match.MatchStatus.FINISHING,
+                                com.example.othello.match.MatchStatus.PENDING_RESULT,
+                            )
+                        ) R.string.retry_result else R.string.retry,
+                    ),
+                )
+            }
+        }
         localizeUserMessage(context, viewState.error)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }
     if (confirmResign) {
@@ -599,10 +637,16 @@ private fun OnlineMatchScreen(
 private fun com.example.othello.match.MatchStatus.userLabel(context: android.content.Context? = null): String = when (this) {
     com.example.othello.match.MatchStatus.P2P_CONNECTED -> context?.getString(R.string.match_status_connecting) ?: "接続確認中"
     com.example.othello.match.MatchStatus.PLAYING -> context?.getString(R.string.match_status_playing) ?: "対局中"
+    com.example.othello.match.MatchStatus.MOVE_CONFIRMING -> context?.getString(R.string.match_status_move_confirming) ?: "着手確認待ち"
+    com.example.othello.match.MatchStatus.SYNCHRONIZING -> context?.getString(R.string.match_status_synchronizing) ?: "対局を同期中"
+    com.example.othello.match.MatchStatus.RECONNECTING -> context?.getString(R.string.match_status_reconnecting) ?: "再接続中"
     com.example.othello.match.MatchStatus.FINISHING -> context?.getString(R.string.match_status_sending) ?: "結果送信中"
     com.example.othello.match.MatchStatus.PENDING_RESULT -> context?.getString(R.string.match_status_waiting_result) ?: "相手の結果待ち"
     com.example.othello.match.MatchStatus.CONFIRMED -> context?.getString(R.string.match_status_confirmed) ?: "結果確定"
     com.example.othello.match.MatchStatus.DISPUTED -> context?.getString(R.string.match_status_disputed) ?: "結果不一致"
+    com.example.othello.match.MatchStatus.FORFEIT -> context?.getString(R.string.match_status_forfeit) ?: "不戦による勝敗確定"
+    com.example.othello.match.MatchStatus.EXPIRED -> context?.getString(R.string.match_status_expired) ?: "無効対局として終了"
+    com.example.othello.match.MatchStatus.ABANDONED -> context?.getString(R.string.match_status_abandoned) ?: "対局をキャンセルしました"
     com.example.othello.match.MatchStatus.DISCONNECTED -> context?.getString(R.string.match_status_disconnected) ?: "切断"
     com.example.othello.match.MatchStatus.SIGNALING_FAILED -> context?.getString(R.string.error) ?: "エラー"
     com.example.othello.match.MatchStatus.FAILED -> context?.getString(R.string.error) ?: "エラー"

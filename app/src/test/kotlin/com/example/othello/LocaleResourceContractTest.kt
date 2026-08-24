@@ -38,7 +38,7 @@ class LocaleResourceContractTest {
         val japanese = readStrings(japaneseFile)
 
         assertEquals(english.keys, japanese.keys)
-        assertEquals(345, english.size)
+        assertEquals(361, english.size)
         english.forEach { (id, value) ->
             assertEquals(formatArguments(value), formatArguments(japanese.getValue(id)), id)
         }

@@ -117,6 +117,59 @@ if (Test-Path 'analysis/edax/src/main/kotlin/com/example/othello/analysis/edax/H
 if (-not (Test-Path 'supabase/tests/202608090003_hardening.sql')) {
     Write-Error 'pgTAP hardening test is missing'; exit 1
 }
+$releaseMigrationPath = 'supabase/migrations/202608250030_release_match_hardening.sql'
+$releaseTestPath = 'supabase/tests/202608250030_release_match_hardening.sql'
+if (-not (Test-Path $releaseMigrationPath) -or -not (Test-Path $releaseTestPath)) {
+    Write-Error 'Release hardening migration and pgTAP suite must ship together'; exit 1
+}
+$releaseSql = Get-Content $releaseMigrationPath -Raw
+$releaseRequiredPatterns = @(
+    'create type public\.release_match_status',
+    'alter table public\.match_queue[\s\S]*add column protocol_version integer not null default 1[\s\S]*add column request_id uuid',
+    'create table public\.match_result_claims_v2',
+    'create table public\.match_results_v2',
+    'create table public\.match_signals_v2',
+    'create function public\.enqueue_or_match_v2\(p_request_id uuid\)',
+    'for update skip locked',
+    'create function public\.submit_match_result_v2',
+    'create function public\.release_replay_game_v2',
+    'create function public\.publish_match_signal_v2[\s\S]*p_negotiation_epoch integer',
+    'stale signaling negotiation epoch',
+    "p_signal_type not in \('OFFER', 'ANSWER', 'RESUME'\)",
+    'create function public\.run_match_maintenance_v2',
+    'grant execute on function public\.run_match_maintenance_v2\(integer\) to service_role',
+    'revoke all on table[\s\S]*public\.match_signals_v2[\s\S]*from public, anon, authenticated',
+    'grant select on table public\.match_results_v2, public\.match_signals_v2 to authenticated',
+    'game_records_v2_canonical_required[\s\S]*result_contract_version <> 2 or canonical_moves is not null',
+    'protocol_version = 1',
+    'protocol_version = 2'
+)
+$releaseMissing = $releaseRequiredPatterns | Where-Object { $releaseSql -notmatch $_ }
+if ($releaseMissing) { $releaseMissing | ForEach-Object { Write-Error "Missing release-v2 SQL contract: $_" }; exit 1 }
+if ($releaseSql -match 'grant\s+(insert|update|delete|all)[^;]*match_signals_v2[^;]*authenticated') {
+    Write-Error 'Authenticated clients must not directly mutate v2 signaling rows'; exit 1
+}
+$releaseFunctionBlocks = [regex]::Matches(
+    $releaseSql,
+    '(?is)create\s+(?:or\s+replace\s+)?function\s+public\.[\s\S]*?\$\$;'
+)
+foreach ($block in $releaseFunctionBlocks) {
+    if ($block.Value -match '(?i)security\s+definer' -and $block.Value -notmatch "(?i)set\s+search_path\s*=\s*''") {
+        Write-Error 'Every release-v2 SECURITY DEFINER function must pin an empty search_path'; exit 1
+    }
+}
+$releaseTestSql = Get-Content $releaseTestPath -Raw
+$releaseTestPatterns = @(
+    'nonparticipant cannot spoof a loser disc or submit evidence',
+    'one legal terminal transcript remains unilateral and unrated',
+    'matching NORMAL claims from both participants confirm the server replay',
+    'one reconnect ACK cannot reactivate a match by itself',
+    'a delayed signal generated for an old epoch cannot enter the current epoch',
+    'signaling slot limit exceeded',
+    'duplicate NORMAL request never rates twice'
+)
+$releaseTestMissing = $releaseTestPatterns | Where-Object { $releaseTestSql -notmatch [regex]::Escape($_) }
+if ($releaseTestMissing) { $releaseTestMissing | ForEach-Object { Write-Error "Missing release-v2 pgTAP boundary: $_" }; exit 1 }
 $testSql = Get-Content 'supabase/tests/202608090003_hardening.sql' -Raw
 if ($testSql -notmatch 'from pg_proc p') {
     Write-Error 'pgTAP privilege query must include FROM pg_proc p'; exit 1
