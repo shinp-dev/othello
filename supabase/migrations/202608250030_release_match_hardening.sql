@@ -1252,8 +1252,8 @@ begin
            p2p_started_at = coalesce(p2p_started_at, now()),
            play_lease_expires_at = play_deadline
      where id = p_match_id;
-    update public.active_match_participants
-       set expires_at = play_deadline where match_id = p_match_id;
+    update public.active_match_participants as participant
+       set expires_at = play_deadline where participant.match_id = p_match_id;
   end if;
   return query select * from public.release_match_state_row_v2(p_match_id, caller_id);
 end;
@@ -1340,16 +1340,19 @@ begin
     else match_row.release_deadline end;
   update public.matches
      set release_status = 'RECONNECTING',
-         negotiation_epoch = negotiation_epoch + case
+         negotiation_epoch = match_row.negotiation_epoch + case
            when match_row.release_status = 'ACTIVE' then 1 else 0 end,
          release_deadline = new_deadline,
          reconnect_deadline = new_deadline,
          black_disconnect_claimed_at = case
-           when caller_id = black_player then null else black_disconnect_claimed_at end,
+           when caller_id = match_row.black_player then null
+           else match_row.black_disconnect_claimed_at end,
          white_disconnect_claimed_at = case
-           when caller_id = white_player then null else white_disconnect_claimed_at end
+           when caller_id = match_row.white_player then null
+           else match_row.white_disconnect_claimed_at end
    where id = p_match_id;
-  update public.active_match_participants set expires_at = new_deadline where match_id = p_match_id;
+  update public.active_match_participants as participant
+     set expires_at = new_deadline where participant.match_id = p_match_id;
   return query select * from public.release_match_state_row_v2(p_match_id, caller_id);
 end;
 $$;
@@ -1595,8 +1598,8 @@ begin
        where id = p_match_id;
       select release_deadline into evidence_deadline
         from public.matches where id = p_match_id;
-      update public.active_match_participants
-         set expires_at = evidence_deadline where match_id = p_match_id;
+      update public.active_match_participants as participant
+         set expires_at = evidence_deadline where participant.match_id = p_match_id;
     end if;
     return query select * from public.release_result_response_row_v2(p_match_id, caller_id);
     return;
@@ -1644,8 +1647,8 @@ begin
      where id = p_match_id;
   end if;
   select release_deadline into evidence_deadline from public.matches where id = p_match_id;
-  update public.active_match_participants
-     set expires_at = evidence_deadline where match_id = p_match_id;
+  update public.active_match_participants as participant
+     set expires_at = evidence_deadline where participant.match_id = p_match_id;
   return query select * from public.release_result_response_row_v2(p_match_id, caller_id);
 end;
 $$;
@@ -2072,8 +2075,8 @@ begin
     update public.matches
        set p2p_started_at = now(), play_lease_expires_at = play_expiry
      where id = p_match_id;
-    update public.active_match_participants
-       set expires_at = play_expiry where match_id = p_match_id;
+    update public.active_match_participants as participant
+       set expires_at = play_expiry where participant.match_id = p_match_id;
   end if;
   return 'CREATED';
 end;
