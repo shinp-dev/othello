@@ -68,7 +68,6 @@ internal fun SettingsScreen(
     onCommonSettings: () -> Unit,
     onResearch: () -> Unit,
 ) {
-    val context = LocalContext.current
     var showLanguageDialog by remember { mutableStateOf(false) }
     val selectedLanguage = AppLanguage.fromTag(AppCompatDelegate.getApplicationLocales().toLanguageTags())
     Column(
@@ -94,7 +93,6 @@ internal fun SettingsScreen(
         LanguageSelectionDialog(
             selectedLanguage = selectedLanguage,
             onSelect = { language ->
-                AppLanguageStore(context).save(language)
                 applyAppLanguage(language)
                 showLanguageDialog = false
             },

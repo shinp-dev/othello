@@ -128,7 +128,10 @@ internal fun ResearchSettingsScreen(
             onDismissRequest = { showConsentDialog = false; consentChecked = false },
             title = { Text(appString(R.string.research_consent_title)) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     Text(appString(R.string.consent_version, ResearchConsent.version), style = MaterialTheme.typography.titleSmall)
                     localizedResearchConsentStatements().forEach { statement -> Text("• $statement") }
                     Row(verticalAlignment = Alignment.CenterVertically) {

@@ -82,7 +82,6 @@ import kotlinx.coroutines.CancellationException
 
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        AppLanguageStore(this).selected().let(::applyAppLanguage)
         super.onCreate(savedInstanceState)
         val launchOptions = debugLaunchOptions(intent)
         setContent {
