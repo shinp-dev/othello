@@ -831,7 +831,10 @@ class OnlineMatchControllerTest {
         controller.onDataChannelOpen()
 
         assertTrue(controller.play(Position(2, 3)))
-        awaitCondition { controller.viewState.matchState.status == MatchStatus.RECONNECTING }
+        awaitCondition {
+            controller.viewState.matchState.status == MatchStatus.RECONNECTING &&
+                repository.submitCalls == 1
+        }
 
         assertEquals(2, transport.sent.size)
         assertEquals(transport.sent.first(), transport.sent.last())
