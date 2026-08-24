@@ -255,6 +255,12 @@ private fun String.requireUuid(): String = also { UUID.fromString(it) }
 private data class AckParams(@SerialName("p_match_id") val matchId: String)
 
 @Serializable
+private data class NegotiationEpochParams(
+    @SerialName("p_match_id") val matchId: String,
+    @SerialName("p_expected_epoch") val expectedNegotiationEpoch: Int,
+)
+
+@Serializable
 private data class ReleaseMatchStateRow(
     @SerialName("lifecycle_status") val lifecycleStatus: String,
     @SerialName("release_deadline") val releaseDeadline: String? = null,
@@ -320,8 +326,14 @@ private data class ReleaseResultRow(
 }
 
 internal class SupabaseOnlineMatchRepository(private val client: SupabaseClient) : OnlineMatchRepository {
-    override suspend fun ackMatchStarted(matchId: String): MatchStartAck = boundedReleaseNetwork {
-        client.postgrest.rpc("ack_match_started_v2", AckParams(matchId.requireUuid()))
+    override suspend fun ackMatchStarted(
+        matchId: String,
+        expectedNegotiationEpoch: Int,
+    ): MatchStartAck = boundedReleaseNetwork {
+        client.postgrest.rpc(
+            "ack_match_started_v2",
+            NegotiationEpochParams(matchId.requireUuid(), expectedNegotiationEpoch),
+        )
             .decodeList<ReleaseMatchStateRow>()
             .single()
             .toStartAck()
@@ -340,10 +352,18 @@ internal class SupabaseOnlineMatchRepository(private val client: SupabaseClient)
             .isNotBlank()
     }
 
-    override suspend fun resumeMatch(matchId: String): MatchFinishResult = releaseStateRpc(
-        "resume_match_v2",
-        matchId,
-    )
+    override suspend fun resumeMatch(
+        matchId: String,
+        expectedNegotiationEpoch: Int,
+    ): MatchStartAck = boundedReleaseNetwork {
+        client.postgrest.rpc(
+            "resume_match_v2",
+            NegotiationEpochParams(matchId.requireUuid(), expectedNegotiationEpoch),
+        )
+            .decodeList<ReleaseMatchStateRow>()
+            .single()
+            .toStartAck()
+    }
 
     override suspend fun reconcileMatch(matchId: String): MatchFinishResult = releaseStateRpc(
         "reconcile_match_v2",

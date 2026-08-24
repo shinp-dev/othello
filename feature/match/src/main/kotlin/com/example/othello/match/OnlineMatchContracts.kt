@@ -49,10 +49,10 @@ data class MatchFinishResult(
 }
 
 interface OnlineMatchRepository {
-    suspend fun ackMatchStarted(matchId: String): MatchStartAck
+    suspend fun ackMatchStarted(matchId: String, expectedNegotiationEpoch: Int): MatchStartAck
     suspend fun getMatchStartState(matchId: String): MatchStartAck
     suspend fun abandonMatch(matchId: String): Boolean
     suspend fun submitMatchResult(submission: MatchSubmission): MatchFinishResult
-    suspend fun resumeMatch(matchId: String): MatchFinishResult = MatchFinishResult("ACTIVE")
+    suspend fun resumeMatch(matchId: String, expectedNegotiationEpoch: Int): MatchStartAck
     suspend fun reconcileMatch(matchId: String): MatchFinishResult = MatchFinishResult("ACTIVE")
 }

@@ -1509,7 +1509,10 @@ begin
 end;
 $$;
 
-create function public.ack_match_started_v2(p_match_id uuid)
+create function public.ack_match_started_v2(
+  p_match_id uuid,
+  p_expected_epoch integer default null
+)
 returns table(
   match_id uuid,
   lifecycle_status text,
@@ -1535,6 +1538,9 @@ declare play_deadline timestamptz;
 declare both_acked_now boolean;
 begin
   if caller_id is null then raise exception 'authentication required'; end if;
+  if p_expected_epoch is not null and p_expected_epoch not between 0 and 3 then
+    raise exception 'invalid expected negotiation epoch';
+  end if;
   select * into match_row from public.matches where id = p_match_id for update;
   if not found or match_row.protocol_version <> 2
      or caller_id not in (match_row.black_player, match_row.white_player) then
@@ -1551,6 +1557,15 @@ begin
   end if;
   if match_row.release_status not in ('MATCHED', 'RECONNECTING', 'ACTIVE') then
     raise exception 'match does not accept a data channel acknowledgement';
+  end if;
+  if p_expected_epoch is not null and p_expected_epoch > match_row.negotiation_epoch then
+    raise exception 'future match acknowledgement epoch';
+  end if;
+  if p_expected_epoch is not null and p_expected_epoch < match_row.negotiation_epoch then
+    -- A delayed DataChannel OPEN from an older generation must not ACK the
+    -- authoritative newer epoch. Return its state so the client can adopt it.
+    return query select * from public.release_match_state_row_v2(p_match_id, caller_id);
+    return;
   end if;
 
   insert into public.match_start_acks_v2(match_id, user_id, negotiation_epoch)
@@ -1613,7 +1628,10 @@ begin
 end;
 $$;
 
-create function public.resume_match_v2(p_match_id uuid)
+create function public.resume_match_v2(
+  p_match_id uuid,
+  p_expected_epoch integer default null
+)
 returns table(
   match_id uuid,
   lifecycle_status text,
@@ -1639,6 +1657,9 @@ declare caller_was_claimed boolean;
 declare new_deadline timestamptz;
 begin
   if caller_id is null then raise exception 'authentication required'; end if;
+  if p_expected_epoch is not null and p_expected_epoch not between 0 and 3 then
+    raise exception 'invalid expected negotiation epoch';
+  end if;
   select * into match_row from public.matches where id = p_match_id for update;
   if not found or match_row.protocol_version <> 2
      or caller_id not in (match_row.black_player, match_row.white_player) then
@@ -1649,6 +1670,17 @@ begin
   end if;
   if match_row.release_deadline <= now() then
     perform public.release_reconcile_match_internal_v2(p_match_id);
+    return query select * from public.release_match_state_row_v2(p_match_id, caller_id);
+    return;
+  end if;
+  if p_expected_epoch is not null and p_expected_epoch > match_row.negotiation_epoch then
+    raise exception 'future resume negotiation epoch';
+  end if;
+  if match_row.release_status = 'ACTIVE' and p_expected_epoch is not null
+     and p_expected_epoch < match_row.negotiation_epoch then
+    -- The epoch observed before this row lock already completed. This request
+    -- is stale, not evidence that another reconnect is required, so it must not
+    -- increment or consume the finite epoch budget.
     return query select * from public.release_match_state_row_v2(p_match_id, caller_id);
     return;
   end if;
@@ -2668,9 +2700,9 @@ revoke all on function public.enqueue_or_match_v2(uuid) from public, anon;
 revoke all on function public.claim_active_match_v2() from public, anon;
 revoke all on function public.cancel_waiting_v2(uuid) from public, anon;
 revoke all on function public.get_release_match_state_v2(uuid) from public, anon;
-revoke all on function public.ack_match_started_v2(uuid) from public, anon;
+revoke all on function public.ack_match_started_v2(uuid, integer) from public, anon;
 revoke all on function public.abandon_match_v2(uuid) from public, anon;
-revoke all on function public.resume_match_v2(uuid) from public, anon;
+revoke all on function public.resume_match_v2(uuid, integer) from public, anon;
 revoke all on function public.reconcile_match_v2(uuid) from public, anon;
 revoke all on function public.submit_match_result_v2(uuid, uuid, text, text, text, jsonb)
   from public, anon;
@@ -2686,9 +2718,9 @@ grant execute on function public.enqueue_or_match_v2(uuid) to authenticated;
 grant execute on function public.claim_active_match_v2() to authenticated;
 grant execute on function public.cancel_waiting_v2(uuid) to authenticated;
 grant execute on function public.get_release_match_state_v2(uuid) to authenticated;
-grant execute on function public.ack_match_started_v2(uuid) to authenticated;
+grant execute on function public.ack_match_started_v2(uuid, integer) to authenticated;
 grant execute on function public.abandon_match_v2(uuid) to authenticated;
-grant execute on function public.resume_match_v2(uuid) to authenticated;
+grant execute on function public.resume_match_v2(uuid, integer) to authenticated;
 grant execute on function public.reconcile_match_v2(uuid) to authenticated;
 grant execute on function public.submit_match_result_v2(uuid, uuid, text, text, text, jsonb)
   to authenticated;

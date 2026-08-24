@@ -99,20 +99,32 @@ private class FakeOnlineRepository : OnlineMatchRepository {
     var startState = MatchStartAck("CREATED", localAcked = true, bothAcked = true)
     val startStateResponses = ArrayDeque<MatchStartAck>()
     var ackCalls = 0
+    var getStartStateCalls = 0
     var submitCalls = 0
     var abandonCalls = 0
     var resumeCalls = 0
     var reconcileCalls = 0
+    val ackExpectedEpochs = mutableListOf<Int>()
+    val resumeExpectedEpochs = mutableListOf<Int>()
     var submitDelayMillis = 0L
     var submitFailuresRemaining = 0
-    var resumeResult = MatchFinishResult("ACTIVE")
+    var ackResponseFailuresRemaining = 0
+    var resumeResult = MatchStartAck("ACTIVE", localAcked = true, bothAcked = true)
     var reconcileResult = MatchFinishResult("ACTIVE")
-    override suspend fun ackMatchStarted(matchId: String): MatchStartAck {
+    override suspend fun ackMatchStarted(matchId: String, expectedNegotiationEpoch: Int): MatchStartAck {
         ackCalls++
+        ackExpectedEpochs += expectedNegotiationEpoch
+        val committed = startStateResponses.removeFirstOrNull() ?: startState
+        if (ackResponseFailuresRemaining > 0) {
+            ackResponseFailuresRemaining--
+            error("ACK response lost after commit")
+        }
+        return committed
+    }
+    override suspend fun getMatchStartState(matchId: String): MatchStartAck {
+        getStartStateCalls++
         return startStateResponses.removeFirstOrNull() ?: startState
     }
-    override suspend fun getMatchStartState(matchId: String) =
-        startStateResponses.removeFirstOrNull() ?: startState
     override suspend fun abandonMatch(matchId: String): Boolean { abandonCalls++; return true }
     override suspend fun submitMatchResult(submission: MatchSubmission): MatchFinishResult {
         attemptedSubmissions += submission
@@ -127,7 +139,11 @@ private class FakeOnlineRepository : OnlineMatchRepository {
         val status = if (serverStatuses.size > 1) serverStatuses.removeAt(0) else serverStatuses.single()
         return MatchFinishResult(status)
     }
-    override suspend fun resumeMatch(matchId: String): MatchFinishResult { resumeCalls++; return resumeResult }
+    override suspend fun resumeMatch(matchId: String, expectedNegotiationEpoch: Int): MatchStartAck {
+        resumeCalls++
+        resumeExpectedEpochs += expectedNegotiationEpoch
+        return resumeResult
+    }
     override suspend fun reconcileMatch(matchId: String): MatchFinishResult { reconcileCalls++; return reconcileResult }
 }
 
@@ -716,8 +732,9 @@ class OnlineMatchControllerTest {
             transport,
             repository,
             disconnectDebounceMillis = 50,
+            initialNegotiationEpoch = 2,
         )
-        controller.onDataChannelOpen()
+        controller.onDataChannelOpen(2)
 
         transport.disconnect()
         delay(10)
@@ -771,6 +788,8 @@ class OnlineMatchControllerTest {
         blackRepository.startStateResponses += MatchStartAck(
             "ACTIVE", localAcked = true, bothAcked = true, negotiationEpoch = 1,
         )
+        black.adoptAuthoritativeReconnectEpoch(1)
+        black.markReconnectSignalingStarted(1)
         blackTransport.reconnect()
         awaitCondition { black.viewState.matchState.status == MatchStatus.PLAYING }
 
@@ -784,6 +803,88 @@ class OnlineMatchControllerTest {
         assertTrue(black.viewState.whiteRemainingMillis < before)
         black.close()
         white.close()
+    }
+
+    @Test
+    fun passivePeerAdoptsAuthoritativeEpochAndAcksWithoutDisconnectClaim() = runBlocking {
+        val passiveTransport = FakeMatchTransport()
+        val peerTransport = FakeMatchTransport()
+        passiveTransport.peer = peerTransport
+        peerTransport.peer = passiveTransport
+        val passiveRepository = FakeOnlineRepository()
+        val passive = OnlineMatchController(
+            "passive-reconnect",
+            Disc.BLACK,
+            passiveTransport,
+            passiveRepository,
+            synchronizationTimeoutMillis = 100,
+        )
+        val peer = OnlineMatchController(
+            "passive-reconnect",
+            Disc.WHITE,
+            peerTransport,
+            FakeOnlineRepository(),
+            synchronizationTimeoutMillis = 100,
+        )
+        assertTrue(passive.onDataChannelOpen(0))
+        assertTrue(peer.onDataChannelOpen(0))
+
+        // Only the peer observed the physical disconnect. Current-epoch signaling
+        // is the passive participant's authoritative trigger.
+        passive.adoptAuthoritativeReconnectEpoch(1)
+        passive.markReconnectSignalingStarted(1)
+        assertEquals(MatchStatus.RECONNECTING, passive.viewState.matchState.status)
+        assertEquals(1, passive.reconnectEpochProgress.adoptedEpoch)
+        assertTrue(passive.reconnectEpochProgress.passiveParticipation)
+        assertTrue(passive.reconnectEpochProgress.signalingStarted)
+        assertEquals(0, passiveRepository.submitCalls)
+
+        passiveRepository.startState = MatchStartAck(
+            "ACTIVE", localAcked = true, bothAcked = true, negotiationEpoch = 1,
+        )
+        passiveTransport.emitState(TransportState.CONNECTING)
+        passiveTransport.reconnect()
+        awaitCondition { passive.viewState.matchState.status == MatchStatus.PLAYING }
+
+        assertEquals(listOf(0, 1), passiveRepository.ackExpectedEpochs)
+        assertEquals(0, passiveRepository.submitCalls)
+        assertEquals(0, passiveRepository.resumeCalls)
+        assertEquals(1, passive.reconnectEpochProgress.authoritativeEpoch)
+        assertNull(passive.reconnectEpochProgress.adoptedEpoch)
+        assertEquals(1, passive.reconnectEpochProgress.completedEpoch)
+        assertEquals(MatchStatus.PLAYING, peer.viewState.matchState.status)
+        passive.adoptAuthoritativeReconnectEpoch(1, serverLocalAcked = true, serverBothAcked = true)
+        assertEquals(MatchStatus.PLAYING, passive.viewState.matchState.status)
+        assertNull(passive.reconnectEpochProgress.adoptedEpoch)
+        passive.close()
+        peer.close()
+    }
+
+    @Test
+    fun committedEpochTwoAckWithLostResponseReconcilesFromServerWithoutResume() = runBlocking {
+        val fixture = verifyCommittedReconnectAckResponseLoss(2)
+        fixture.controller.close()
+        fixture.peer.close()
+    }
+
+    @Test
+    fun committedEpochThreeAckWithLostResponseDoesNotConsumeEpochFour() = runBlocking {
+        val fixture = verifyCommittedReconnectAckResponseLoss(3)
+        assertEquals(3, fixture.controller.reconnectEpochProgress.authoritativeEpoch)
+        assertNull(fixture.controller.reconnectEpochProgress.adoptedEpoch)
+        assertEquals(MatchStatus.PLAYING, fixture.controller.viewState.matchState.status)
+        assertEquals(0, fixture.repository.resumeCalls)
+
+        // A later, genuinely new disconnect remains distinguishable and reaches
+        // the server's epoch-3 budget decision instead of reusing the completed ACK.
+        fixture.repository.serverStatuses.clear()
+        fixture.repository.serverStatuses += "EXPIRED"
+        fixture.transport.disconnect()
+        awaitCondition { fixture.controller.viewState.matchState.status == MatchStatus.EXPIRED }
+        assertEquals(2, fixture.repository.submitCalls)
+        assertEquals(0, fixture.repository.resumeCalls)
+        fixture.controller.close()
+        fixture.peer.close()
     }
 
     @Test
@@ -811,6 +912,40 @@ class OnlineMatchControllerTest {
         assertEquals(1, repository.attemptedSubmissions.map { it.requestId }.toSet().size)
         assertEquals(1, repository.submitCalls)
         assertEquals(MatchStatus.RECONNECTING, controller.viewState.matchState.status)
+        controller.close()
+    }
+
+    @Test
+    fun authoritativeEpochAdoptionCancelsTheConsumedDisconnectReportRetry() = runBlocking {
+        val transport = FakeMatchTransport()
+        val repository = FakeOnlineRepository().apply {
+            submitFailuresRemaining = 1
+            serverStatuses.clear()
+            serverStatuses += "RECONNECTING"
+        }
+        val controller = OnlineMatchController(
+            "consumed-disconnect-report",
+            Disc.BLACK,
+            transport,
+            repository,
+            disconnectDebounceMillis = 0,
+            disconnectReportRetryMillis = 50,
+            reconnectGraceMillis = 1_000,
+        )
+        controller.onDataChannelOpen(0)
+
+        transport.disconnect()
+        awaitCondition {
+            repository.attemptedSubmissions.size == 1 &&
+                controller.reconnectEpochProgress.freshEpochRequired
+        }
+        controller.adoptAuthoritativeReconnectEpoch(1)
+        delay(100)
+
+        assertEquals(1, repository.attemptedSubmissions.size)
+        assertEquals(0, repository.submitCalls)
+        assertEquals(1, controller.reconnectEpochProgress.adoptedEpoch)
+        assertFalse(controller.reconnectEpochProgress.freshEpochRequired)
         controller.close()
     }
 
@@ -1023,6 +1158,71 @@ class OnlineMatchControllerTest {
         assertEquals(1, blackTransport.closeCalls)
         assertEquals(1, whiteTransport.closeCalls)
     }
+
+    private suspend fun verifyCommittedReconnectAckResponseLoss(epoch: Int): AckLossFixture {
+        val transport = FakeMatchTransport()
+        val peerTransport = FakeMatchTransport()
+        transport.peer = peerTransport
+        peerTransport.peer = transport
+        val repository = FakeOnlineRepository().apply {
+            serverStatuses.clear()
+            serverStatuses += "RECONNECTING"
+        }
+        val controller = OnlineMatchController(
+            "lost-reconnect-ack-$epoch",
+            Disc.BLACK,
+            transport,
+            repository,
+            synchronizationTimeoutMillis = 100,
+            reconnectGraceMillis = 1_000,
+            disconnectDebounceMillis = 0,
+        )
+        val peer = OnlineMatchController(
+            "lost-reconnect-ack-$epoch",
+            Disc.WHITE,
+            peerTransport,
+            FakeOnlineRepository(),
+            synchronizationTimeoutMillis = 100,
+        )
+        assertTrue(controller.onDataChannelOpen(0))
+        assertTrue(peer.onDataChannelOpen(0))
+
+        transport.disconnect()
+        awaitCondition {
+            repository.submitCalls == 1 &&
+                controller.viewState.matchState.status == MatchStatus.RECONNECTING
+        }
+        assertTrue(controller.reconnectEpochProgress.freshEpochRequired)
+        controller.adoptAuthoritativeReconnectEpoch(epoch)
+        controller.markReconnectSignalingStarted(epoch)
+        assertTrue(controller.reconnectEpochProgress.localDisconnectObserved)
+        assertFalse(controller.reconnectEpochProgress.passiveParticipation)
+        assertFalse(controller.reconnectEpochProgress.freshEpochRequired)
+
+        repository.startState = MatchStartAck(
+            "ACTIVE", localAcked = true, bothAcked = true, negotiationEpoch = epoch,
+        )
+        repository.ackResponseFailuresRemaining = 1
+        transport.emitState(TransportState.CONNECTING)
+        transport.reconnect()
+        awaitCondition { controller.viewState.matchState.status == MatchStatus.PLAYING }
+
+        assertEquals(listOf(0, epoch), repository.ackExpectedEpochs)
+        assertEquals(1, repository.getStartStateCalls)
+        assertEquals(0, repository.resumeCalls)
+        assertEquals(1, repository.submitCalls)
+        assertEquals(epoch, controller.reconnectEpochProgress.authoritativeEpoch)
+        assertNull(controller.reconnectEpochProgress.adoptedEpoch)
+        assertEquals(MatchStatus.PLAYING, peer.viewState.matchState.status)
+        return AckLossFixture(controller, peer, transport, repository)
+    }
+
+    private data class AckLossFixture(
+        val controller: OnlineMatchController,
+        val peer: OnlineMatchController,
+        val transport: FakeMatchTransport,
+        val repository: FakeOnlineRepository,
+    )
 
     private suspend fun awaitCondition(timeoutMillis: Long = 1_000, condition: () -> Boolean) {
         withTimeout(timeoutMillis) {

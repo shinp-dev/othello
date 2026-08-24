@@ -8,6 +8,7 @@ import com.example.othello.game.MoveOutcome
 import com.example.othello.game.Position
 import com.example.othello.game.TurnResolver
 import com.example.othello.network.MatchTransport
+import com.example.othello.network.MAX_MATCH_NEGOTIATION_EPOCH
 import com.example.othello.network.MoveAck
 import com.example.othello.network.MoveCommand
 import com.example.othello.network.MoveCommandValidator
@@ -58,6 +59,27 @@ data class OnlineMatchViewState(
     val pendingResultRequestId: String? = null,
 )
 
+data class ReconnectEpochProgress(
+    val authoritativeEpoch: Int = 0,
+    val adoptedEpoch: Int? = null,
+    val completedEpoch: Int? = null,
+    val signalingStarted: Boolean = false,
+    val ackRequestSent: Boolean = false,
+    val serverLocalAcked: Boolean = false,
+    val serverBothAcked: Boolean = false,
+    val localDisconnectObserved: Boolean = false,
+    val freshEpochRequired: Boolean = false,
+) {
+    init {
+        require(authoritativeEpoch in 0..MAX_MATCH_NEGOTIATION_EPOCH)
+        require(adoptedEpoch == null || adoptedEpoch in 0..MAX_MATCH_NEGOTIATION_EPOCH)
+        require(completedEpoch == null || completedEpoch in 0..MAX_MATCH_NEGOTIATION_EPOCH)
+    }
+
+    val passiveParticipation: Boolean
+        get() = adoptedEpoch != null && !localDisconnectObserved
+}
+
 /** Coordinates local game rules, DataChannel validation and result submission. */
 class OnlineMatchController(
     private val matchId: String,
@@ -74,6 +96,7 @@ class OnlineMatchController(
     initialPendingLoserDisc: Disc? = null,
     initialPendingResultRequestId: String? = null,
     recoverySynchronizationRequired: Boolean = false,
+    initialNegotiationEpoch: Int = 0,
     private val deliveryRetryAttempts: Int = 3,
     private val deliveryAckTimeoutMillis: Long = 750,
     private val synchronizationTimeoutMillis: Long = 3_000,
@@ -142,6 +165,7 @@ class OnlineMatchController(
     private var pendingMove: PendingMove? = null
     private var pendingDisconnectClaim: MatchSubmission? = null
     private var recoverySyncPending = recoverySynchronizationRequired
+    private var reconnectProgress = ReconnectEpochProgress(authoritativeEpoch = initialNegotiationEpoch)
     private var pendingSyncRequestId: String? = null
     private val peerSyncRequestIds = LinkedHashSet<String>()
     private val receivedMoveAcks = mutableMapOf<String, MoveAck>()
@@ -174,8 +198,9 @@ class OnlineMatchController(
                     TransportState.OPEN -> {
                         disconnectDebounceJob?.cancel()
                         disconnectDebounceJob = null
-                        if (started && state.matchState.status == MatchStatus.RECONNECTING) {
-                            handleTransportRecovered()
+                        val adoptedEpoch = reconnectProgress.adoptedEpoch
+                        if (started && state.matchState.status == MatchStatus.RECONNECTING && adoptedEpoch != null) {
+                            handleTransportRecovered(adoptedEpoch)
                         }
                     }
                     else -> Unit
@@ -185,6 +210,7 @@ class OnlineMatchController(
     }
 
     val viewState: OnlineMatchViewState get() = state
+    val reconnectEpochProgress: ReconnectEpochProgress get() = reconnectProgress
 
     fun observe(listener: (OnlineMatchViewState) -> Unit): AutoCloseable {
         listeners += listener
@@ -192,7 +218,106 @@ class OnlineMatchController(
         return AutoCloseable { listeners -= listener }
     }
 
-    suspend fun onDataChannelOpen(): Boolean = startMutex.withLock {
+    suspend fun adoptAuthoritativeReconnectEpoch(
+        negotiationEpoch: Int,
+        serverLocalAcked: Boolean = false,
+        serverBothAcked: Boolean = false,
+    ) = actionMutex.withLock {
+        require(negotiationEpoch in 0..MAX_MATCH_NEGOTIATION_EPOCH)
+        if (closed || state.matchState.status.isTerminal()) return@withLock
+        if (started && state.matchState.status !in ACTIVE_SYNC_STATUSES &&
+            state.matchState.status != MatchStatus.RECONNECTING
+        ) {
+            return@withLock
+        }
+        require(negotiationEpoch >= reconnectProgress.authoritativeEpoch) {
+            "authoritative reconnect epoch cannot move backwards"
+        }
+        if (started && state.matchState.status == MatchStatus.PLAYING &&
+            reconnectProgress.completedEpoch == negotiationEpoch &&
+            !reconnectProgress.freshEpochRequired
+        ) {
+            return@withLock
+        }
+        val sameAdoption = reconnectProgress.adoptedEpoch == negotiationEpoch
+        val freshEpochConsumed = !sameAdoption && reconnectProgress.freshEpochRequired
+        val localDisconnectObserved = if (sameAdoption) {
+            reconnectProgress.localDisconnectObserved
+        } else {
+            reconnectProgress.freshEpochRequired
+        }
+        reconnectProgress = ReconnectEpochProgress(
+            authoritativeEpoch = negotiationEpoch,
+            adoptedEpoch = negotiationEpoch,
+            completedEpoch = reconnectProgress.completedEpoch,
+            signalingStarted = sameAdoption && reconnectProgress.signalingStarted,
+            ackRequestSent = sameAdoption && reconnectProgress.ackRequestSent,
+            serverLocalAcked = serverLocalAcked || (sameAdoption && reconnectProgress.serverLocalAcked),
+            serverBothAcked = serverBothAcked || (sameAdoption && reconnectProgress.serverBothAcked),
+            localDisconnectObserved = localDisconnectObserved,
+            freshEpochRequired = false,
+        )
+        if (freshEpochConsumed) {
+            disconnectReportRetryJob?.cancel()
+            disconnectReportRetryJob = null
+            pendingDisconnectClaim = null
+        }
+        if (!started) {
+            recoverySyncPending = true
+            return@withLock
+        }
+
+        deliveryRetryJob?.cancel()
+        synchronizationJob?.cancel()
+        pendingSyncRequestId = null
+        peerSyncRequestIds.clear()
+        timeoutJob?.cancel()
+        matchClock.stop()
+        publishClockState()
+        if (state.matchState.status in ACTIVE_SYNC_STATUSES) {
+            transition(MatchCommand.Reconnect)
+        }
+        update {
+            copy(
+                localStartAcked = reconnectProgress.serverLocalAcked,
+                bothStartAcked = reconnectProgress.serverBothAcked,
+                message = "再接続中",
+                error = null,
+            )
+        }
+        scheduleReconnectReconciliation()
+    }
+
+    suspend fun markReconnectSignalingStarted(negotiationEpoch: Int) = actionMutex.withLock {
+        if (reconnectProgress.adoptedEpoch == negotiationEpoch) {
+            reconnectProgress = reconnectProgress.copy(signalingStarted = true)
+        }
+    }
+
+    suspend fun reconcileAuthoritativeStartState(authoritativeState: MatchStartAck): Boolean =
+        actionMutex.withLock {
+            reconcileAuthoritativeStartStateLocked(authoritativeState)
+        }
+
+    suspend fun onDataChannelOpen(
+        negotiationEpoch: Int = reconnectProgress.authoritativeEpoch,
+    ): Boolean {
+        if (closed) return false
+        if (started) {
+            return when {
+                state.matchState.status == MatchStatus.RECONNECTING &&
+                    reconnectProgress.adoptedEpoch == negotiationEpoch ->
+                    handleTransportRecovered(negotiationEpoch)
+                state.matchState.status in ACTIVE_SYNC_STATUSES -> true
+                else -> false
+            }
+        }
+        return handleInitialDataChannelOpen(negotiationEpoch)
+    }
+
+    private suspend fun handleInitialDataChannelOpen(
+        negotiationEpoch: Int,
+    ): Boolean = startMutex.withLock {
         if (closed) return@withLock false
         if (started) return@withLock true
         transition(MatchCommand.DataChannelOpened)
@@ -202,8 +327,10 @@ class OnlineMatchController(
         if (!localAckRecorded) {
             for (attempt in 0 until ackAttempts.coerceAtLeast(1)) {
                 try {
-                    startState = repository.ackMatchStarted(matchId)
-                    localAckRecorded = startState?.localAcked == true
+                    startState = repository.ackMatchStarted(matchId, negotiationEpoch)
+                    startState?.let(::recordAuthoritativeStartState)
+                    localAckRecorded = startState?.localAcked == true &&
+                        startState?.negotiationEpoch == negotiationEpoch
                     if (localAckRecorded) break
                 } catch (error: CancellationException) {
                     throw error
@@ -237,13 +364,15 @@ class OnlineMatchController(
                     failure = error
                     null
                 }
+                startState?.let(::recordAuthoritativeStartState)
                 if (startState?.serverStatus == "ACTIVE" || startState?.bothAcked == true) break
             }
         }
 
         val confirmed = startState
-        val ready = confirmed?.serverStatus == "ACTIVE" ||
-            (confirmed?.serverStatus == "CREATED" && confirmed.bothAcked)
+        val ready = confirmed?.negotiationEpoch == negotiationEpoch &&
+            (confirmed.serverStatus == "ACTIVE" ||
+                (confirmed.serverStatus == "CREATED" && confirmed.bothAcked))
         if (!ready) {
             update {
                 copy(
@@ -258,7 +387,14 @@ class OnlineMatchController(
         transition(MatchCommand.StartConfirmed)
         initialClock?.let { matchClock.adoptAndStart(it, state.game.currentPlayer) }
             ?: matchClock.start(state.game.currentPlayer)
-        update { copy(message = "対局中", error = null, localStartAcked = true, bothStartAcked = confirmed?.bothAcked == true) }
+        update {
+            copy(
+                message = "対局中",
+                error = null,
+                localStartAcked = true,
+                bothStartAcked = confirmed?.bothAcked == true,
+            )
+        }
         publishClockState()
         drainPendingRemoteMessages()
         if (activeSubmission != null) {
@@ -431,18 +567,42 @@ class OnlineMatchController(
         }
     }
 
-    private suspend fun handleTransportRecovered() = actionMutex.withLock {
-        if (closed || !started || state.matchState.status != MatchStatus.RECONNECTING) return@withLock
+    private suspend fun handleTransportRecovered(expectedEpoch: Int): Boolean = actionMutex.withLock {
+        if (closed || !started || state.matchState.status != MatchStatus.RECONNECTING ||
+            reconnectProgress.adoptedEpoch != expectedEpoch
+        ) {
+            return@withLock false
+        }
+        reconnectProgress = reconnectProgress.copy(ackRequestSent = true)
         var acknowledged = try {
-            repository.ackMatchStarted(matchId)
+            repository.ackMatchStarted(matchId, expectedEpoch)
         } catch (error: CancellationException) {
             throw error
-        } catch (error: Exception) {
-            update { copy(error = error.message, message = "再接続を確認できませんでした") }
-            return@withLock
+        } catch (_: Exception) {
+            // The request may have committed even when its HTTP response was lost.
+            // Resolve the ambiguity from the authoritative match row before allowing
+            // the Coordinator to consider spending another reconnect epoch.
+            try {
+                repository.getMatchStartState(matchId)
+            } catch (stateError: CancellationException) {
+                throw stateError
+            } catch (stateError: Exception) {
+                update { copy(error = stateError.message, message = "再接続を確認できませんでした") }
+                return@withLock false
+            }
         }
+        recordAuthoritativeStartState(acknowledged)
         for (attempt in 0 until startConfirmationAttempts.coerceAtLeast(1)) {
-            if (acknowledged.serverStatus == "ACTIVE" && acknowledged.bothAcked) break
+            if (acknowledged.negotiationEpoch == expectedEpoch &&
+                acknowledged.serverStatus == "ACTIVE" && acknowledged.bothAcked
+            ) {
+                break
+            }
+            if (acknowledged.negotiationEpoch != expectedEpoch ||
+                acknowledged.serverStatus in TERMINAL_SERVER_STATUSES
+            ) {
+                break
+            }
             if (attempt > 0) delay(startConfirmationDelayMillis)
             acknowledged = try {
                 repository.getMatchStartState(matchId)
@@ -450,18 +610,56 @@ class OnlineMatchController(
                 throw error
             } catch (error: Exception) {
                 update { copy(error = error.message, message = "再接続を確認できませんでした") }
-                return@withLock
+                return@withLock false
+            }
+            recordAuthoritativeStartState(acknowledged)
+        }
+        reconcileAuthoritativeStartStateLocked(acknowledged)
+    }
+
+    private suspend fun reconcileAuthoritativeStartStateLocked(authoritativeState: MatchStartAck): Boolean {
+        recordAuthoritativeStartState(authoritativeState)
+        if (authoritativeState.serverStatus in TERMINAL_SERVER_STATUSES) {
+            applyServerResult(authoritativeState.toFinishResult())
+            return true
+        }
+        if (authoritativeState.negotiationEpoch != reconnectProgress.adoptedEpoch) {
+            update { copy(error = "新しい再接続epochを確認しました", message = "再接続状態を更新しています") }
+            return false
+        }
+        if (authoritativeState.serverStatus == "ACTIVE" && authoritativeState.localAcked &&
+            authoritativeState.bothAcked && lastTransportState == TransportState.OPEN
+        ) {
+            beginRecoveredSynchronization()
+            return true
+        }
+        update {
+            copy(
+                localStartAcked = authoritativeState.localAcked,
+                bothStartAcked = authoritativeState.bothAcked,
+                error = "相手の再接続ACKが未確認です",
+                message = "相手の復帰を待っています",
+            )
+        }
+        return false
+    }
+
+    private fun recordAuthoritativeStartState(authoritativeState: MatchStartAck) {
+        if (authoritativeState.negotiationEpoch < reconnectProgress.authoritativeEpoch) return
+        val appliesToAdoptedEpoch = authoritativeState.negotiationEpoch == reconnectProgress.adoptedEpoch
+        reconnectProgress = reconnectProgress.copy(
+            authoritativeEpoch = authoritativeState.negotiationEpoch,
+            serverLocalAcked = if (appliesToAdoptedEpoch) authoritativeState.localAcked else false,
+            serverBothAcked = if (appliesToAdoptedEpoch) authoritativeState.bothAcked else false,
+        )
+        if (appliesToAdoptedEpoch) {
+            update {
+                copy(
+                    localStartAcked = authoritativeState.localAcked,
+                    bothStartAcked = authoritativeState.bothAcked,
+                )
             }
         }
-        if (acknowledged.serverStatus != "ACTIVE" || !acknowledged.bothAcked) {
-            if (acknowledged.serverStatus in TERMINAL_SERVER_STATUSES) {
-                applyServerResult(acknowledged.toFinishResult())
-            } else {
-                update { copy(error = "相手の再接続ACKが未確認です", message = "相手の復帰を待っています") }
-            }
-            return@withLock
-        }
-        beginRecoveredSynchronization()
     }
 
     private suspend fun beginRecoveredSynchronization() {
@@ -484,6 +682,12 @@ class OnlineMatchController(
         timeoutJob?.cancel()
         matchClock.stop()
         publishClockState()
+        reconnectProgress = ReconnectEpochProgress(
+            authoritativeEpoch = reconnectProgress.authoritativeEpoch,
+            completedEpoch = reconnectProgress.completedEpoch,
+            localDisconnectObserved = true,
+            freshEpochRequired = true,
+        )
         transition(MatchCommand.Reconnect)
         update { copy(message = "再接続中", error = null) }
         val claim = pendingDisconnectClaim ?: MatchSubmission(
@@ -788,6 +992,12 @@ class OnlineMatchController(
         deliveryRetryJob?.cancel()
         synchronizationJob?.cancel()
         if (state.matchState.status == MatchStatus.SYNCHRONIZING) transition(MatchCommand.Synchronized)
+        reconnectProgress = ReconnectEpochProgress(
+            authoritativeEpoch = reconnectProgress.authoritativeEpoch,
+            completedEpoch = reconnectProgress.authoritativeEpoch,
+            serverLocalAcked = true,
+            serverBothAcked = true,
+        )
         if (state.game.status is GameStatus.InProgress) {
             matchClock.adoptAndStart(matchClock.snapshot(), state.game.currentPlayer)
         } else {

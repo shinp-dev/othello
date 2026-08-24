@@ -3,8 +3,9 @@ package com.example.othello
 import android.content.Context
 import com.example.othello.data.supabase.SignalingEnvelope
 import com.example.othello.data.supabase.SupabaseSignalingDataSource
-import com.example.othello.game.Disc
 import com.example.othello.game.CanonicalMoves
+import com.example.othello.game.Disc
+import com.example.othello.match.MatchStartAck
 import com.example.othello.match.OnlineMatchController
 import com.example.othello.match.OnlineMatchRepository
 import com.example.othello.match.MatchDiagnostics
@@ -15,6 +16,7 @@ import com.example.othello.transport.webrtc.AndroidWebRtcTransportFactory
 import com.example.othello.transport.webrtc.DefaultIceServers
 import com.example.othello.transport.webrtc.SessionDescriptionPayload
 import com.example.othello.network.ClockSnapshot
+import com.example.othello.network.MAX_MATCH_NEGOTIATION_EPOCH
 import com.example.othello.network.TransportState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -35,24 +37,32 @@ internal enum class ReleaseRenegotiationAction {
 internal fun planReleaseRenegotiation(
     force: Boolean,
     transportState: TransportState,
-    controllerReconnecting: Boolean,
+    freshReconnectEpochRequired: Boolean,
+    adoptedReconnectEpoch: Int?,
     currentEpoch: Int,
     serverStatus: String,
     serverEpoch: Int,
+    serverLocalAcked: Boolean,
+    serverBothAcked: Boolean,
 ): ReleaseRenegotiationAction = when {
     serverStatus in setOf("CONFIRMED", "FORFEIT", "EXPIRED", "ABANDONED", "DISPUTED", "RESULT_PENDING") ->
         ReleaseRenegotiationAction.RECONCILE_TERMINAL
     serverStatus == "RECONNECTING" -> ReleaseRenegotiationAction.SIGNAL_CURRENT_EPOCH
     serverStatus == "MATCHED" -> ReleaseRenegotiationAction.SIGNAL_CURRENT_EPOCH
-    serverStatus == "ACTIVE" && transportState == TransportState.OPEN && serverEpoch != currentEpoch ->
-        ReleaseRenegotiationAction.SYNCHRONIZE_CURRENT_EPOCH
-    // Once the Controller has crossed its disconnect debounce, an ACTIVE same-epoch
-    // read is not enough to prove the disconnect report lost the race. Entering the
-    // resumable server transition is idempotent with that in-flight report: whichever
-    // request locks ACTIVE first creates the one next epoch and the other observes
-    // RECONNECTING without incrementing it again.
-    serverStatus == "ACTIVE" && controllerReconnecting ->
+    // A locally observed disconnect that has not yet been consumed by an adopted
+    // server epoch is a genuinely fresh reconnect request. It must win-or-join the
+    // row-locked ACTIVE -> RECONNECTING transition even if the old channel reopened.
+    serverStatus == "ACTIVE" && freshReconnectEpochRequired ->
         ReleaseRenegotiationAction.START_NEW_EPOCH
+    // ACTIVE is authoritative proof that both ACKs committed for its current epoch.
+    // The explicit ACK columns make that invariant visible to the client and prevent
+    // an ambiguous/lost ACK HTTP response from consuming the following epoch.
+    serverStatus == "ACTIVE" && transportState == TransportState.OPEN &&
+        serverLocalAcked && serverBothAcked &&
+        (serverEpoch > currentEpoch || adoptedReconnectEpoch == serverEpoch) ->
+        ReleaseRenegotiationAction.SYNCHRONIZE_CURRENT_EPOCH
+    serverStatus == "ACTIVE" && serverEpoch < currentEpoch ->
+        ReleaseRenegotiationAction.RECONCILE_TERMINAL
     serverStatus == "ACTIVE" && transportState == TransportState.OPEN && !force ->
         ReleaseRenegotiationAction.SKIP_TRANSIENT_RECOVERY
     serverStatus == "ACTIVE" -> ReleaseRenegotiationAction.START_NEW_EPOCH
@@ -93,6 +103,7 @@ class WebRtcMatchCoordinator(
         initialPendingResultRequestId = recoveredSnapshot?.pendingResultRequestId,
         recoverySynchronizationRequired = recoveredSnapshot != null ||
             assignment.lifecycleStatus in setOf("ACTIVE", "RECONNECTING"),
+        initialNegotiationEpoch = assignment.negotiationEpoch,
         durableCheckpoint = ::persistRecoveryCheckpoint,
     )
 
@@ -247,17 +258,35 @@ class WebRtcMatchCoordinator(
                 }
                 val recovering = assignment.lifecycleStatus in setOf("ACTIVE", "RECONNECTING")
                 if (recovering) {
-                    val state = repository.resumeMatch(assignment.matchId)
+                    val state = requestReconnectEpoch(
+                        expectedEpoch = currentNegotiationEpoch,
+                        acceptCompletedEpochWhenTransportOpen = false,
+                    )
                     currentNegotiationEpoch = state.negotiationEpoch
                     if (state.serverStatus !in setOf("ACTIVE", "RECONNECTING")) {
                         controller.reconcileServerState()
                         return
                     }
+                    if (state.serverStatus == "ACTIVE" && state.localAcked && state.bothAcked) {
+                        controller.adoptAuthoritativeReconnectEpoch(
+                            state.negotiationEpoch,
+                            state.localAcked,
+                            state.bothAcked,
+                        )
+                        controller.reconcileAuthoritativeStartState(state)
+                        return
+                    }
+                    controller.adoptAuthoritativeReconnectEpoch(
+                        state.negotiationEpoch,
+                        state.localAcked,
+                        state.bothAcked,
+                    )
                 }
                 if (assignment.assignedDisc.name == "BLACK") {
                     publishOffer(restarting = recovering)
                 } else if (recovering) {
                     ensureTransportGeneration(offerer = false)
+                    controller.markReconnectSignalingStarted(currentNegotiationEpoch)
                     publishWithRetry(signal("RESUME", "resume"))
                 }
             } catch (error: kotlinx.coroutines.CancellationException) {
@@ -269,8 +298,12 @@ class WebRtcMatchCoordinator(
     }
 
     private suspend fun publishOffer(restarting: Boolean) {
-        if (restarting) ensureTransportGeneration(offerer = true)
-        else transport.provideOffererDataChannel()
+        if (restarting) {
+            ensureTransportGeneration(offerer = true)
+            controller.markReconnectSignalingStarted(currentNegotiationEpoch)
+        } else {
+            transport.provideOffererDataChannel()
+        }
         remoteAnswerApplied = false
         val offer = transport.createOffer()
         publishWithRetry(signal("OFFER", offer.sdp))
@@ -286,6 +319,33 @@ class WebRtcMatchCoordinator(
         dataChannelJob = null
         transport.prepareForRenegotiation(offerer)
         preparedTransportEpoch = currentNegotiationEpoch
+    }
+
+    /**
+     * Resume is conditional on the epoch that was read before the RPC. If another
+     * participant advances and fully ACKs an epoch before this request obtains the
+     * row lock, the server returns that newer ACTIVE epoch without mutating it. An
+     * already-open channel can synchronize it; otherwise this process still needs a
+     * genuinely fresh reconnect and retries from the newly authoritative epoch.
+     */
+    private suspend fun requestReconnectEpoch(
+        expectedEpoch: Int,
+        acceptCompletedEpochWhenTransportOpen: Boolean,
+    ): MatchStartAck {
+        var expected = expectedEpoch
+        var latest: MatchStartAck? = null
+        repeat(MAX_MATCH_NEGOTIATION_EPOCH + 2) {
+            val state = repository.resumeMatch(assignment.matchId, expected)
+            latest = state
+            if (state.serverStatus != "ACTIVE" || state.negotiationEpoch == expected ||
+                (acceptCompletedEpochWhenTransportOpen &&
+                    transport.diagnostics().state == TransportState.OPEN)
+            ) {
+                return state
+            }
+            expected = state.negotiationEpoch
+        }
+        return checkNotNull(latest)
     }
 
     private fun schedulePendingResultRetry() {
@@ -345,21 +405,33 @@ class WebRtcMatchCoordinator(
             repeat(RENEGOTIATION_ATTEMPTS) { attempt ->
                 try {
                     signalingMutex.withLock {
+                        currentNegotiationEpoch = maxOf(
+                            currentNegotiationEpoch,
+                            controller.reconnectEpochProgress.authoritativeEpoch,
+                        )
                         val observedState = repository.getMatchStartState(assignment.matchId)
+                        val progress = controller.reconnectEpochProgress
                         val action = planReleaseRenegotiation(
                             force = force,
                             transportState = transport.diagnostics().state,
-                            controllerReconnecting = controller.viewState.matchState.status ==
-                                com.example.othello.match.MatchStatus.RECONNECTING,
+                            freshReconnectEpochRequired = progress.freshEpochRequired,
+                            adoptedReconnectEpoch = progress.adoptedEpoch,
                             currentEpoch = currentNegotiationEpoch,
                             serverStatus = observedState.serverStatus,
                             serverEpoch = observedState.negotiationEpoch,
+                            serverLocalAcked = observedState.localAcked,
+                            serverBothAcked = observedState.bothAcked,
                         )
                         currentNegotiationEpoch = observedState.negotiationEpoch
                         when (action) {
                             ReleaseRenegotiationAction.SKIP_TRANSIENT_RECOVERY -> return@launch
                             ReleaseRenegotiationAction.SYNCHRONIZE_CURRENT_EPOCH -> {
-                                controller.reconcileServerState()
+                                controller.adoptAuthoritativeReconnectEpoch(
+                                    observedState.negotiationEpoch,
+                                    observedState.localAcked,
+                                    observedState.bothAcked,
+                                )
+                                controller.reconcileAuthoritativeStartState(observedState)
                                 return@launch
                             }
                             ReleaseRenegotiationAction.RECONCILE_TERMINAL -> {
@@ -373,10 +445,24 @@ class WebRtcMatchCoordinator(
                         if (action == ReleaseRenegotiationAction.START_NEW_EPOCH ||
                             observedState.serverStatus == "RECONNECTING"
                         ) {
-                            val resumedState = repository.resumeMatch(assignment.matchId)
+                            val resumedState = requestReconnectEpoch(
+                                expectedEpoch = observedState.negotiationEpoch,
+                                acceptCompletedEpochWhenTransportOpen = true,
+                            )
                             currentNegotiationEpoch = resumedState.negotiationEpoch
                             if (resumedState.serverStatus !in setOf("ACTIVE", "RECONNECTING")) {
                                 controller.reconcileServerState()
+                                return@launch
+                            }
+                            controller.adoptAuthoritativeReconnectEpoch(
+                                resumedState.negotiationEpoch,
+                                resumedState.localAcked,
+                                resumedState.bothAcked,
+                            )
+                            if (resumedState.serverStatus == "ACTIVE" &&
+                                resumedState.localAcked && resumedState.bothAcked
+                            ) {
+                                controller.reconcileAuthoritativeStartState(resumedState)
                                 return@launch
                             }
                         }
@@ -384,6 +470,7 @@ class WebRtcMatchCoordinator(
                         remoteOfferApplied = false
                         remoteAnswerApplied = false
                         answerPayload = null
+                        controller.markReconnectSignalingStarted(currentNegotiationEpoch)
                         if (assignment.assignedDisc.name == "BLACK") {
                             publishOffer(restarting = true)
                         } else {
@@ -434,6 +521,10 @@ class WebRtcMatchCoordinator(
 
     private suspend fun handle(envelope: SignalingEnvelope) = signalingMutex.withLock {
         if (closed || envelope.matchId != assignment.matchId) return@withLock
+        currentNegotiationEpoch = maxOf(
+            currentNegotiationEpoch,
+            controller.reconnectEpochProgress.authoritativeEpoch,
+        )
         if (envelope.negotiationEpoch < currentNegotiationEpoch) return@withLock
         val newerEpoch = envelope.negotiationEpoch > currentNegotiationEpoch
         if (newerEpoch) {
@@ -446,6 +537,26 @@ class WebRtcMatchCoordinator(
         val signalKey = "${envelope.negotiationEpoch}|${envelope.senderUserId}|${envelope.type}|${envelope.sdp}|${envelope.protocolVersion}"
         if (!handledSignals.add(signalKey)) return@withLock
         try {
+            val acceptedForRole =
+                (envelope.type == "RESUME" && assignment.assignedDisc.name == "BLACK") ||
+                    (envelope.type == "OFFER" && assignment.assignedDisc.name == "WHITE") ||
+                    (envelope.type == "ANSWER" && assignment.assignedDisc.name == "BLACK")
+            if (!acceptedForRole) return@withLock
+            val progress = controller.reconnectEpochProgress
+            if (progress.adoptedEpoch == null &&
+                progress.completedEpoch == currentNegotiationEpoch &&
+                !progress.freshEpochRequired
+            ) {
+                return@withLock
+            }
+            if (currentNegotiationEpoch > 0 && progress.adoptedEpoch != currentNegotiationEpoch &&
+                progress.completedEpoch != currentNegotiationEpoch
+            ) {
+                // A peer can legitimately be the only side that observed DISCONNECTED.
+                // Receiving current-epoch signaling adopts that server-authoritative
+                // negotiation without manufacturing a local disconnect claim.
+                controller.adoptAuthoritativeReconnectEpoch(currentNegotiationEpoch)
+            }
             when {
                 envelope.type == "RESUME" && assignment.assignedDisc.name == "BLACK" -> {
                     if (lastOfferEpoch != currentNegotiationEpoch) publishOffer(restarting = true)
@@ -469,6 +580,7 @@ class WebRtcMatchCoordinator(
                 }
                 else -> return@withLock
             }
+            controller.markReconnectSignalingStarted(currentNegotiationEpoch)
             beginDataChannelHandshake()
         } catch (error: Exception) {
             handledSignals.remove(signalKey)
@@ -503,14 +615,21 @@ class WebRtcMatchCoordinator(
 
     private fun beginDataChannelHandshake() {
         if (dataChannelJob?.isActive == true || closed) return
+        val handshakeEpoch = currentNegotiationEpoch
         dataChannelJob = sessionScope.launch {
             try {
                 transport.awaitDataChannelOpen()
                 repeat(3) { attempt ->
-                    if (controller.onDataChannelOpen()) {
+                    if (controller.onDataChannelOpen(handshakeEpoch)) {
                         return@launch
                     }
                     if (attempt < 2) delay(1_000)
+                }
+                if (controller.reconnectEpochProgress.authoritativeEpoch > handshakeEpoch) {
+                    currentNegotiationEpoch = controller.reconnectEpochProgress.authoritativeEpoch
+                    preparedTransportEpoch = null
+                    scheduleTransportRenegotiation(force = true)
+                    return@launch
                 }
                 controller.reportConnectionError("開始ACKの確認期限を超えました")
             } catch (error: kotlinx.coroutines.CancellationException) {

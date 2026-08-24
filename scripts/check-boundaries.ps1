@@ -37,12 +37,12 @@ $releaseRpcPatterns = @(
     '(?s)rpc\("enqueue_or_match_v2".{0,200}?decodeList<EnqueueRow>\(\)\s*\.single\(\)',
     '(?s)rpc\("cancel_waiting_v2".{0,200}?decodeList<ClaimRow>\(\)\s*\.singleOrNullForRpc\("cancel_waiting_v2"\)',
     '(?s)rpc\("claim_active_match_v2"\).{0,160}?decodeList<ClaimRow>\(\)\s*\.singleOrNullForRpc\("claim_active_match_v2"\)',
-    '(?s)rpc\("ack_match_started_v2".{0,180}?decodeList<ReleaseMatchStateRow>\(\)\s*\.single\(\)',
+    '(?s)rpc\(\s*"ack_match_started_v2",\s*NegotiationEpochParams\(.{0,240}?decodeList<ReleaseMatchStateRow>\(\)\s*\.single\(\)',
     '(?s)rpc\("get_release_match_state_v2".{0,180}?decodeList<ReleaseMatchStateRow>\(\)\s*\.single\(\)',
     '(?s)rpc\("abandon_match_v2".{0,160}?decodeAs<String>\(\)',
     '(?s)rpc\(\s*"submit_match_result_v2".{0,800}?decodeList<ReleaseResultRow>\(\)\.single\(\)',
+    '(?s)rpc\(\s*"resume_match_v2",\s*NegotiationEpochParams\(.{0,240}?decodeList<ReleaseMatchStateRow>\(\)\s*\.single\(\)',
     '(?s)rpc\(name, AckParams\(matchId\.requireUuid\(\)\)\).{0,120}?decodeList<ReleaseMatchStateRow>\(\)\s*\.single\(\)',
-    '"resume_match_v2"',
     '"reconcile_match_v2"',
     '"publish_match_signal_v2"'
 )

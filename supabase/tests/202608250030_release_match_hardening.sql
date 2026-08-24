@@ -74,14 +74,27 @@ select ok(to_regprocedure('public.claim_active_match_v2()') is not null,
   'claim_active_match_v2 exists');
 select ok(to_regprocedure('public.cancel_waiting_v2(uuid)') is not null,
   'cancel_waiting_v2 exists');
-select ok(to_regprocedure('public.ack_match_started_v2(uuid)') is not null,
+select ok(to_regprocedure('public.ack_match_started_v2(uuid,integer)') is not null,
   'ack_match_started_v2 exists');
+select ok(position('p_expected_epoch integer' in
+  pg_get_function_arguments(
+    'public.ack_match_started_v2(uuid,integer)'::regprocedure)) > 0,
+  'start ACK binds the DataChannel generation to an expected epoch');
 select ok(to_regprocedure('public.get_release_match_state_v2(uuid)') is not null,
   'get_release_match_state_v2 exists');
 select ok(to_regprocedure('public.abandon_match_v2(uuid)') is not null,
   'abandon_match_v2 exists');
-select ok(to_regprocedure('public.resume_match_v2(uuid)') is not null,
+select ok(to_regprocedure('public.resume_match_v2(uuid,integer)') is not null,
   'resume_match_v2 exists');
+select ok(position('p_expected_epoch integer' in
+  pg_get_function_arguments(
+    'public.resume_match_v2(uuid,integer)'::regprocedure)) > 0,
+  'resume binds its ACTIVE read to an expected epoch');
+select ok(position('for update' in lower(pg_get_functiondef(
+  'public.resume_match_v2(uuid,integer)'::regprocedure))) > 0
+  and position('for update' in lower(pg_get_functiondef(
+  'public.submit_match_result_v2(uuid,uuid,text,text,text,jsonb)'::regprocedure))) > 0,
+  'resume and disconnect evidence serialize their epoch transition on the matches row');
 select ok(to_regprocedure('public.reconcile_match_v2(uuid)') is not null,
   'reconcile_match_v2 exists');
 select ok(to_regprocedure('public.submit_match_result_v2(uuid,uuid,text,text,text,jsonb)') is not null,
@@ -151,12 +164,20 @@ select ok(not exists (
 select ok(has_function_privilege('authenticated',
   'public.enqueue_or_match_v2(uuid)', 'execute')
   and has_function_privilege('authenticated',
+  'public.ack_match_started_v2(uuid,integer)', 'execute')
+  and has_function_privilege('authenticated',
+  'public.resume_match_v2(uuid,integer)', 'execute')
+  and has_function_privilege('authenticated',
   'public.submit_match_result_v2(uuid,uuid,text,text,text,jsonb)', 'execute')
   and has_function_privilege('authenticated',
   'public.publish_match_signal_v2(uuid,text,text,integer,integer)', 'execute'),
   'authenticated clients can execute only the intended release RPC surface');
 select ok(not has_function_privilege('anon',
   'public.enqueue_or_match_v2(uuid)', 'execute')
+  and not has_function_privilege('anon',
+  'public.ack_match_started_v2(uuid,integer)', 'execute')
+  and not has_function_privilege('anon',
+  'public.resume_match_v2(uuid,integer)', 'execute')
   and not has_function_privilege('anon',
   'public.submit_match_result_v2(uuid,uuid,text,text,text,jsonb)', 'execute')
   and not has_function_privilege('anon',
@@ -1024,7 +1045,7 @@ select set_config('request.jwt.claim.sub',
   '00000000-0000-4000-8000-000000000310', false);
 create temporary table returned_peer on commit drop as
 select * from public.resume_match_v2(
-  '10000000-0000-4000-8000-000000000309');
+  '10000000-0000-4000-8000-000000000309', 0);
 select ok((select lifecycle_status = 'RECONNECTING'
   and negotiation_epoch = 1 from returned_peer),
   'accused peer return clears stale evidence without double-bumping the reconnect epoch');
@@ -1082,7 +1103,7 @@ select * from public.submit_match_result_v2(
   '30000000-0000-4000-8000-000000000339', 'd3', 'DISCONNECT', 'WHITE', null);
 create temporary table resume_after_disconnect_report on commit drop as
 select * from public.resume_match_v2(
-  '10000000-0000-4000-8000-000000000339');
+  '10000000-0000-4000-8000-000000000339', 0);
 select ok((select lifecycle_status = 'RECONNECTING' and negotiation_epoch = 1
   from resume_after_disconnect_report),
   'resume after the raced report joins epoch one without a second increment');
@@ -1115,7 +1136,7 @@ create temporary table read_before_resume on commit drop as
 select * from public.get_release_match_state_v2(
   '10000000-0000-4000-8000-000000000341');
 select * from public.resume_match_v2(
-  '10000000-0000-4000-8000-000000000341');
+  '10000000-0000-4000-8000-000000000341', 0);
 select * from public.submit_match_result_v2(
   '10000000-0000-4000-8000-000000000341',
   '30000000-0000-4000-8000-000000000341', 'd3', 'DISCONNECT', 'WHITE', null);
@@ -1141,6 +1162,81 @@ select ok((select release_status = 'ACTIVE' and negotiation_epoch = 1
       and negotiation_epoch = 1),
   'resume-before-report ordering returns to ACTIVE after bilateral current-epoch ACK');
 
+-- A delayed OPEN from an older transport generation may observe the newer epoch,
+-- but it must not create that epoch's ACK on behalf of the stale channel.
+select pg_temp.create_release_match(
+  '10000000-0000-4000-8000-000000000347',
+  '00000000-0000-4000-8000-000000000309',
+  '00000000-0000-4000-8000-000000000310');
+update public.matches
+   set release_status = 'RECONNECTING',
+       negotiation_epoch = 1,
+       reconnect_deadline = now() + interval '45 seconds',
+       release_deadline = now() + interval '45 seconds'
+ where id = '10000000-0000-4000-8000-000000000347';
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000309', false);
+create temporary table stale_generation_ack on commit drop as
+select * from public.ack_match_started_v2(
+  '10000000-0000-4000-8000-000000000347', 0);
+select ok((select negotiation_epoch = 1 and not local_acked
+  from stale_generation_ack),
+  'a stale generation ACK returns the authoritative epoch without acknowledging it');
+select is((select count(*)::integer from public.match_start_acks_v2
+  where match_id = '10000000-0000-4000-8000-000000000347'), 0,
+  'a stale generation OPEN creates no ACK row in the newer epoch');
+update public.matches set release_deadline = now() - interval '1 second'
+ where id = '10000000-0000-4000-8000-000000000347';
+select * from public.reconcile_match_v2(
+  '10000000-0000-4000-8000-000000000347');
+
+-- If a response is delayed across a fully completed epoch, its expected epoch
+-- makes the resume a read-only reconciliation rather than a fresh reconnect.
+select pg_temp.create_release_match(
+  '10000000-0000-4000-8000-000000000349',
+  '00000000-0000-4000-8000-000000000309',
+  '00000000-0000-4000-8000-000000000310');
+update public.matches set negotiation_epoch = 3
+ where id = '10000000-0000-4000-8000-000000000349';
+insert into public.match_start_acks_v2(match_id, user_id, negotiation_epoch)
+values
+  ('10000000-0000-4000-8000-000000000349',
+   '00000000-0000-4000-8000-000000000309', 3),
+  ('10000000-0000-4000-8000-000000000349',
+   '00000000-0000-4000-8000-000000000310', 3);
+create temporary table completed_epoch_three on commit drop as
+select * from public.get_release_match_state_v2(
+  '10000000-0000-4000-8000-000000000349');
+select ok((select lifecycle_status = 'ACTIVE' and negotiation_epoch = 3
+  and local_acked and both_acked from completed_epoch_three),
+  'the ACK-response-loss fixture is authoritatively ACTIVE with both epoch-3 ACKs');
+create temporary table stale_resume_after_completed_epoch on commit drop as
+select * from public.resume_match_v2(
+  '10000000-0000-4000-8000-000000000349', 2);
+select ok((select lifecycle_status = 'ACTIVE' and negotiation_epoch = 3
+  and local_acked and both_acked from stale_resume_after_completed_epoch),
+  'a stale resume reconciles completed epoch three without creating epoch four');
+select ok((select release_status = 'ACTIVE' and negotiation_epoch = 3
+  and release_terminal_reason is null
+  from public.matches where id = '10000000-0000-4000-8000-000000000349'),
+  'completed epoch three remains ACTIVE and does not consume the budget');
+create temporary table genuine_disconnect_after_epoch_three on commit drop as
+select * from public.resume_match_v2(
+  '10000000-0000-4000-8000-000000000349', 3);
+select ok((select lifecycle_status = 'EXPIRED' and negotiation_epoch = 3
+  and terminal_reason = 'RECONNECT_BUDGET_EXHAUSTED_UNRATED'
+  from genuine_disconnect_after_epoch_three),
+  'only a current-epoch fresh reconnect request exhausts the epoch-3 budget');
+select is((select count(*)::integer from public.match_results_v2
+  where match_id = '10000000-0000-4000-8000-000000000349'), 0,
+  'the genuine epoch-3 budget exhaustion fabricates no authoritative result');
+select is((select count(*)::integer from public.rating_history
+  where match_id = '10000000-0000-4000-8000-000000000349'), 0,
+  'the genuine epoch-3 budget exhaustion leaves ratings untouched');
+select is((select count(*)::integer from public.game_records
+  where match_id = '10000000-0000-4000-8000-000000000349'), 0,
+  'the genuine epoch-3 budget exhaustion creates no GameRecord or Research source');
+
 -- A match owns only epochs 0..3, even when both participants coordinate retries.
 select pg_temp.create_release_match(
   '10000000-0000-4000-8000-000000000330',
@@ -1158,7 +1254,7 @@ select * from public.ack_match_started_v2(
 select set_config('request.jwt.claim.sub',
   '00000000-0000-4000-8000-000000000309', false);
 select * from public.resume_match_v2(
-  '10000000-0000-4000-8000-000000000330');
+  '10000000-0000-4000-8000-000000000330', 0);
 select set_config('request.jwt.claim.sub',
   '00000000-0000-4000-8000-000000000310', false);
 select * from public.publish_match_signal_v2(
@@ -1175,7 +1271,7 @@ select * from public.ack_match_started_v2(
 select set_config('request.jwt.claim.sub',
   '00000000-0000-4000-8000-000000000309', false);
 select * from public.resume_match_v2(
-  '10000000-0000-4000-8000-000000000330');
+  '10000000-0000-4000-8000-000000000330', 1);
 select set_config('request.jwt.claim.sub',
   '00000000-0000-4000-8000-000000000310', false);
 select * from public.publish_match_signal_v2(
@@ -1192,7 +1288,7 @@ select * from public.ack_match_started_v2(
 select set_config('request.jwt.claim.sub',
   '00000000-0000-4000-8000-000000000309', false);
 select * from public.resume_match_v2(
-  '10000000-0000-4000-8000-000000000330');
+  '10000000-0000-4000-8000-000000000330', 2);
 select set_config('request.jwt.claim.sub',
   '00000000-0000-4000-8000-000000000310', false);
 select * from public.publish_match_signal_v2(
@@ -1210,7 +1306,7 @@ select set_config('request.jwt.claim.sub',
   '00000000-0000-4000-8000-000000000309', false);
 create temporary table reconnect_budget_exhausted on commit drop as
 select * from public.resume_match_v2(
-  '10000000-0000-4000-8000-000000000330');
+  '10000000-0000-4000-8000-000000000330', 3);
 select ok((select lifecycle_status = 'EXPIRED'
   and negotiation_epoch = 3
   and terminal_reason = 'RECONNECT_BUDGET_EXHAUSTED_UNRATED'
@@ -1240,7 +1336,7 @@ select is((select count(*)::integer from public.active_match_participants
   'reconnect budget expiry releases both active reservations');
 select throws_ok(
   $$select * from public.resume_match_v2(
-    '10000000-0000-4000-8000-000000000330')$$,
+    '10000000-0000-4000-8000-000000000330', 3)$$,
   'P0001', 'release match is not resumable',
   'a terminalized budget match cannot be resumed again'
 );
