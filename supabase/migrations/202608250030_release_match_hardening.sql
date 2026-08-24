@@ -40,8 +40,8 @@ alter table public.matches
       or
       (protocol_version = 2 and release_status is not null and release_deadline is not null)
     ) not valid,
-  add constraint matches_negotiation_epoch_nonnegative
-    check (negotiation_epoch >= 0) not valid,
+  add constraint matches_negotiation_epoch_budget
+    check (negotiation_epoch between 0 and 3) not valid,
   add constraint matches_players_distinct
     check (black_player <> white_player) not valid,
   add constraint matches_release_reconnect_shape
@@ -103,7 +103,9 @@ alter table public.game_records
 create table public.match_start_acks_v2 (
   match_id uuid not null references public.matches(id) on delete cascade,
   user_id uuid not null references public.profiles(id) on delete cascade,
-  negotiation_epoch integer not null check (negotiation_epoch >= 0),
+  negotiation_epoch integer not null
+    constraint match_start_acks_v2_negotiation_epoch_budget
+    check (negotiation_epoch between 0 and 3),
   acked_at timestamptz not null default now(),
   primary key (match_id, user_id, negotiation_epoch)
 );
@@ -112,7 +114,9 @@ create table public.match_result_claims_v2 (
   match_id uuid not null references public.matches(id) on delete cascade,
   player_id uuid not null references public.profiles(id) on delete cascade,
   request_id uuid not null,
-  negotiation_epoch integer not null check (negotiation_epoch >= 0),
+  negotiation_epoch integer not null
+    constraint match_result_claims_v2_negotiation_epoch_budget
+    check (negotiation_epoch between 0 and 3),
   canonical_moves text not null check (
     char_length(canonical_moves) <= 240
     and canonical_moves ~ '^((--|[a-h][1-8])*)$'
@@ -180,7 +184,9 @@ create table public.match_results_v2 (
 create table public.match_signals_v2 (
   id bigint generated always as identity primary key,
   match_id uuid not null references public.matches(id) on delete cascade,
-  negotiation_epoch integer not null check (negotiation_epoch >= 0),
+  negotiation_epoch integer not null
+    constraint match_signals_v2_negotiation_epoch_budget
+    check (negotiation_epoch between 0 and 3),
   sender_id uuid not null references public.profiles(id) on delete cascade,
   signal_type text not null check (signal_type in ('OFFER', 'ANSWER', 'RESUME')),
   sdp text not null,
@@ -1331,6 +1337,13 @@ begin
     return query select * from public.release_match_state_row_v2(p_match_id, caller_id);
     return;
   end if;
+  if match_row.release_status = 'ACTIVE' and match_row.negotiation_epoch >= 3 then
+    perform public.release_expire_match_v2(
+      p_match_id, 'RECONNECT_BUDGET_EXHAUSTED_UNRATED'
+    );
+    return query select * from public.release_match_state_row_v2(p_match_id, caller_id);
+    return;
+  end if;
   caller_was_claimed := case
     when caller_id = match_row.black_player then match_row.black_disconnect_claimed_at is not null
     else match_row.white_disconnect_claimed_at is not null end;
@@ -1458,6 +1471,14 @@ declare
   claim_epoch integer;
 begin
   if caller_id is null then raise exception 'authentication required'; end if;
+  select m.* into match_row
+    from public.matches m
+   where m.id = p_match_id
+     and m.protocol_version = 2
+     and caller_id in (m.black_player, m.white_player)
+   for update;
+  if not found then raise exception 'release match participant required'; end if;
+
   if p_request_id is null then raise exception 'request id required'; end if;
   if p_finish_reason is null
      or p_finish_reason not in ('NORMAL', 'RESIGNATION', 'TIMEOUT', 'DISCONNECT') then
@@ -1472,12 +1493,6 @@ begin
   select * into replay_row from public.release_replay_game_v2(p_canonical_moves);
   if not replay_row.accepted then
     raise exception 'invalid canonical moves: %', replay_row.rejection_code;
-  end if;
-
-  select * into match_row from public.matches where id = p_match_id for update;
-  if not found or match_row.protocol_version <> 2
-     or caller_id not in (match_row.black_player, match_row.white_player) then
-    raise exception 'release match participant required';
   end if;
 
   select * into existing_claim
@@ -1525,6 +1540,16 @@ begin
     when 'WHITE' then 'BLACK_WIN'
     else null
   end;
+  if p_finish_reason = 'DISCONNECT'
+     and loser_id is distinct from caller_id
+     and match_row.release_status = 'ACTIVE'
+     and match_row.negotiation_epoch >= 3 then
+    perform public.release_expire_match_v2(
+      p_match_id, 'RECONNECT_BUDGET_EXHAUSTED_UNRATED'
+    );
+    return query select * from public.release_result_response_row_v2(p_match_id, caller_id);
+    return;
+  end if;
   claim_epoch := match_row.negotiation_epoch + case
     when p_finish_reason = 'DISCONNECT'
       and loser_id is distinct from caller_id
@@ -1703,7 +1728,8 @@ begin
     raise exception 'release match does not accept signaling';
   end if;
   if (p_signal_type = 'OFFER' and caller_id <> match_row.black_player)
-     or (p_signal_type = 'ANSWER' and caller_id <> match_row.white_player) then
+     or (p_signal_type = 'ANSWER' and caller_id <> match_row.white_player)
+     or (p_signal_type = 'RESUME' and caller_id <> match_row.white_player) then
     raise exception 'signal role does not match assigned disc';
   end if;
 

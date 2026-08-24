@@ -37,6 +37,17 @@ select ok(exists (
      and conname = 'matches_players_distinct'
 ), 'a release match cannot assign both discs to one account');
 select is((
+  select count(*)::integer
+    from pg_constraint
+   where conname in (
+     'matches_negotiation_epoch_budget',
+     'match_start_acks_v2_negotiation_epoch_budget',
+     'match_result_claims_v2_negotiation_epoch_budget',
+     'match_signals_v2_negotiation_epoch_budget'
+   )
+     and position('negotiation_epoch <= 3' in pg_get_constraintdef(oid)) > 0
+), 4, 'match, ACK, claim, and signal rows share the finite epoch-3 budget');
+select is((
   select is_nullable
     from information_schema.columns
    where table_schema = 'public' and table_name = 'game_records'
@@ -456,20 +467,11 @@ select throws_ok(
   'P0001', 'signaling slot limit exceeded',
   'a fifth OFFER in one sender epoch is rate-limited'
 );
-create temporary table black_resume on commit drop as
-select * from public.publish_match_signal_v2(
-  (select match_id from mm_matched), 'RESUME', 'black-resume', 2, 0);
-create temporary table black_resume_retry on commit drop as
-select * from public.publish_match_signal_v2(
-  (select match_id from mm_matched), 'RESUME', 'black-resume', 2, 0);
-select ok((select not duplicate from black_resume)
-  and (select duplicate from black_resume_retry),
-  'BLACK RESUME has one idempotent slot per epoch');
 select throws_ok(
   $$select * from public.publish_match_signal_v2(
-    (select match_id from mm_matched), 'RESUME', 'black-resume-two', 2, 0)$$,
-  'P0001', 'signaling slot limit exceeded',
-  'a second distinct BLACK RESUME slot is rejected'
+    (select match_id from mm_matched), 'RESUME', 'black-resume', 2, 0)$$,
+  'P0001', 'signal role does not match assigned disc',
+  'BLACK cannot publish the WHITE-only RESUME wake-up'
 );
 select throws_ok(
   $$select * from public.publish_match_signal_v2(
@@ -490,6 +492,12 @@ select * from public.publish_match_signal_v2(
 select ok((select not duplicate from white_resume)
   and (select duplicate from white_resume_retry),
   'WHITE may publish an idempotent RESUME in the current epoch');
+select throws_ok(
+  $$select * from public.publish_match_signal_v2(
+    (select match_id from mm_matched), 'RESUME', 'white-resume-two', 2, 0)$$,
+  'P0001', 'signaling slot limit exceeded',
+  'a second distinct WHITE RESUME slot is rejected'
+);
 select throws_ok(
   $$select * from public.publish_match_signal_v2(
     (select match_id from mm_matched), 'OFFER', 'spoof-offer', 2, 0)$$,
@@ -761,6 +769,147 @@ update public.matches set release_deadline = now() - interval '1 second'
 select * from public.reconcile_match_v2(
   '10000000-0000-4000-8000-000000000309');
 
+-- A match owns only epochs 0..3, even when both participants coordinate retries.
+select pg_temp.create_release_match(
+  '10000000-0000-4000-8000-000000000330',
+  '00000000-0000-4000-8000-000000000309',
+  '00000000-0000-4000-8000-000000000310');
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000309', false);
+select * from public.ack_match_started_v2(
+  '10000000-0000-4000-8000-000000000330');
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000310', false);
+select * from public.ack_match_started_v2(
+  '10000000-0000-4000-8000-000000000330');
+
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000309', false);
+select * from public.resume_match_v2(
+  '10000000-0000-4000-8000-000000000330');
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000310', false);
+select * from public.publish_match_signal_v2(
+  '10000000-0000-4000-8000-000000000330', 'RESUME', 'budget-resume-1', 2, 1);
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000309', false);
+select * from public.ack_match_started_v2(
+  '10000000-0000-4000-8000-000000000330');
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000310', false);
+select * from public.ack_match_started_v2(
+  '10000000-0000-4000-8000-000000000330');
+
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000309', false);
+select * from public.resume_match_v2(
+  '10000000-0000-4000-8000-000000000330');
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000310', false);
+select * from public.publish_match_signal_v2(
+  '10000000-0000-4000-8000-000000000330', 'RESUME', 'budget-resume-2', 2, 2);
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000309', false);
+select * from public.ack_match_started_v2(
+  '10000000-0000-4000-8000-000000000330');
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000310', false);
+select * from public.ack_match_started_v2(
+  '10000000-0000-4000-8000-000000000330');
+
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000309', false);
+select * from public.resume_match_v2(
+  '10000000-0000-4000-8000-000000000330');
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000310', false);
+select * from public.publish_match_signal_v2(
+  '10000000-0000-4000-8000-000000000330', 'RESUME', 'budget-resume-3', 2, 3);
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000309', false);
+select * from public.ack_match_started_v2(
+  '10000000-0000-4000-8000-000000000330');
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000310', false);
+select * from public.ack_match_started_v2(
+  '10000000-0000-4000-8000-000000000330');
+
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000309', false);
+create temporary table reconnect_budget_exhausted on commit drop as
+select * from public.resume_match_v2(
+  '10000000-0000-4000-8000-000000000330');
+select ok((select lifecycle_status = 'EXPIRED'
+  and negotiation_epoch = 3
+  and terminal_reason = 'RECONNECT_BUDGET_EXHAUSTED_UNRATED'
+  from reconnect_budget_exhausted),
+  'a fourth ACTIVE reconnect expires unrated without creating epoch 4');
+select is((select count(*)::integer from public.match_start_acks_v2
+  where match_id = '10000000-0000-4000-8000-000000000330'), 8,
+  'initial plus three reconnect epochs bound start ACK rows to eight');
+select ok((select count(*) = 3 and max(negotiation_epoch) = 3
+  from public.match_signals_v2
+  where match_id = '10000000-0000-4000-8000-000000000330'),
+  'WHITE-only RESUME rows remain bounded to the three reconnect epochs');
+select is((select count(*)::integer from public.match_result_claims_v2
+  where match_id = '10000000-0000-4000-8000-000000000330'), 0,
+  'reconnect budget exhaustion fabricates no result claim');
+select is((select count(*)::integer from public.match_results_v2
+  where match_id = '10000000-0000-4000-8000-000000000330'), 0,
+  'reconnect budget exhaustion creates no authoritative result');
+select is((select count(*)::integer from public.rating_history
+  where match_id = '10000000-0000-4000-8000-000000000330'), 0,
+  'reconnect budget exhaustion remains unrated');
+select is((select count(*)::integer from public.game_records
+  where match_id = '10000000-0000-4000-8000-000000000330'), 0,
+  'reconnect budget exhaustion creates no GameRecord or Research source');
+select is((select count(*)::integer from public.active_match_participants
+  where match_id = '10000000-0000-4000-8000-000000000330'), 0,
+  'reconnect budget expiry releases both active reservations');
+select throws_ok(
+  $$select * from public.resume_match_v2(
+    '10000000-0000-4000-8000-000000000330')$$,
+  'P0001', 'release match is not resumable',
+  'a terminalized budget match cannot be resumed again'
+);
+select * from public.ack_match_started_v2(
+  '10000000-0000-4000-8000-000000000330');
+select is((select count(*)::integer from public.match_start_acks_v2
+  where match_id = '10000000-0000-4000-8000-000000000330'), 8,
+  'a terminal ACK cannot create another persistent row');
+
+-- The opponent-DISCONNECT submission path shares the same epoch budget guard.
+select pg_temp.create_release_match(
+  '10000000-0000-4000-8000-000000000332',
+  '00000000-0000-4000-8000-000000000309',
+  '00000000-0000-4000-8000-000000000310');
+update public.matches set negotiation_epoch = 3
+ where id = '10000000-0000-4000-8000-000000000332';
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000309', false);
+create temporary table disconnect_budget_exhausted on commit drop as
+select * from public.submit_match_result_v2(
+  '10000000-0000-4000-8000-000000000332',
+  '30000000-0000-4000-8000-000000000332', 'd3', 'DISCONNECT', 'WHITE', null);
+select is((select server_status from disconnect_budget_exhausted), 'EXPIRED',
+  'opponent DISCONNECT at epoch 3 expires instead of creating epoch 4');
+select ok((select negotiation_epoch = 3
+  and release_terminal_reason = 'RECONNECT_BUDGET_EXHAUSTED_UNRATED'
+  from public.matches where id = '10000000-0000-4000-8000-000000000332'),
+  'DISCONNECT budget exhaustion preserves the final allowed epoch and reason');
+select is((select count(*)::integer from public.match_result_claims_v2
+  where match_id = '10000000-0000-4000-8000-000000000332'), 0,
+  'DISCONNECT budget exhaustion creates no claim row');
+select is((select count(*)::integer from public.match_results_v2
+  where match_id = '10000000-0000-4000-8000-000000000332'), 0,
+  'DISCONNECT budget exhaustion creates no result');
+select is((select count(*)::integer from public.rating_history
+  where match_id = '10000000-0000-4000-8000-000000000332'), 0,
+  'DISCONNECT budget exhaustion leaves ratings untouched');
+select is((select count(*)::integer from public.game_records
+  where match_id = '10000000-0000-4000-8000-000000000332'), 0,
+  'DISCONNECT budget exhaustion creates no GameRecord or Research source');
+
 select pg_temp.create_release_match(
   '10000000-0000-4000-8000-000000000311',
   '00000000-0000-4000-8000-000000000311',
@@ -914,9 +1063,9 @@ select set_config('request.jwt.claim.sub',
 select throws_ok(
   $$select * from public.submit_match_result_v2(
     '10000000-0000-4000-8000-000000000317',
-    '30000000-0000-4000-8000-000000000319', '', 'RESIGNATION', 'BLACK', null)$$,
+    '30000000-0000-4000-8000-000000000319', 'a1', 'NORMAL', null, null)$$,
   'P0001', 'release match participant required',
-  'nonparticipant cannot spoof a loser disc or submit evidence'
+  'participant authorization rejects an intruder before illegal transcript replay'
 );
 select throws_ok(
   $$select * from public.get_release_match_state_v2(

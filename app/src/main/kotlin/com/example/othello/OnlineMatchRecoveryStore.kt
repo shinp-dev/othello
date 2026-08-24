@@ -9,6 +9,7 @@ import com.example.othello.game.GameStatus
 import com.example.othello.network.ClockSnapshot
 import com.example.othello.matchmaking.AssignedDisc
 import com.example.othello.matchmaking.MatchAssignment
+import com.example.othello.network.MAX_MATCH_NEGOTIATION_EPOCH
 import com.example.othello.records.FinishReason
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
@@ -46,7 +47,7 @@ data class OnlineMatchRecoverySnapshot(
     init {
         require(userId.isNotBlank() && matchId.isNotBlank() && opponentId.isNotBlank())
         require(opponentRating == null || opponentRating > 0)
-        require(negotiationEpoch >= 0)
+        require(negotiationEpoch in 0..MAX_MATCH_NEGOTIATION_EPOCH)
         require(canonicalMoves.length <= 240)
         CanonicalMoves.decode(canonicalMoves)
         require(blackRemainingMillis >= 0 && whiteRemainingMillis >= 0)

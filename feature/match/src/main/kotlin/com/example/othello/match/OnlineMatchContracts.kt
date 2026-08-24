@@ -1,6 +1,7 @@
 package com.example.othello.match
 
 import com.example.othello.game.Disc
+import com.example.othello.network.MAX_MATCH_NEGOTIATION_EPOCH
 import com.example.othello.records.FinishReason
 import com.example.othello.records.MatchResult
 import java.util.UUID
@@ -11,7 +12,11 @@ data class MatchStartAck(
     val bothAcked: Boolean,
     val deadlineEpochMillis: Long? = null,
     val negotiationEpoch: Int = 0,
-)
+) {
+    init {
+        require(negotiationEpoch in 0..MAX_MATCH_NEGOTIATION_EPOCH)
+    }
+}
 
 data class MatchSubmission(
     val matchId: String,
@@ -37,7 +42,11 @@ data class MatchFinishResult(
     val finalPositionHash: String? = null,
     val deadlineEpochMillis: Long? = null,
     val negotiationEpoch: Int = 0,
-)
+) {
+    init {
+        require(negotiationEpoch in 0..MAX_MATCH_NEGOTIATION_EPOCH)
+    }
+}
 
 interface OnlineMatchRepository {
     suspend fun ackMatchStarted(matchId: String): MatchStartAck

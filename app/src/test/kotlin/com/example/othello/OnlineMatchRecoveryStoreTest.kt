@@ -6,6 +6,7 @@ import com.example.othello.game.MoveOutcome
 import com.example.othello.game.Position
 import com.example.othello.network.ClockSnapshot
 import com.example.othello.matchmaking.AssignedDisc
+import com.example.othello.network.MAX_MATCH_NEGOTIATION_EPOCH
 import com.example.othello.records.FinishReason
 import org.junit.Test
 import kotlin.test.assertEquals
@@ -49,6 +50,25 @@ class OnlineMatchRecoveryStoreTest {
             OnlineMatchRecoverySnapshot(
                 "user-a", "match-a", "user-b", AssignedDisc.BLACK, null, 0,
                 "d3".repeat(121), "hash", 1, 1, updatedAtEpochMillis = 1,
+            )
+        }
+    }
+
+    @Test
+    fun recoverySnapshotRejectsAnEpochBeyondTheMatchBudget() {
+        assertFails {
+            OnlineMatchRecoverySnapshot(
+                userId = "user-a",
+                matchId = "match-a",
+                opponentId = "user-b",
+                assignedDisc = AssignedDisc.BLACK,
+                opponentRating = null,
+                negotiationEpoch = MAX_MATCH_NEGOTIATION_EPOCH + 1,
+                canonicalMoves = "",
+                stateHash = GameState().stateHash(),
+                blackRemainingMillis = 1,
+                whiteRemainingMillis = 1,
+                updatedAtEpochMillis = 1,
             )
         }
     }

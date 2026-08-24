@@ -39,13 +39,21 @@ class OnlineSessionViewModel(application: Application) : AndroidViewModel(applic
                 if (state is AuthState.Authenticated) {
                     val checkpoint = recoveryStore.load()
                     if (checkpoint == null || checkpoint.userId == state.session.userId) {
-                        try {
-                            matchmaking?.restoreActiveAssignment()
-                        } catch (error: kotlinx.coroutines.CancellationException) {
-                            throw error
-                        } catch (_: Exception) {
-                            // The online-play action calls the same idempotent v2 matcher and
-                            // can recover the assignment after an offline app launch.
+                        val controller = matchmaking
+                        if (controller != null) {
+                            try {
+                                restoreAssignmentAndClearCheckpointWhenServerReturnsEmpty(
+                                    checkpointMatchId = checkpoint?.matchId,
+                                    restoreActiveAssignment = controller::restoreActiveAssignment,
+                                    clearRecovery = recoveryStore::clear,
+                                )
+                            } catch (error: kotlinx.coroutines.CancellationException) {
+                                throw error
+                            } catch (_: Exception) {
+                                // Preserve the checkpoint on timeout, offline startup, or a
+                                // malformed response. A later online-play action retries the
+                                // same idempotent server claim.
+                            }
                         }
                     } else {
                         recoveryStore.clear()

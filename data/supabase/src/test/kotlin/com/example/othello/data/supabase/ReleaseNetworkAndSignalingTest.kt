@@ -1,5 +1,6 @@
 package com.example.othello.data.supabase
 
+import com.example.othello.network.MAX_MATCH_NEGOTIATION_EPOCH
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -10,6 +11,16 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ReleaseNetworkAndSignalingTest {
+    @Test
+    fun zeroRowRpcIsDistinctFromAMalformedMultiRowResponse() {
+        assertEquals(null, emptyList<Int>().singleOrNullForRpc("claim_active_match_v2"))
+        assertEquals(7, listOf(7).singleOrNullForRpc("claim_active_match_v2"))
+        val malformed = assertFailsWith<IllegalStateException> {
+            listOf(7, 8).singleOrNullForRpc("claim_active_match_v2")
+        }
+        assertEquals("claim_active_match_v2 returned 2 rows", malformed.message)
+    }
+
     @Test
     fun boundedTimeoutBecomesAUserRecoverableException(): Unit = runBlocking {
         assertFailsWith<ReleaseNetworkTimeoutException> {
@@ -31,9 +42,17 @@ class ReleaseNetworkAndSignalingTest {
 
     @Test
     fun resumeAndEpochArePartOfTheValidatedSignalingContract() {
-        validateSignalingEnvelope(SignalingEnvelope("match", "user", "RESUME", "resume", negotiationEpoch = 3))
+        validateSignalingEnvelope(SignalingEnvelope(
+            "match", "user", "RESUME", "resume", negotiationEpoch = MAX_MATCH_NEGOTIATION_EPOCH,
+        ))
         assertFailsWith<IllegalArgumentException> {
             validateSignalingEnvelope(SignalingEnvelope("match", "user", "RESUME", "resume", negotiationEpoch = -1))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            validateSignalingEnvelope(SignalingEnvelope(
+                "match", "user", "RESUME", "resume",
+                negotiationEpoch = MAX_MATCH_NEGOTIATION_EPOCH + 1,
+            ))
         }
         assertFailsWith<IllegalArgumentException> {
             validateSignalingEnvelope(SignalingEnvelope("match", "user", "CANDIDATE", "candidate", negotiationEpoch = 3))

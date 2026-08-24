@@ -35,8 +35,8 @@ if ($supabaseBuild -notmatch 'io\.ktor:ktor-client-okhttp' -or $supabaseBuild -m
 $supabaseSource = Get-Content 'data/supabase/src/main/kotlin/com/example/othello/data/supabase/SupabaseContracts.kt' -Raw
 $releaseRpcPatterns = @(
     '(?s)rpc\("enqueue_or_match_v2".{0,200}?decodeList<EnqueueRow>\(\)\s*\.single\(\)',
-    '(?s)rpc\("cancel_waiting_v2".{0,200}?decodeList<ClaimRow>\(\)\s*\.singleOrNull\(\)',
-    '(?s)rpc\("claim_active_match_v2"\).{0,120}?decodeList<ClaimRow>\(\)\s*\.singleOrNull\(\)',
+    '(?s)rpc\("cancel_waiting_v2".{0,200}?decodeList<ClaimRow>\(\)\s*\.singleOrNullForRpc\("cancel_waiting_v2"\)',
+    '(?s)rpc\("claim_active_match_v2"\).{0,160}?decodeList<ClaimRow>\(\)\s*\.singleOrNullForRpc\("claim_active_match_v2"\)',
     '(?s)rpc\("ack_match_started_v2".{0,180}?decodeList<ReleaseMatchStateRow>\(\)\s*\.single\(\)',
     '(?s)rpc\("get_release_match_state_v2".{0,180}?decodeList<ReleaseMatchStateRow>\(\)\s*\.single\(\)',
     '(?s)rpc\("abandon_match_v2".{0,160}?decodeAs<String>\(\)',

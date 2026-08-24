@@ -1,5 +1,6 @@
 package com.example.othello.matchmaking
 
+import com.example.othello.network.MAX_MATCH_NEGOTIATION_EPOCH
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.CancellationException
 import kotlin.test.Test
@@ -38,6 +39,20 @@ class MatchmakingControllerTest {
     private val firstRequestId = "00000000-0000-0000-0000-000000000001"
     private val secondRequestId = "00000000-0000-0000-0000-000000000002"
     private val assignment = MatchAssignment("match", "opponent", AssignedDisc.BLACK, 1520, "MATCHED", 2)
+
+    @Test
+    fun assignmentEpochIsBoundedForTheWholeMatch() {
+        MatchAssignment(
+            "match", "opponent", AssignedDisc.BLACK,
+            negotiationEpoch = MAX_MATCH_NEGOTIATION_EPOCH,
+        )
+        assertFailsWith<IllegalArgumentException> {
+            MatchAssignment(
+                "match", "opponent", AssignedDisc.BLACK,
+                negotiationEpoch = MAX_MATCH_NEGOTIATION_EPOCH + 1,
+            )
+        }
+    }
 
     private fun controller(
         repository: FakeMatchmakingRepository,

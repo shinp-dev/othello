@@ -47,6 +47,7 @@ data class FinishCommand(
 )
 
 const val CURRENT_PROTOCOL_VERSION: Int = 2
+const val MAX_MATCH_NEGOTIATION_EPOCH: Int = 3
 
 enum class TransportState { NEW, CONNECTING, CONNECTED, OPEN, DISCONNECTED, CLOSING, CLOSED, FAILED }
 

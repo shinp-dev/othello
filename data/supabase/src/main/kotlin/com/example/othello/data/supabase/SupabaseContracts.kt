@@ -13,6 +13,7 @@ import com.example.othello.matchmaking.EnqueueResult
 import com.example.othello.matchmaking.MatchAssignment
 import com.example.othello.matchmaking.MatchmakingRepository
 import com.example.othello.network.CURRENT_PROTOCOL_VERSION
+import com.example.othello.network.MAX_MATCH_NEGOTIATION_EPOCH
 import com.example.othello.profile.AccountDeletionRepository
 import com.example.othello.profile.CurrentRatingRepository
 import com.example.othello.profile.RatingSummary
@@ -168,6 +169,12 @@ private fun String?.toAssignedDisc(): AssignedDisc = when (this) {
     else -> error("invalid assigned disc")
 }
 
+internal fun <T> List<T>.singleOrNullForRpc(rpcName: String): T? = when (size) {
+    0 -> null
+    1 -> single()
+    else -> throw IllegalStateException("$rpcName returned $size rows")
+}
+
 @Serializable
 private data class MatchNotificationRow(
     @SerialName("user_id") val userId: String,
@@ -201,7 +208,7 @@ internal class SupabaseMatchmakingRepository(
         client.postgrest
             .rpc("cancel_waiting_v2", MatchmakingRequestParams(requestId.requireUuid()))
             .decodeList<ClaimRow>()
-            .singleOrNull()
+            .singleOrNullForRpc("cancel_waiting_v2")
             ?.toDomain()
     }
 
@@ -209,7 +216,7 @@ internal class SupabaseMatchmakingRepository(
         client.postgrest
             .rpc("claim_active_match_v2")
             .decodeList<ClaimRow>()
-            .singleOrNull()
+            .singleOrNullForRpc("claim_active_match_v2")
             ?.toDomain()
     }
     override fun subscribeToMatchNotifications(
@@ -539,7 +546,7 @@ data class SignalingEnvelope(
 
 internal fun validateSignalingEnvelope(envelope: SignalingEnvelope) {
     require(envelope.protocolVersion == CURRENT_PROTOCOL_VERSION)
-    require(envelope.negotiationEpoch >= 0)
+    require(envelope.negotiationEpoch in 0..MAX_MATCH_NEGOTIATION_EPOCH)
     require(envelope.matchId.isNotBlank() && envelope.senderUserId.isNotBlank())
     require(envelope.type in setOf("OFFER", "ANSWER", "RESUME"))
     require(envelope.sdp.length in 1..16_384)

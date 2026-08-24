@@ -67,6 +67,9 @@ Leases use server time:
 - `FAILED`, process death, force stop or power loss: the surviving process follows the same
   45-second path. A relaunched process obtains its assignment with `claim_active_match_v2`, loads
   the app-private checkpoint, and starts a new signaling negotiation.
+- Reconnection is a match-wide budget, not a per-process retry counter. Epoch 0 is the initial
+  negotiation and epochs 1–3 are the only reconnect epochs. A fourth `ACTIVE` reconnect request
+  leaves epoch 3 unchanged and terminalizes the match as `EXPIRED`/unrated.
 - One missing peer at deadline: a one-sided liveness allegation becomes `EXPIRED`, unrated. A
   client cannot prove its opponent's absence, so that allegation never creates a winner.
 - Both peers report each other missing: the server cannot distinguish a partition from two
@@ -122,6 +125,11 @@ cannot choose a rated winner: NORMAL needs bilateral identical evidence, and non
 authority is limited to the caller losing its own side. Repeat-opponent abuse remains a monitoring
 concern.
 
+Whether a server-valid completed game that only one peer could submit should later be retained as
+an explicitly non-authoritative local/archive record is unresolved. The current contract creates
+no server GameRecord for it. Any future archival path must remain separate from verified
+GameRecords, rating, and Research eligibility.
+
 ### `canonical_moves`
 
 Protocol-v2 result claims and results are `NOT NULL`; empty text is the valid zero-ply
@@ -174,6 +182,10 @@ On authenticated app launch:
 5. resend an unfinished self-adverse/normal result with the same payload semantics;
 6. if the server is already terminal, show the terminal meaning and clear the checkpoint.
 
+A successful claim that returns no active assignment clears the matching stale local checkpoint.
+Timeout, offline/decode failure, coroutine cancellation, or an unavailable repository preserves
+it, because those outcomes do not prove that the authoritative assignment is absent.
+
 UI states are exclusive and bounded: connecting, playing, waiting for move confirmation,
 synchronizing, reconnecting/opponent grace, sending result, result pending, confirmed, forfeit,
 expired/no-result, disputed or cancelled. English and Japanese resources share the same IDs.
@@ -191,6 +203,8 @@ the pre-start abandon RPC.
   recovery so BLACK creates the offer;
 - every write includes the caller's expected negotiation epoch; a delayed old-epoch write is
   rejected server-side;
+- the server accepts only epochs 0–3. Together with the per-role slot caps, this bounds a match to
+  eight start ACK rows and at most 36 signal rows even if both participants coordinate retries;
 - byte-size limit (not Java/Kotlin character count);
 - duplicate payload digests are idempotent; each sender/type/epoch is capped at four
   `OFFER`/`ANSWER` rows and one `RESUME` row;

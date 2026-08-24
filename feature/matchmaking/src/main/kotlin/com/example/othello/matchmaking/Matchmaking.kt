@@ -1,5 +1,6 @@
 package com.example.othello.matchmaking
 
+import com.example.othello.network.MAX_MATCH_NEGOTIATION_EPOCH
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.CancellationException
@@ -17,7 +18,7 @@ data class MatchAssignment(
 ) {
     init {
         require(opponentRating == null || opponentRating > 0)
-        require(negotiationEpoch >= 0)
+        require(negotiationEpoch in 0..MAX_MATCH_NEGOTIATION_EPOCH)
     }
 }
 

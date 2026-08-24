@@ -129,6 +129,7 @@ $releaseRequiredPatterns = @(
     'create table public\.match_result_claims_v2',
     'create table public\.match_results_v2',
     'create table public\.match_signals_v2',
+    'matches_negotiation_epoch_budget[\s\S]*negotiation_epoch between 0 and 3',
     'create function public\.enqueue_or_match_v2\(p_request_id uuid\)',
     'for update skip locked',
     'create function public\.submit_match_result_v2',
@@ -136,6 +137,8 @@ $releaseRequiredPatterns = @(
     'create function public\.publish_match_signal_v2[\s\S]*p_negotiation_epoch integer',
     'stale signaling negotiation epoch',
     "p_signal_type not in \('OFFER', 'ANSWER', 'RESUME'\)",
+    "p_signal_type = 'RESUME' and caller_id <> match_row\.white_player",
+    'RECONNECT_BUDGET_EXHAUSTED_UNRATED',
     'create function public\.run_match_maintenance_v2',
     'grant execute on function public\.run_match_maintenance_v2\(integer\) to service_role',
     'revoke all on table[\s\S]*public\.match_signals_v2[\s\S]*from public, anon, authenticated',
@@ -160,10 +163,12 @@ foreach ($block in $releaseFunctionBlocks) {
 }
 $releaseTestSql = Get-Content $releaseTestPath -Raw
 $releaseTestPatterns = @(
-    'nonparticipant cannot spoof a loser disc or submit evidence',
+    'participant authorization rejects an intruder before illegal transcript replay',
     'one legal terminal transcript remains unilateral and unrated',
     'matching NORMAL claims from both participants confirm the server replay',
     'one reconnect ACK cannot reactivate a match by itself',
+    'a fourth ACTIVE reconnect expires unrated without creating epoch 4',
+    'BLACK cannot publish the WHITE-only RESUME wake-up',
     'a delayed signal generated for an old epoch cannot enter the current epoch',
     'signaling slot limit exceeded',
     'duplicate NORMAL request never rates twice'
