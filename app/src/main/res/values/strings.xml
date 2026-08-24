@@ -296,6 +296,7 @@
     <string name="online_records_note">This screen shows the latest 50 games.</string>
     <string name="offline_records_note">Game Records saved on this device.</string>
     <string name="online_records_load_failed">Could not load Online Game Records.</string>
+    <string name="online_records_timeout">Online Game Records took too long to load.</string>
     <string name="offline_records_load_failed">Could not load Offline Game Records.</string>
     <string name="offline_records_warning_quarantine">Some Offline Game Records could not be loaded (%1$d quarantined).</string>
     <string name="offline_records_warning_recovery">Some Offline Game Records could not be loaded (%1$d awaiting recovery).</string>

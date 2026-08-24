@@ -298,6 +298,7 @@
     <string name="online_records_note">この画面では最新50局を表示します</string>
     <string name="offline_records_note">この端末に保存した棋譜です</string>
     <string name="online_records_load_failed">オンライン棋譜を読み込めませんでした</string>
+    <string name="online_records_timeout">オンライン棋譜の読み込みがタイムアウトしました</string>
     <string name="offline_records_load_failed">オフライン棋譜を読み込めませんでした</string>
     <string name="offline_records_warning_quarantine">一部のオフライン棋譜を読み込めませんでした（%1$d件を隔離しました）</string>
     <string name="offline_records_warning_recovery">一部のオフライン棋譜を読み込めませんでした（%1$d件の復旧待ち）</string>

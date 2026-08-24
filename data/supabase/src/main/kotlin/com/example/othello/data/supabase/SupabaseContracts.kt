@@ -63,6 +63,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
 import java.time.Clock
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
@@ -367,7 +370,8 @@ internal class SupabaseGameRecordRepository(private val client: SupabaseClient) 
             order("finished_at", Order.DESCENDING)
             limit(limit.coerceIn(1, 50).toLong())
         }
-        .decodeList<GameRecordRow>().map(GameRecordRow::toDomain)
+        .decodeList<JsonObject>()
+        .let(::decodeGameRecordRows)
 
     override suspend fun get(matchId: String): GameRecord = client.from("game_records")
         .select { filter { eq("match_id", matchId) } }.decodeSingle<GameRecordRow>().toDomain()
@@ -412,6 +416,21 @@ internal class SupabaseCurrentRatingRepository(private val client: SupabaseClien
         }
         return RatingSummary(current, yesterday)
     }
+}
+
+internal class InvalidGameRecordRowsException : IllegalStateException("Online Game Record rows were present but none were valid")
+
+private val gameRecordJson = Json { ignoreUnknownKeys = true }
+
+/** Decodes rows independently so one legacy or malformed row cannot poison the whole list. */
+internal fun decodeGameRecordRows(rows: List<JsonObject>): List<GameRecord> {
+    val records = rows.mapNotNull { row ->
+        runCatching {
+            gameRecordJson.decodeFromJsonElement<GameRecordRow>(row).toDomain()
+        }.getOrNull()
+    }
+    if (rows.isNotEmpty() && records.isEmpty()) throw InvalidGameRecordRowsException()
+    return records
 }
 
 @Serializable

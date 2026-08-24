@@ -487,15 +487,17 @@ internal fun OnlineRecordsScreen(
     onReview: (ReviewInput) -> Unit,
 ) {
     val context = LocalContext.current
-    var records by remember { mutableStateOf<List<GameRecord>?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var recordsState by remember { mutableStateOf<OnlineRecordsState>(OnlineRecordsState.Idle) }
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
 
+    suspend fun loadRecords() {
+        recordsState = OnlineRecordsState.Loading
+        recordsState = loadOnlineRecords(repository, userId, limit = 50)
+    }
+
     LaunchedEffect(userId, repository) {
-        runCatching { repository.recent(userId, 50) }
-            .onSuccess { records = it; error = null }
-            .onFailure { error = it.message ?: context.getString(R.string.online_records_load_failed) }
+        loadRecords()
     }
     Box(Modifier.fillMaxSize()) {
         Column(
@@ -504,11 +506,26 @@ internal fun OnlineRecordsScreen(
         ) {
             ScreenHeader(appString(R.string.online_records), onBack)
             Text(appString(R.string.online_records_note), style = MaterialTheme.typography.bodySmall)
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            when {
-                records == null -> Text(appString(R.string.loading))
-                records.orEmpty().isEmpty() -> Text(appString(R.string.online_records_none))
-                else -> records.orEmpty().forEach { record ->
+            when (val state = recordsState) {
+                OnlineRecordsState.Idle -> Unit
+                OnlineRecordsState.Loading -> Text(appString(R.string.loading))
+                OnlineRecordsState.Empty -> Text(appString(R.string.online_records_none))
+                is OnlineRecordsState.Error -> {
+                    Text(
+                        appString(
+                            if (state.kind == OnlineRecordsErrorKind.TIMEOUT) {
+                                R.string.online_records_timeout
+                            } else {
+                                R.string.online_records_load_failed
+                            },
+                        ),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    OutlinedButton(onClick = { scope.launch { loadRecords() } }) {
+                        Text(appString(R.string.retry))
+                    }
+                }
+                is OnlineRecordsState.Success -> state.records.forEach { record ->
                     val localIsBlack = record.players.first() == userId
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
