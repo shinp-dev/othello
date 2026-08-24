@@ -1,5 +1,7 @@
 # Online Match Reconnect — Design Evolution and Failure Recovery
 
+初めてオンライン対局の設計を読む場合は、先に[Online Match Connection — Design Story](ONLINE_MATCH_CONNECTION_DESIGN_STORY.md)を読む。そちらがP2PとServerの責任分界、通常のepoch 0 signaling、DataChannel、start ACK、`ACTIVE` / `PLAYING`までを説明し、この資料は開始済み対局の切断後を引き継ぐ。通常接続を理解している場合は、この資料から読んでもよい。
+
 ## まずこれだけ分かれば読める
 
 再接続で最も大切なのは、**「端末同士の通信がつながったこと」と「対局を安全に再開できること」は別**だという点である。
@@ -22,10 +24,11 @@
 
 | 用語 | この資料での意味 |
 |---|---|
-| **epoch** | 再接続が「第何回目か」を示す番号。epoch 0は初回接続、epoch 1は1回目、epoch 2は2回目、epoch 3は3回目の再接続である。現在のsystemでは0..3だけを使う。 |
+| **epoch** | 同じmatch内で、どの接続世代を扱っているかを識別する番号。epoch 0は初回接続、epoch 1は1回目、epoch 2は2回目、epoch 3は3回目の再接続である。Reconnectの文脈ではepoch 1..3が再接続回数にも対応し、現在のsystemでは0..3だけを使う。 |
 | **current epoch** | その時点でサーバーが正式に扱っている現在のepoch。古い端末内状態ではなく、サーバーDBの`negotiation_epoch`が基準になる。 |
 | **authoritative** | 「サーバーが持つ正式な状態」という意味。端末側の推測、表示、callbackより、server DB上の状態を優先する。 |
 | **ACK** | 受領確認（acknowledgement）。この資料では主に、「このepochのDataChannelが使えることを端末が確認した」というサーバーへの通知を指す。 |
+| **start ACK** | 初回接続または再接続のDataChannelを利用できると、端末が対象epoch付きでserverへ送るACK。着手ごとのpeer ACKとは別である。 |
 | **bilateral** | 両者・双方という意味。bilateral ACKは「両端末のACKが揃っている」状態である。 |
 | **adopt** | **サーバーが示した再接続epochを、自分の端末も現在参加する再接続として受け入れること。** 例えばサーバーがepoch 2で再接続中なら、端末Bは自分で切断を検知していなくても、epoch 2が正式な再接続だと受け入れて処理に参加する。これがadoptである。 |
 | **passive peer** | 自分では切断を検知していないが、相手端末が始めた再接続へ参加する端末。本資料では初出後、「相手端末」またはpassive peerと書く。 |
@@ -34,8 +37,12 @@
 | **stale request** | 送信時点では正しかったが、到着時には古くなっているrequest。例えばepoch 2向けACKが、サーバーがepoch 3になった後に届く場合である。 |
 | **reconcile / reconciliation** | 端末が持つ状態とサーバーの正式状態を照合し、正しい状態へ合わせ直すこと。本資料では「照合」「状態照合」とも書く。 |
 | **idempotent** | 同じ処理が重複して実行されても、結果が壊れたり二重処理になったりしない性質。日本語では「冪等」ともいう。 |
+| **bounded** | retry、待機、検索を無制限に続けず、回数、時間、件数などの範囲を決めて行うこと。 |
 | **transport** | 実際にデータを運ぶ通信路。本資料では主にWebRTC DataChannelと、その接続状態を指す。 |
-| **signaling** | WebRTCのP2P通信路を作るために、OFFER、ANSWER、ICE candidateなどの接続情報を交換する処理。 |
+| **signaling** | 一般には、WebRTCのP2P通信路を作るためにOFFER / ANSWER等の接続情報を交換する処理。current implementationはICE candidateを1件ずつpublishせず、ICE gathering後のcandidateをOFFER / ANSWERのSDPへまとめるnon-trickle ICEである。 |
+| **OFFER / ANSWER** | OFFERは接続条件の提案、ANSWERはその応答。current roleではBLACKがOFFER、WHITEがANSWERを担当する。 |
+| **SDP** | OFFER / ANSWERに含まれる接続条件の表現。current implementationでは収集済みICE candidateもここへ含まれる。 |
+| **ICE / non-trickle ICE** | ICEは2台の端末間で通信可能なrouteを探す仕組み。non-trickle ICEはcandidateを個別送信せず、候補収集後のSDPへまとめる方式である。 |
 | **debounce** | 一瞬の通信揺れを本当の切断として扱わないため、少し待ってから切断と判定する処理。現在のclient pathでは1.5秒待つ。 |
 | **transcript** | この対局で行われた着手の記録。このアプリではほぼ「棋譜」と考えてよい。 |
 | **canonical** | 同じ内容が必ず同じ表現になるよう正規化された、サーバーと端末が共通に解釈できる形式。`canonical transcript`は正規形式の棋譜を指す。 |
@@ -45,15 +52,21 @@
 | **invariant** | 処理順や通信状況が変わっても、必ず守らなければならない設計上の約束。 |
 | **failure model** | 「どんな壊れ方を想定して設計するか」という障害パターン。例は片側だけの切断観測やHTTP responseだけの喪失である。 |
 | **mutation** | サーバーやDBの状態を書き換える操作。状態を読むだけの処理と区別するときに使う。 |
+| **participant** | server上でそのmatchへ正式に割り当てられた参加者。自分の端末のuserと相手端末のuserの2者を指す。 |
+| **role / disc** | 盤上のBLACK / WHITE。signalingでもBLACKがOFFER、WHITEがRESUME / ANSWERを担当するrole境界になる。 |
 | **generation** | どの世代の再接続処理かを区別する概念。本資料では原則としてepochと表現し、一般原則を述べる箇所だけgenerationも使う。 |
 | **liveness** | 処理がいつまでも止まらず、成功または安全な終了へ進める性質。再接続できない場合に`EXPIRED`へ収束できることも含む。 |
 | **fencing** | 古いrequestが新しい状態を書き換えないよう、対象epochを照合して境界を設けること。expected epochがその識別札になる。 |
+| **expected epoch** | ACKやresume requestが「どのepochを対象にしているか」をserverへ伝える番号。stale requestをcurrent epochへ誤適用しないために使う。 |
 | **planner** | サーバー状態と端末状態を読み、「同期する」「現在epochでsignalingする」「新epochを始める」など次の行動を選ぶ判断関数。現在は`planReleaseRenegotiation()`を指す。 |
 | **force retry** | 通常の一時復旧なら処理を見送る条件を越えて、サーバーとの状態照合をもう一度試すretry。完了済みepochを破棄して新epochを必ず作る命令ではない。 |
+| **client state / server state** | client stateは1台のAndroid端末のsession状態、server stateは`matches.release_status`等の正式な永続状態。`PLAYING`はclient state、`ACTIVE`はserver stateであり、同じstate名ではない。 |
 
 ## 1. この資料について
 
 この資料は、現在のRPCやclassを網羅的に列挙するreferenceではない。オンライン対戦の再接続が、なぜ単純な通信路の復旧（transport recovery）ではなく、サーバーが持つ正式状態（server authority）と再接続epochを明示した設計になったのかを残すdesign storyである。
+
+この資料の主対象は、epoch 0の双方start ACKによってserverが`ACTIVE`になり、通常経路ではclientも`PLAYING`へ入った後のrecoveryである。ACK response lossやprocess recoveryではclientがまだ`P2P_CONNECTED`に見えることもあるため、protocol上の境界はclient表示だけでなくserverの正式状態も基準にする。serverがまだ`MATCHED / epoch 0`の初回開始前は次epochを作らず、同じepoch 0のbounded retry、または`ABANDONED` / `MATCH_START_TIMEOUT`によるunrated `EXPIRED`へ進む。その境界は[Connection Design Storyの第19章](ONLINE_MATCH_CONNECTION_DESIGN_STORY.md#19-通常系からreconnectへ)に記載する。
 
 - Baseline: `release-hardening` at `6b914f5acfc0cc9f0182ec2ab78ae687d8e34d22`
 - Main implementation: [`WebRtcMatchCoordinator.kt`](../app/src/main/kotlin/com/example/othello/WebRtcMatchCoordinator.kt), [`OnlineMatchController.kt`](../feature/match/src/main/kotlin/com/example/othello/match/OnlineMatchController.kt)
@@ -112,6 +125,7 @@ stateDiagram-v2
     [*] --> P2P_CONNECTED: P2P接続を準備
     P2P_CONNECTED --> P2P_CONNECTED: DataChannel OPEN
     P2P_CONNECTED --> PLAYING: 初回epochの双方ACKをサーバーで確認
+    P2P_CONNECTED --> DISCONNECTED: 初回開始前の持続切断<br/>epochは増やさない
 
     PLAYING --> MOVE_CONFIRMING: 着手を送信
     MOVE_CONFIRMING --> PLAYING: 着手ACKを受信
@@ -128,6 +142,8 @@ stateDiagram-v2
 ```
 
 特に重要なのは、`RECONNECTING`から`PLAYING`への直接の矢印がないことである。DataChannelが`OPEN`になっても、サーバー上の双方ACKと棋譜／盤面同期を経由しなければ対局再開にはならない。
+
+`P2P_CONNECTED`はactual `MatchStatus`名だが、名前だけでDataChannel OPENやserver双方ACK済みを意味しない。serverがまだ`MATCHED`のまま初回接続に失敗した場合は、図の`DISCONNECTED`へ進む初回接続失敗であり、epochを増やす`resume_match_v2`は呼ばない。Controllerが`MatchStatus.RECONNECTING`へ直接遷移するのは、開始済み対局の`PLAYING` / `MOVE_CONFIRMING` / `SYNCHRONIZING`からのrecoveryである。ただしACK response lossやprocess recoveryではclient stateが`P2P_CONNECTED`でもserverがすでに`ACTIVE` / `RECONNECTING`の場合があり、Coordinatorはそのserver stateを基準にReconnect処理を選ぶ。
 
 ## 4. Failure 1 — 片側だけが切断を観測する
 
@@ -324,7 +340,7 @@ actual plannerでは終了済みstate、`RECONNECTING`／`MATCHED`のcurrent-epo
 
 ## 13. Reconnect budget
 
-reconnect budgetは端末ごとのretry counterではなく、対局全体で共有するserver stateである。epoch 0が初回接続、epoch 1..3が利用可能な再接続であり、DB constraint、signaling、ACK、result evidenceにも0..3の境界が適用される。
+reconnect budgetは端末ごとのretry counterではなく、対局全体で共有するserver stateである。epochは同じmatchの接続世代を識別し、epoch 0が初回接続、epoch 1..3が利用可能な再接続である。Reconnectの文脈では1..3が再接続回数に対応し、DB constraint、signaling、ACK、result evidenceにも0..3の境界が適用される。
 
 完了済みepochへのstale requestやdelayed force retryはbudgetを使わない。一方、epoch 3のrecoveryが完了して`PLAYING`へ戻った後、本当に新しい`DISCONNECTED`がdebounceを越えれば、ControllerはcompletedEpoch 3を保持したまま`freshEpochRequired=true`にする。plannerではfreshがcompletedより優先される。
 
@@ -346,9 +362,11 @@ budget exhaustionは「対局を継続できない」という進行可能性の
 
 現在の正常recoveryは、通信路、サーバー上の対局状態、端末上のprotocol stateを次の順で同じ状態へ合わせる。
 
+次の図はserver `ACTIVE`かつclient開始済みの対局から始まる。serverが`MATCHED / epoch 0`である初回開始前の切断は、このflowへ入らずConnection Design Storyの初回接続失敗pathで扱う。
+
 ```mermaid
 flowchart TD
-    A[Transport DISCONNECTED] --> B{1.5秒以内にOPENへ復帰?}
+    A[開始済み対局で<br/>Transport DISCONNECTED] --> B{1.5秒以内にOPENへ復帰?}
     B -->|yes| C[reportなし / epoch消費なし<br/>PLAYING継続]
     B -->|no| D[localDisconnectObserved=true<br/>freshEpochRequired=true]
     D --> E[disconnect report / resume<br/>matches rowをFOR UPDATE]
@@ -420,10 +438,10 @@ process death recoveryでも、サーバーから回収したactive assignment�
 reconnect testは正常系だけの関数呼出し数ではなく、障害パターンごとに守るべきinvariantを固定している。
 
 - **一時的な切断:** `oneSidedTransientDisconnectReturnsToOpenWithoutConsumingServerReconnect`と`transientOpenWithUnchangedActiveEpochDoesNotRenegotiate`が、debounce内復帰でreport/resume/epoch消費がないことを確認する。
-- **Passive peer:** `passivePeerAdoptsAuthoritativeEpochAndAcksWithoutDisconnectClaim`がclaimなしのadopt、current epoch ACK、同期後`PLAYING`を確認する。`passivePeerNewEpochSignalUsesCoordinatorAdoptionGate`はCoordinator `handle()`が使用するproduction側のadopt判定を固定する。
+- **Passive peer:** `passivePeerAdoptsAuthoritativeEpochAndAcksWithoutDisconnectClaim`がclaimなしのadopt、current epoch ACK、同期後`PLAYING`を確認する。`passivePeerNewEpochSignalUsesCoordinatorAdoptionGate`はCoordinator `handle()`が使用するactual adoption gateを固定する。
 - **Report/resumeの到着順:** planner testがreport先着時のcurrent-epoch signalingと、古い`ACTIVE` read時のfresh STARTを分ける。pgTAPはreport-first／resume-first双方でepochが1回だけ増え、双方ACK後に`ACTIVE`へ戻るfixtureを持つ。
 - **ACK response loss:** `committedEpochTwoAckWithLostResponseReconcilesFromServerWithoutResume`と`committedEpochThreeAckWithLostResponseDoesNotConsumeEpochFour`が、ACK commit後のresponse lossをserver readから回復し、resumeを呼ばないことを確認する。
-- **遅延force retry:** `delayedForcedRetryAfterCompletedEpochThreeSynchronizesWithoutResume`が、`completedEpoch=3 / fresh=false / force=true`で同期を選び、productionのresume dispatch callbackが0回であることを確認する。Controller testは完了済み`ACTIVE`の再照合が冪等に`PLAYING`を維持することも確認する。
+- **遅延force retry:** `delayedForcedRetryAfterCompletedEpochThreeSynchronizesWithoutResume`が、`completedEpoch=3 / fresh=false / force=true`で同期を選び、actual Coordinatorのresume dispatch callbackが0回であることを確認する。Controller testは完了済み`ACTIVE`の再照合が冪等に`PLAYING`を維持することも確認する。
 - **本当のepoch 3 exhaustion:** `genuineDisconnectAfterCompletedEpochThreeRequestsBudgetDecision`がfresh=trueのplanner優先順位を固定する。pgTAPはcurrent epoch 3 resumeとDISCONNECT reportの両pathがepoch 4を作らずunrated `EXPIRED`になることを確認する。
 - **Stale expected epoch:** pgTAPは古いDataChannel ACKが新しいepochへACK rowを作らないことと、stale `ACTIVE` resumeがcompleted epoch 3を変更しないことを確認する。future epochの拒否はSQL本体の分岐として実装されている。
 - **Persistent data非生成:** budget exhaustion、片側disconnect、mutual disconnect、one-sided NORMAL等について、`match_results_v2`、`rating_history`、`game_records`が作られないことをpgTAPで確認する。
@@ -440,7 +458,7 @@ High: 0
 Medium blockers: 0
 ```
 
-completed-epoch delayed force retryは、actual planner input、production dispatch、Controllerの冪等な状態照合まで確認してCLOSEDと判定された。本当のepoch 3 exhaustion、stale ACTIVE race、passive peer participationも維持され、オンライン対戦release-hardeningは実装修正フェーズを終了して2台実機smokeへ進むGO判定となった。
+completed-epoch delayed force retryは、actual planner input、Coordinator dispatch、Controllerの冪等な状態照合まで確認してCLOSEDと判定された。本当のepoch 3 exhaustion、stale ACTIVE race、passive peer participationも維持され、オンライン対戦release-hardeningは実装修正フェーズを終了して2台実機smokeへ進むGO判定となった。
 
 これはreconnectにバグが存在しないことの証明ではない。unit testはplanner、dispatch gate、Controller、SQL transactionを層別に固定している一方、実Android WebRTC、実network handover、HTTP response loss、1.5秒delayと複数callbackの実scheduler orderingを1つのfixtureですべて再現してはいない。これらは2台実機smokeで確認する、残っている統合上のriskである。
 

@@ -85,16 +85,19 @@ SupabaseはP2Pの着手を常時中継せず、対局をリアルタイム実況
 | DataChannel | WebRTC上で任意のdataを送る通信路。着手、着手ACK、同期message、terminal control等を送る。 |
 | matchmaking | 対戦相手を探し、正式なmatch、disc、rating snapshotを成立させる処理。 |
 | waiting claim | 待機中だった端末が、通知後またはretry時に自分のactive assignmentをserverから取得すること。current RPCは`claim_active_match_v2`。 |
-| signaling | WebRTC接続前に、接続提案などの情報をserver経由で交換する処理。対局dataそのものの中継ではない。 |
+| signaling | WebRTC接続前に、OFFER / ANSWERなどの接続情報をserver経由で交換する処理。対局dataそのものの中継ではない。current implementationはcandidateを1件ずつpublishせず、ICE gathering後のcandidateをSDPへまとめるnon-trickle ICEである。 |
 | OFFER | 「この接続条件で始められる」というWebRTCの接続提案。current protocolではBLACKが送る。 |
 | ANSWER | OFFERを受けたWHITEが返すWebRTCの接続応答。 |
 | SDP | OFFER / ANSWERに含まれる接続条件の表現。current実装はICE gathering後にまとめて送るnon-trickle方式。 |
 | ICE | 2台の端末間で実際に通信できるroute候補を探す仕組み。 |
 | STUN | 自端末が外部networkからどう見えるかを知り、直接経路を見つける助けとなるserver。対局dataのrelayではない。 |
-| TURN | 直接接続できないとき、通信dataそのものをrelayするserver。current production codeにはTURN設定がない。 |
+| TURN | 直接接続できないとき、通信dataそのものをrelayするserver。current `release-hardening` implementationにはTURN設定がない。 |
 | Realtime | Supabase Postgres Changesの通知機能。match availabilityとsignalingのcoordinationに限定して使う。 |
 | ACK | 受領・利用可能の確認。この資料ではDataChannelの着手ACKと、接続開始をserverへ知らせるstart ACKを文脈で区別する。 |
-| epoch | 接続の世代番号。通常の初回接続はepoch 0、再接続はepoch 1..3。古いcallbackを現在の接続へ混ぜないためにも使う。 |
+| start ACK / bilateral ACK | start ACKは「このepochのDataChannelを利用できる」と端末がserverへ送る確認。bilateral ACKは両端末のstart ACKが揃った状態である。 |
+| epoch | 同じmatch内で、どの接続世代を扱っているかを識別する番号。epoch 0は初回接続、epoch 1は1回目、epoch 2は2回目、epoch 3は3回目の再接続である。 |
+| current epoch | その時点でserverが正式に扱っている接続世代。server DBの`negotiation_epoch`を基準にする。 |
+| expected epoch | ACKやresume requestが「どのepochを対象にしているか」をserverへ伝える番号。古いrequestを新しいepochへ適用しないための識別札になる。 |
 | authoritative | サーバーが持つ正式状態。端末の画面やローカル観測より優先する。 |
 | client state | 1台のAndroid端末が持つsession状態。`WAITING`や`P2P_CONNECTED`など、端末だけが知る状態も含む。 |
 | server state | Supabaseの`matches.release_status`等に保存される正式なmatch状態。 |
@@ -113,6 +116,9 @@ SupabaseはP2Pの着手を常時中継せず、対局をリアルタイム実況
 | transaction | 複数のDB更新を一まとまりとして成功または失敗させ、途中状態を外へ確定しない仕組み。 |
 | snapshot | ある時点の値を固定して表したもの。rating snapshot、clock snapshot、sync snapshotなどがある。 |
 | non-trickle ICE | ICE candidateを1件ずつ送らず、候補収集を待ってOFFER / ANSWERのSDPへまとめる方式。 |
+| transport | 実際にdataを運ぶ通信路。この資料では主にWebRTC DataChannelと、その接続状態を指す。 |
+| reconcile / reconciliation | 端末が持つ状態とserverの正式状態を照合し、正しい状態へ合わせ直すこと。本文では「照合」とも書く。 |
+| bounded | retryや検索を無制限に続けず、回数、時間、件数などの範囲を決めて行うこと。 |
 
 ## 5. 通常接続の全体sequence
 
@@ -174,8 +180,9 @@ stateDiagram-v2
     SIGNALING --> P2P_CONNECTED: Coordinator / transportを作成
     SIGNALING --> SIGNALING_FAILED: 接続準備失敗
     P2P_CONNECTED --> P2P_CONNECTED: DataChannel OPEN<br/>start ACK未完了
+    P2P_CONNECTED --> P2P_CONNECTED: 一時的な切断<br/>epoch 0内で再試行
     P2P_CONNECTED --> PLAYING: serverで双方ACKを確認
-    P2P_CONNECTED --> DISCONNECTED: transport切断
+    P2P_CONNECTED --> DISCONNECTED: start前のFAILED / CLOSED<br/>またはdebounce後も切断
     PLAYING --> MOVE_CONFIRMING: 着手command送信
     MOVE_CONFIRMING --> PLAYING: 着手ACK・状態一致
     PLAYING --> SYNCHRONIZING: transcript照合が必要
@@ -183,10 +190,16 @@ stateDiagram-v2
     PLAYING --> FINISHING: 正常終局・投了等
     FINISHING --> PENDING_RESULT: 相手のevidence待ち
     PENDING_RESULT --> CONFIRMED: server replay・双方evidence一致
-    PLAYING --> RECONNECTING: 切断がdebounceを超過
+    PLAYING --> RECONNECTING: 開始済み対局で切断
+    MOVE_CONFIRMING --> RECONNECTING: 開始済み対局で切断
+    SYNCHRONIZING --> RECONNECTING: 開始済み対局で切断・同期失敗
 ```
 
-重要なのは、`DataChannel OPEN`が`P2P_CONNECTED`から`PLAYING`への直接遷移条件ではないことです。OPEN後のstart ACKと、serverが返す双方ACK済みの正式状態が必要です。`RECONNECTING`以降は[Reconnect design story](ONLINE_MATCH_RECONNECT_DESIGN_STORY.md)が説明します。
+`P2P_CONNECTED`はactual `MatchStatus`名ですが、`OnlineMatchController`の初期値としてCoordinator生成時から使われます。名前に`CONNECTED`とあっても、PeerConnectionやDataChannelが完全にOPENしたこと、serverで双方ACKが揃ったこと、対局を開始できることのいずれも、このstateだけでは意味しません。UI上の意味は「P2P接続と開始確認を進めている段階」です。
+
+重要なのは、`DataChannel OPEN`が`P2P_CONNECTED`から`PLAYING`への直接遷移条件ではないことです。OPEN後のstart ACKと、serverが返す双方ACK済みの正式状態が必要です。また、図の`DISCONNECTED`はclientの`MatchStatus.DISCONNECTED`です。きっかけとなるWebRTC側の`TransportState.DISCONNECTED`とは同じ名前でも別のstateであり、短い揺れはclient stateを`DISCONNECTED`へ終端させずepoch 0内で再試行できます。
+
+初回開始が完了した後の`RECONNECTING`以降は[Reconnect design story](ONLINE_MATCH_RECONNECT_DESIGN_STORY.md)が説明します。双方start ACK完了前の切断境界は第19章でactual pathを明記します。
 
 ## 7. Client stateとServer stateは違う
 
@@ -378,7 +391,25 @@ epoch 0
   -> client PLAYING
 ```
 
-一度`PLAYING`へ入った後にDataChannelが失われ、短い通信揺れを無視する待機処理（debounce）を超えた場合、接続世代はepoch 1以降へ進みます。そこでは「自分が切断を観測したか」と「serverが正式に開始したreconnectへ参加するか」を分離し、古いretryと新しい切断も区別します。
+### epoch 0の開始確認前に切断した場合
+
+ここにはReconnectとの明確な境界があります。通常の初回接続では、`OnlineMatchController`は同じepochについてserverの`ACTIVE`を確認し`StartConfirmed`を適用するまで、内部の`started`をfalseに保ち、client stateは`P2P_CONNECTED`です。serverも双方ACKが揃うまでは`MATCHED / epoch 0`です。
+
+この段階で`TransportState.DISCONNECTED`を観測すると、Controllerは1.5秒のdebounceを置きます。短時間でOPENへ戻る、またはCoordinatorがserverの`MATCHED`を読み直して再試行する場合は、次epochを作らずepoch 0のsignaling / start handshakeを続けます。plannerの`MATCHED`分岐は`SIGNAL_CURRENT_EPOCH`であり、`resume_match_v2`を呼びません。
+
+`FAILED` / `CLOSED`になった場合、またはdebounce後も切断が残る場合は、`started == false`なので`beginReconnectGrace()`には入りません。Controllerは`abandon_match_v2`を呼び、serverの`MATCHED`を`ABANDONED`、理由を`CANCELLED_BEFORE_START`とし、clientを`MatchStatus.DISCONNECTED`へ進めます。`transportFailureBeforeStartAbandonsReservation`は、このpathがdisconnect resultをsubmitせずreservationを解放することを固定しています。
+
+abandon RPCを完了できない場合も、clientはerror付き`DISCONNECTED`になります。serverの`MATCHED`には2分の初回leaseがあり、その期限後はreconciliationまたはbounded maintenanceが`MATCH_START_TIMEOUT`によるunrated `EXPIRED`へ進めます。どちらの終了でもepoch 1、rated result、Rating、GameRecord、Research起点を作りません。
+
+### 開始確認後に切断した場合
+
+serverがepoch 0の双方ACKを受けて`ACTIVE`になり、Controllerが同じ正式状態を確認して`StartConfirmed`を適用すると、clientは`PLAYING`になります。この開始済み状態の`PLAYING` / `MOVE_CONFIRMING` / `SYNCHRONIZING`で切断が継続した場合に、Controllerの通常sessionは`beginReconnectGrace()`とepoch 1以降のReconnect protocolへ入ります。
+
+実装上の境界判定は二段あります。Controllerが現在sessionの切断を処理する入口では、`started`と上記3つのclient stateを確認します。一方、Coordinatorが再交渉やprocess recoveryを始める入口では、先にserver stateを読みます。serverがまだ`MATCHED`ならepoch 0内を扱い、serverがすでに`ACTIVE` / `RECONNECTING`ならその正式状態を基準にrecovery actionを選びます。
+
+後者は、start ACKのDB commit後にHTTP responseだけを失った場合やprocess recoveryでは、端末がまだ`P2P_CONNECTED`に見えてもserverでは対局開始済みになり得るためです。したがってReconnectとの境界は「clientが一度`PLAYING`を表示したか」だけでは決めません。ただし本節の問いである**server双方ACK完了前の`MATCHED / epoch 0`**では、どちらの入口から見ても新しいepochを作らず、上記のepoch 0 retryまたは開始前終了を選びます。
+
+Reconnectでは「自分が切断を観測したか」と「serverが正式に開始したreconnectへ参加するか」を分離し、古いretryと新しい切断も区別します。
 
 そのfailure model、passive peer、ACK response loss、expected epoch、finite reconnect budgetは[Online Match Reconnect — Design Evolution and Failure Recovery](ONLINE_MATCH_RECONNECT_DESIGN_STORY.md)を参照してください。通常接続から引き継がれる最も重要な前提は、**DataChannelがOPENであることと、server上で対局継続が確定していることは別**、という点です。
 
