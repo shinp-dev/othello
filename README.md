@@ -57,8 +57,10 @@ pwsh ./scripts/check-release-contents.ps1
 pwsh ./scripts/check-release-contents.ps1 -ArtifactPath app/build/outputs/bundle/release/app-release.aab
 ```
 
-The release artifact records only the non-secret project ref, environment,
-URL, package ID, and variant metadata. It never records the anon key itself.
+The release metadata records only the non-secret project ref, environment, URL,
+package ID, and variant. The existing client anon key remains supplied through
+the runtime configuration path; it is not copied into this metadata or logged,
+and no new credential is added to the repository.
 
 Android Studioでルートを開いて同期し、`app` configurationを実行することもできます。リポジトリにはGradle Wrapperを含めています。
 
