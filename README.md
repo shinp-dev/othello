@@ -31,13 +31,11 @@ choice to `AppLanguage` and the Settings dialog.
 
 ```powershell
 ./gradlew test
+./gradlew :data:supabase:testReleaseSupabaseConfig
 ./gradlew lint
 ./gradlew :app:assembleDebug
-./gradlew :app:assembleRelease
-./gradlew :app:bundleRelease
 pwsh ./scripts/check-boundaries.ps1
 pwsh ./scripts/check-sql-security.ps1
-pwsh ./scripts/check-release-contents.ps1
 supabase start
 supabase test db
 supabase stop
@@ -45,6 +43,22 @@ supabase stop
 # Emulator A/B smoke/E2E (credentials are environment variables, never committed)
 ./scripts/run-emulator-e2e.ps1 -StartSupabase -AutoPlay
 ```
+
+Release variants are fail-closed for the CHANRIVA production Supabase project.
+They require `SUPABASE_URL` and `SUPABASE_ANON_KEY` from the environment or
+untracked `local.properties`; debug/test builds do not require production
+credentials. The release URL must be HTTPS and target project ref
+`zgzllmaoyymoeiqtybck`. After configuring the real production values, build and
+inspect both artifacts:
+
+```powershell
+./gradlew :app:assembleRelease :app:bundleRelease
+pwsh ./scripts/check-release-contents.ps1
+pwsh ./scripts/check-release-contents.ps1 -ArtifactPath app/build/outputs/bundle/release/app-release.aab
+```
+
+The release artifact records only the non-secret project ref, environment,
+URL, package ID, and variant metadata. It never records the anon key itself.
 
 Android Studioでルートを開いて同期し、`app` configurationを実行することもできます。リポジトリにはGradle Wrapperを含めています。
 

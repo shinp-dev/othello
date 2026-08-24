@@ -27,8 +27,14 @@ $env:JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'
 ./gradlew :analysis:edax:assembleDebug
 ./gradlew :analysis:edax:connectedDebugAndroidTest
 ./gradlew :app:assembleDebug
-./gradlew :app:assembleRelease
 ```
+
+Release builds require the real CHANRIVA production Supabase URL and anon key;
+missing, placeholder, HTTP, malformed, or other-project values fail before the
+release variant is packaged. Configure them only through untracked
+`local.properties` or environment variables, then run `assembleRelease` and
+`bundleRelease` followed by `scripts/check-release-contents.ps1`. Debug builds
+and unit tests do not require production credentials.
 
 Android Gradle Plugin installs the pinned NDK/CMake after SDK licenses are
 accepted. Do not add a machine-specific `ndkPath` to tracked files.

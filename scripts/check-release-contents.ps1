@@ -1,5 +1,8 @@
 param(
-    [string]$ArtifactPath = "app/build/outputs/apk/release/app-release-unsigned.apk"
+    [string]$ArtifactPath = "app/build/outputs/apk/release/app-release-unsigned.apk",
+    [string]$ExpectedPackageId = "com.shinpstudio.chanriva",
+    [string]$ExpectedSupabaseProjectRef = "zgzllmaoyymoeiqtybck",
+    [string]$ExpectedSupabaseUrl = "https://zgzllmaoyymoeiqtybck.supabase.co"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -13,6 +16,65 @@ $temporaryDirectory = Join-Path ([IO.Path]::GetTempPath()) ("othello-release-sca
 [IO.Directory]::CreateDirectory($temporaryDirectory) | Out-Null
 try {
     $entries = @($archive.Entries)
+
+    function Get-ArchiveEntryText([string]$suffix) {
+        $entry = $entries | Where-Object { $_.FullName -match "(^|/)$([regex]::Escape($suffix))$" } | Select-Object -First 1
+        if (-not $entry) { throw "Release metadata entry is missing: $suffix" }
+        $memory = [IO.MemoryStream]::new()
+        try {
+            $stream = $entry.Open()
+            try { $stream.CopyTo($memory) } finally { $stream.Dispose() }
+            return [Text.Encoding]::UTF8.GetString($memory.ToArray())
+        } finally {
+            $memory.Dispose()
+        }
+    }
+
+    function Get-MetadataValue([string]$content, [string]$name, [string]$entryName) {
+        $line = @($content -split "`r?`n" | Where-Object { $_ -match "^$([regex]::Escape($name))=(.*)$" })
+        if ($line.Count -ne 1) { throw "Release metadata '$entryName' must contain exactly one $name value" }
+        return ([regex]::Match($line[0], "^$([regex]::Escape($name))=(.*)$")).Groups[2].Value
+    }
+
+    $releaseMetadataEntryName = 'assets/chanriva-release-metadata.properties'
+    $releaseMetadata = Get-ArchiveEntryText $releaseMetadataEntryName
+    if ((Get-MetadataValue $releaseMetadata 'application_id' $releaseMetadataEntryName) -ne $ExpectedPackageId) {
+        throw "Release artifact application ID does not match the expected package."
+    }
+    if ((Get-MetadataValue $releaseMetadata 'variant' $releaseMetadataEntryName) -ne 'release') {
+        throw 'Release artifact metadata does not identify a release variant.'
+    }
+
+    $supabaseMetadataEntryName = $releaseMetadataEntryName
+    $supabaseMetadata = $releaseMetadata
+    if ((Get-MetadataValue $supabaseMetadata 'supabase_project_ref' $supabaseMetadataEntryName) -ne $ExpectedSupabaseProjectRef) {
+        throw 'Release artifact targets an unexpected Supabase project.'
+    }
+    if ((Get-MetadataValue $supabaseMetadata 'supabase_environment' $supabaseMetadataEntryName) -ne 'production') {
+        throw 'Release artifact is not marked for the production Supabase environment.'
+    }
+    $artifactSupabaseUrl = (Get-MetadataValue $supabaseMetadata 'supabase_url' $supabaseMetadataEntryName).TrimEnd('/')
+    if ($artifactSupabaseUrl -ne $ExpectedSupabaseUrl.TrimEnd('/')) {
+        throw 'Release artifact Supabase URL does not match the expected production project.'
+    }
+    if ($supabaseMetadata -match '(?im)^\s*(?:anon_key|service_role_key|anon_key_configured)=') {
+        throw 'Release metadata must not contain Supabase credentials.'
+    }
+
+    $manifestEntry = $entries | Where-Object { $_.FullName -in @('base/manifest/AndroidManifest.xml', 'AndroidManifest.xml') } | Select-Object -First 1
+    if (-not $manifestEntry) { throw 'Release manifest is missing.' }
+    $manifestMemory = [IO.MemoryStream]::new()
+    try {
+        $manifestStream = $manifestEntry.Open()
+        try { $manifestStream.CopyTo($manifestMemory) } finally { $manifestStream.Dispose() }
+        $manifestText = [Text.Encoding]::UTF8.GetString($manifestMemory.ToArray())
+        if ($manifestText.IndexOf($ExpectedPackageId, [StringComparison]::Ordinal) -lt 0) {
+            throw 'Release manifest package ID does not match the expected application ID.'
+        }
+    } finally {
+        $manifestMemory.Dispose()
+    }
+
     $forbiddenEntry = $entries | Where-Object {
         $_.FullName -match '(?i)(^|/)(eval(?:uation)?\.dat|[^/]*opening[^/]*book[^/]*|[^/]*\.book|synthetic[^/]*)$'
     }

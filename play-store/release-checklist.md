@@ -6,6 +6,8 @@
 - [x] `applicationId = com.shinpstudio.chanriva`
 - [x] namespace / Kotlin packageは変更なし
 - [x] `targetSdk = 36`, `minSdk = 26`
+- [x] Release Supabase gate requires HTTPS URL, expected project ref, and a non-placeholder anon key
+- [x] Release artifact records non-secret Supabase project/environment metadata; credentials are not added to metadata
 - [x] AABを作成（署名状態は実行結果を参照）
 - [ ] 公開versionをOWNER DECISION: `1.0.0`にするか`0.x`とするか
 - [ ] versionCodeは公開ごとに単調増加。初回候補は現在の`1`、以後は`2, 3, ...`等を運用ルールとしてOWNER確定

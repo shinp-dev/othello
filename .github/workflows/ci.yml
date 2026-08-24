@@ -19,12 +19,23 @@ jobs:
       - run: npm run typecheck --prefix cloudflare-admin
       - run: npm test --prefix cloudflare-admin
       - run: ./gradlew test
+      - run: ./gradlew :data:supabase:testReleaseSupabaseConfig
       - run: ./gradlew lint
-      - run: ./gradlew assembleDebug assembleRelease bundleRelease
+      - run: ./gradlew assembleDebug
       - run: pwsh ./scripts/check-boundaries.ps1
       - run: pwsh ./scripts/check-sql-security.ps1
-      - run: pwsh ./scripts/check-release-contents.ps1
-      - run: pwsh ./scripts/check-release-contents.ps1 -ArtifactPath app/build/outputs/bundle/release/app-release.aab
+      - name: Build release artifacts when production configuration is enabled
+        if: ${{ vars.CHANRIVA_RELEASE_CONFIG_AVAILABLE == 'true' }}
+        env:
+          SUPABASE_URL: ${{ secrets.CHANRIVA_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.CHANRIVA_SUPABASE_ANON_KEY }}
+        run: ./gradlew assembleRelease bundleRelease
+      - name: Check release APK contents
+        if: ${{ vars.CHANRIVA_RELEASE_CONFIG_AVAILABLE == 'true' }}
+        run: pwsh ./scripts/check-release-contents.ps1
+      - name: Check release AAB contents
+        if: ${{ vars.CHANRIVA_RELEASE_CONFIG_AVAILABLE == 'true' }}
+        run: pwsh ./scripts/check-release-contents.ps1 -ArtifactPath app/build/outputs/bundle/release/app-release.aab
       - id: supabase_cli
         uses: supabase/setup-cli@v2
         with: { version: 2.101.0 }
