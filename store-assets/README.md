@@ -22,14 +22,14 @@ Feature graphicには「COMING SOON」の表記が残っています。現行機
 
 ## 申請時に開く資料
 
-- Store listing文案: `../play-store/listing-ja.md`
-- Data Safety回答案: `../play-store/data-safety.md`
-- App access回答案: `../play-store/app-access.md`
-- 公開チェックリスト: `../play-store/release-checklist.md`
-- 詳細チェックリスト: `../play-store/08142327_公開前準備項目.md`
+- Store listing文案: [`docs/07_リリース・移行/Google Play公開準備/ストア掲載文案.md`](../docs/07_リリース・移行/Google%20Play公開準備/ストア掲載文案.md)
+- Data Safety回答案: [`docs/07_リリース・移行/Google Play公開準備/データセーフティ回答案.md`](../docs/07_リリース・移行/Google%20Play公開準備/データセーフティ回答案.md)
+- App access回答案: [`docs/07_リリース・移行/Google Play公開準備/審査アクセス回答案.md`](../docs/07_リリース・移行/Google%20Play公開準備/審査アクセス回答案.md)
+- 公開チェックリスト: [`docs/07_リリース・移行/Google Play公開準備/公開チェックリスト.md`](../docs/07_リリース・移行/Google%20Play公開準備/公開チェックリスト.md)
+- 詳細チェックリスト: [`docs/07_リリース・移行/Google Play公開準備/公開前準備項目.md`](../docs/07_リリース・移行/Google%20Play公開準備/公開前準備項目.md)
 
 ## 署名済みAAB
 
-署名済みAABは `../release-artifacts/` に置きます。このフォルダはGit管理対象外です。Play Consoleへ提出するAABは、提出直前に `verifyPlayReleaseSigning` で再生成・検証したものを使用してください。
+署名済みAABは`release-artifacts/`に置きます。このフォルダはGit管理対象外です。Play Consoleへ提出するAABは、提出直前に`verifyPlayReleaseSigning`で再生成・検証したものを使用してください。
 
 Google公式素材要件: <https://support.google.com/googleplay/android-developer/answer/9866151>

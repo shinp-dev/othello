@@ -1,6 +1,8 @@
 # ちゃんりば（ちゃんとリバーシ）
 
-軽く一局打っても、その一局がちゃんと残り、ちゃんと振り返れて、次につながるAndroid向けリバーシアプリです。アプリ全体をログイン必須とし、Supabase Auth・matchmaking・Realtime signaling・WebRTC DataChannelを使うオンライン対局と、対局後GameRecordをEdaxで解析するレビュー経路を実装しています。本アプリはEdax公式・公認アプリではありません。
+軽く一局打っても、その一局がちゃんと残り、ちゃんと振り返れて、次につながるAndroid向けリバーシアプリです。Supabase Auth・対戦相手の割り当て（matchmaking）・Realtimeを使った接続情報交換（signaling）・WebRTC DataChannelによるオンライン対局と、対局後のGameRecordをEdaxで解析するレビュー経路を実装しています。本アプリはEdax公式・公認アプリではありません。
+
+設計、運用、リリース、監査資料は[技術資料index](docs/README.md)から目的別に参照できます。
 
 ## 開発環境
 
@@ -10,22 +12,11 @@
 - Android NDK `27.3.13750724` (r27d LTS) / CMake `3.22.1`
 - Kotlin 2.2.10 / Compose Compiler plugin / Compose 1.6.8
 
-## Android language support
+## Androidの対応言語
 
-The Android app supports Japanese and English. With `System default`, Japanese
-devices use Japanese and all other system locales fall back to English. Users
-can override this from `Settings -> Language` with `日本語` or `English`. The
-selection is stored and synchronized by Android/AppCompat, so the in-app picker
-and Android 13+ App Language settings share the same state. IP address, country,
-and region information are not used for language selection.
+Androidアプリは日本語と英語に対応します。`System default`では、日本語端末は日本語、それ以外のシステム言語は英語へ切り替わります。利用者は`Settings -> Language`から`日本語`または`English`を選べます。選択内容はAndroid/AppCompatが保存・同期するため、アプリ内の選択画面とAndroid 13以降のアプリ言語設定は同じ状態を共有します。言語選択にIPアドレス、国、地域情報は使いません。
 
-Locale metadata is in `app/src/main/res/xml/locales_config.xml`; localized
-strings are in `app/src/main/res/values/strings.xml` and
-`app/src/main/res/values-ja/strings.xml`; the unqualified `values` resources are
-English so unsupported system locales fall back to English. To add a language,
-add its BCP 47 locale to `locales_config.xml`, create the matching
-`values-<locale>` directory, translate the existing resources, and add the
-choice to `AppLanguage` and the Settings dialog.
+言語メタデータは`app/src/main/res/xml/locales_config.xml`、翻訳文字列は`app/src/main/res/values/strings.xml`と`app/src/main/res/values-ja/strings.xml`にあります。修飾子のない`values`は英語なので、未対応のシステム言語は英語へ切り替わります。言語を追加する場合は、BCP 47 localeを`locales_config.xml`へ追加し、対応する`values-<locale>`ディレクトリを作成して既存リソースを翻訳し、`AppLanguage`と設定ダイアログへ選択肢を追加します。
 
 ## ビルドとテスト
 
@@ -40,16 +31,11 @@ supabase start
 supabase test db
 supabase stop
 
-# Emulator A/B smoke/E2E (credentials are environment variables, never committed)
+# Emulator A/B smoke/E2E（認証情報は環境変数で渡し、commitしない）
 ./scripts/run-emulator-e2e.ps1 -StartSupabase -AutoPlay
 ```
 
-Release variants are fail-closed for the CHANRIVA production Supabase project.
-They require `SUPABASE_URL` and `SUPABASE_ANON_KEY` from the environment or
-untracked `local.properties`; debug/test builds do not require production
-credentials. The release URL must be HTTPS and target project ref
-`zgzllmaoyymoeiqtybck`. After configuring the real production values, build and
-inspect both artifacts:
+リリース版（release variant）は、CHANRIVA本番Supabaseプロジェクトの設定が正しくない場合にビルドを失敗させます。環境変数またはGit管理外の`local.properties`から`SUPABASE_URL`と`SUPABASE_ANON_KEY`を渡す必要がありますが、debug／testビルドには本番の認証情報は不要です。リリースURLはHTTPSで、プロジェクト参照`zgzllmaoyymoeiqtybck`を対象にする必要があります。本番値を設定した後、次のコマンドで両方の成果物をビルド・検査します。
 
 ```powershell
 ./gradlew :app:assembleRelease :app:bundleRelease
@@ -57,29 +43,23 @@ pwsh ./scripts/check-release-contents.ps1
 pwsh ./scripts/check-release-contents.ps1 -ArtifactPath app/build/outputs/bundle/release/app-release.aab
 ```
 
-The release metadata records only the non-secret project ref, environment, URL,
-package ID, and variant. The existing client anon key remains supplied through
-the runtime configuration path; it is not copied into this metadata or logged,
-and no new credential is added to the repository.
+リリースメタデータへ記録するのは、秘密ではないプロジェクト参照、環境、URL、package ID、variantだけです。既存のクライアント用anonキーは引き続き実行時設定経路から渡し、このメタデータへ複製したりログへ出したりしません。リポジトリへ新しい認証情報も追加しません。
 
 Android Studioでルートを開いて同期し、`app` configurationを実行することもできます。リポジトリにはGradle Wrapperを含めています。
 
 ## 構成
 
-詳細は [ARCHITECTURE.md](ARCHITECTURE.md) と [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) を参照してください。運用責務、定期処理、Secret境界、障害確認先の正本は [docs/OPERATIONS_MAP.md](docs/OPERATIONS_MAP.md) です。`core:game`はAndroid/Supabase/WebRTC/Rating/Edaxを参照しない純粋Kotlinです。`feature:match`は`analysis`へ依存せず、Reviewだけが`analysis:api`を参照します。
+技術資料の入口は[docs/README.md](docs/README.md)です。システム構成の正本は[システム構成](docs/01_全体設計/システム構成.md)、運用責務、定期処理、Secret境界、障害確認先の正本は[運用マップ](docs/01_全体設計/運用マップ.md)です。初期の実装計画は現行手順ではないため、[旧実装計画](docs/09_履歴/旧実装計画.md)として履歴へ分離しています。`core:game`はAndroid/Supabase/WebRTC/Rating/Edaxを参照しない純粋Kotlinです。`feature:match`は`analysis`へ依存せず、Reviewだけが`analysis:api`を参照します。
 
 WebRTC SDKとSupabase SDKの具体実装は、それぞれ`transport:webrtc`と`data:supabase`へ隔離します。`matches.server_status`はサーバーが保証できる状態だけを保持し、AndroidのP2P session stateとは別物です。
 WebRTC Android SDKはMaven Centralの`io.github.webrtc-sdk:android:144.7559.09`に固定しています。
 `SupabaseModule`が`data:supabase`内でSDK clientとrepositoryを組み立て、appへは自前port interfaceだけを返します。
 
-## Supabase / Android configuration
+## Supabase / Android設定
 
-The Android client reads `supabase.url` and `supabase.anonKey` from the untracked
-`local.properties` file, or `SUPABASE_URL` / `SUPABASE_ANON_KEY` from the environment.
-Missing values produce a visible configuration error and do not crash the app. Never
-place a service-role key in Android resources or BuildConfig.
+Androidクライアントは、Git管理外の`local.properties`にある`supabase.url`と`supabase.anonKey`、または環境変数`SUPABASE_URL` / `SUPABASE_ANON_KEY`を読みます。値がない場合は設定エラーを画面に表示し、アプリを異常終了させません。サービスロール（service_role）のキーはAndroidリソースやBuildConfigへ絶対に置かないでください。
 
-Hosted疎通環境を同じ設定で作り直す手順は [docs/SUPABASE_HOSTED_SETUP.md](docs/SUPABASE_HOSTED_SETUP.md) に記録しています。
+ホスト型（hosted）の疎通環境を同じ設定で作り直す手順は[Supabase検証環境構築](docs/06_基盤・外部サービス/Supabase検証環境構築.md)に記録しています。
 
 1. Supabase projectを作成します。
 2. `supabase/migrations`内のmigrationをファイル名順にすべてSupabase SQL EditorまたはSupabase CLIで適用します。
@@ -111,16 +91,16 @@ npm run deploy
 `applicationId = com.shinpstudio.chanriva` をGoogle Play公開用の正式IDとして使用します。repository名と内部package/DB識別子の`othello`は、公開ブランドではなく既存の技術識別子として変更していません。
 
 Emulator A/Bの再現手順と、emulatorで完了できる項目・物理端末に残る項目は
-[`docs/DEVICE_TEST.md`](docs/DEVICE_TEST.md)を参照してください。`build/e2e/`には
+[`実機・エミュレーター確認`](docs/08_テスト・監査/実機・エミュレーター確認.md)を参照してください。`build/e2e/`には
 secretを含めないXML、スクリーンショット、対象tagのlogcatを保存できます。
 
-`matches`のCREATED leaseは5分のsignaling用です。DataChannel成立後、両participantが`ack_match_started`を一度呼び、クライアントが`get_match_start_state`で両者ACKを確認してからPLAYINGへ進みます。両者ACK後はP2P開始事実と24時間のbounded play leaseを記録します。PENDING_RESULTのactive reservationは5分で、30日保持の監査用submissionとは分離しています。期限切れはABANDONEDへ遷移してからreservationを解放します。matchmaking hot pathはcaller-scoped reconciliationとqueue expiryだけを行い、stale matchとterminal recordの全体cleanupはmaintenance pathで実行します。オンライン対戦のschedulerは既存`cloudflare-admin` Cronへ集約し、10分ごとにservice roleで`run_match_maintenance_v2(100)`と`run_legacy_match_maintenance_v1(100)`を独立実行します。後者は期限切れlegacy business stateを先に永続化し、その後protocol 1 signaling / queueを各100行以下で削除します。online match cleanup用の追加Supabase Cron / pg_cronは作成しません。
+`matches`の`CREATED`リースは、接続情報交換（signaling）用に5分確保します。DataChannel成立後、両参加者が`ack_match_started`を一度呼び、クライアントが`get_match_start_state`で双方のACKを確認してから`PLAYING`へ進みます。双方のACK後は、P2P開始事実と上限24時間の対局リースを記録します。`PENDING_RESULT`の進行中予約は5分で、30日保持する監査用submissionとは分離しています。期限切れは`ABANDONED`へ遷移してから予約を解放します。対戦相手割り当ての通常経路は、呼び出し元単位の状態照合（reconciliation）とキュー期限切れだけを扱い、古い対局と終了済み記録の全体クリーンアップは保守経路で実行します。オンライン対局の定期処理は既存の`cloudflare-admin` Cronへ集約し、10分ごとにサービスロール（service_role）で`run_match_maintenance_v2(100)`と`run_legacy_match_maintenance_v1(100)`を独立実行します。後者は期限切れの旧プロトコル状態を先に永続化し、その後プロトコル1のsignaling／queueを各100行以下で削除します。オンライン対局のクリーンアップ用に追加のSupabase Cron／pg_cronは作成しません。
 
-日次順位は既存のmaintenance pathに分散させず、Supabase Cron job `daily-rating-snapshot`がAsia/Tokyoの日付境界後の毎日00:10 JSTに`select public.refresh_rating_daily_snapshot();`を実行します。関数は`SECURITY DEFINER`かつ空の`search_path`で、`PUBLIC` / `anon` / `authenticated`からEXECUTEを剥奪し、`service_role`または明示的に権限を持つDB ownerのCronだけが実行します。正式なmigrationは`202608220029_daily_rating_snapshot.sql`です。028は本番未適用の永久欠番であり、適用してはいけません。migration自身は関数と最新snapshot用tableを追加するだけで、Cron extension / jobは別の本番操作として導入しています。適用監査、scheduler方針、導入結果は[`docs/DAILY_RATING_SNAPSHOT_ROLLOUT.md`](docs/DAILY_RATING_SNAPSHOT_ROLLOUT.md)を参照してください。
+日次順位は既存の保守経路へ分散させず、Supabase Cronジョブ`daily-rating-snapshot`がAsia/Tokyoの日付境界後の毎日00:10 JSTに`select public.refresh_rating_daily_snapshot();`を実行します。関数は`SECURITY DEFINER`かつ空の`search_path`で、`PUBLIC` / `anon` / `authenticated`からEXECUTEを剥奪し、`service_role`または明示的に権限を持つDB所有者のCronだけが実行します。正式なマイグレーションは`202608220029_daily_rating_snapshot.sql`です。028は本番未適用の永久欠番であり、適用してはいけません。マイグレーション自身は関数と最新スナップショット用テーブルを追加するだけで、Cron拡張とジョブは別の本番操作として導入しています。適用監査、定期処理の方針、導入結果は[日次レートスナップショット運用](docs/04_レーティング/日次レートスナップショット運用.md)を参照してください。
 
 ## Edax / OSS
 
-対局後Reviewの解析エンジンには[Edax 4.6](https://github.com/abulmo/edax-reversi)を使用します。upstream commitは`14f048c05ddfa385b6bf954a9c2905bbe677e9d3`へ固定し、`Kotlin -> analysis:api -> analysis:edax -> JNI -> native Edax`で統合しています。Android app全体はGNU GPL version 3で配布します。ライセンス全文は[`LICENSE`](LICENSE)、著作権・第三者dependency表示は[`NOTICE.md`](NOTICE.md)、固定ソース・patch・再構築手順は[`third_party/edax/UPSTREAM.md`](third_party/edax/UPSTREAM.md)と[`docs/EDAX_BUILD.md`](docs/EDAX_BUILD.md)を参照してください。
+対局後レビューの解析エンジンには[Edax 4.6](https://github.com/abulmo/edax-reversi)を使用します。upstream commitは`14f048c05ddfa385b6bf954a9c2905bbe677e9d3`へ固定し、`Kotlin -> analysis:api -> analysis:edax -> JNI -> native Edax`で統合しています。Androidアプリ全体はGNU GPL version 3で配布します。ライセンス全文は[`LICENSE`](LICENSE)、著作権・第三者依存関係の表示は[`NOTICE.md`](NOTICE.md)、固定ソース・patch・再構築手順は[`third_party/edax/UPSTREAM.md`](third_party/edax/UPSTREAM.md)と[Edaxビルド](docs/05_解析エンジン/Edaxビルド.md)を参照してください。
 
 Edaxの評価データ（`eval.dat`等）とOpening Bookは、権利をEdax本体と分離して扱い、APK/AABにもrepositoryにも同梱しません。評価データは`設定 -> 解析`から、Edax公式GitHub Releasesのv4.4 `eval.7z`から`eval.dat`だけを自動設定するか、ユーザーが正当に取得・所有するファイルをStorage Access Frameworkで選んで、アプリprivate storageへコピーできます。ダウンロード・展開・検証に成功するまで既存データは置き換えません。評価データ未設定時は偽の値を表示しません。Bookは任意で、未設定またはbook miss時は通常のEdax探索を使います。詳しい導線は`https://chanriva.shinp-studio.com/edax`を使用します。
 
