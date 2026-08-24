@@ -109,7 +109,7 @@ Android reset mail要求
 | 関連migration | `202608150025_private_match_rating.sql`ほかmatch lifecycle / Realtime / result関連migration |
 | 関連RPC | `enqueue_or_match()`、`cancel_waiting()`、`heartbeat_waiting()`、`claim_waiting_match()`、`reconcile_expired_active_match_for_user()`、`ack_match_started()`、`get_match_start_state()`、`abandon_match()`、`submit_match_result(...)`、`finalize_match_v2(...)` |
 | 関連workflow / Worker | なし |
-| 関連ドキュメント | [Architecture](../ARCHITECTURE.md#client-session-state-vs-server-persisted-match-state)、[Device test](DEVICE_TEST.md) |
+| 関連ドキュメント | [Architecture](../ARCHITECTURE.md#client-session-state-vs-server-persisted-match-state)、[Reconnect design story](ONLINE_MATCH_RECONNECT_DESIGN_STORY.md)、[Device test](DEVICE_TEST.md) |
 | 本番状態 | 稼働中 |
 | 注意事項 | P2P成立後の盤面・着手・時計・結果をSupabase Realtimeへ送らない。Realtimeはparticipant限定のmatch notification / SDP signaling用。確定結果だけがratingを更新する |
 
