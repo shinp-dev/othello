@@ -8,7 +8,9 @@ this branch are **not deployed** by this work. This document is the contract for
 The closed-test APK speaks protocol v1. It calls the unversioned matchmaking/result RPCs and
 writes `match_signaling` directly. Replacing those objects in place would break installed APKs.
 Protocol v2 is therefore additive and is matched only with protocol v2. The compatibility layer
-is temporary; the cutover and deletion criteria are listed below.
+is temporary; the cutover and deletion criteria are listed below. Coexistence does not preserve
+the old authority weaknesses: the v1 result signature now uses the same server replay boundary,
+and a trigger bounds the existing direct signaling INSERT contract.
 
 The pre-change root causes were:
 
@@ -61,9 +63,13 @@ Leases use server time:
 
 - Graceful leave/resignation: the leaving caller submits an adverse claim about itself. The
   server can authorize that fact without trusting the opponent and finalizes it idempotently.
-- Temporary network loss / ICE `DISCONNECTED`: gameplay and the local monotonic clock pause; the
-  survivor reports the opponent missing and enters `RECONNECTING`. A returning participant calls
-  `resume_match_v2`, negotiates a fresh connection and exchanges a transcript snapshot.
+- Temporary network loss / ICE `DISCONNECTED`: a 1.5-second client debounce first permits the
+  existing candidate pair to return to `OPEN` without spending an epoch. If recovery is still
+  required, gameplay and the local monotonic clock pause and the survivor enters `RECONNECTING`.
+  Before skipping renegotiation on an `OPEN` transport, the client reads server state. A server
+  `RECONNECTING` epoch still completes current-epoch signaling and bilateral ACK; an already
+  `ACTIVE` advanced epoch performs authoritative transcript synchronization instead of spending
+  another epoch.
 - `FAILED`, process death, force stop or power loss: the surviving process follows the same
   45-second path. A relaunched process obtains its assignment with `claim_active_match_v2`, loads
   the app-private checkpoint, and starts a new signaling negotiation.
@@ -215,8 +221,9 @@ The subscriber establishes Realtime, performs one initial snapshot, and uses at 
 reconciliation for a join race. It no longer selects the full history every 500 ms. Realtime is a
 wake-up mechanism; the constrained row snapshot remains the recoverable fact.
 
-V1 direct insert stays granted only during coexistence. The v2 table has no authenticated direct
-write grant.
+V1 direct insert stays granted only during coexistence. Its trigger permits only live, unstarted
+v1 matches, BLACK `OFFER`, WHITE `ANSWER`, four rows per sender and eight rows per match; existing
+maintenance removes started/terminal rows. The v2 table has no authenticated direct write grant.
 
 ## Matchmaking v2
 

@@ -134,6 +134,10 @@ $releaseRequiredPatterns = @(
     'for update skip locked',
     'create function public\.submit_match_result_v2',
     'create function public\.release_replay_game_v2',
+    'create or replace function public\.submit_match_result[\s\S]*release_replay_game_v2',
+    'create function public\.enforce_match_signaling_v1_budget',
+    'legacy signaling sender limit exceeded',
+    'legacy signaling match limit exceeded',
     'create function public\.publish_match_signal_v2[\s\S]*p_negotiation_epoch integer',
     'stale signaling negotiation epoch',
     "p_signal_type not in \('OFFER', 'ANSWER', 'RESUME'\)",
@@ -171,7 +175,10 @@ $releaseTestPatterns = @(
     'BLACK cannot publish the WHITE-only RESUME wake-up',
     'a delayed signal generated for an old epoch cannot enter the current epoch',
     'signaling slot limit exceeded',
-    'duplicate NORMAL request never rates twice'
+    'duplicate NORMAL request never rates twice',
+    'protocol-1 BLACK cannot submit an illegal canonical line for rating',
+    'protocol-1 direct INSERT rejects signaling beyond the sender budget',
+    'protocol-1 terminal match rejects later direct signaling INSERT'
 )
 $releaseTestMissing = $releaseTestPatterns | Where-Object { $releaseTestSql -notmatch [regex]::Escape($_) }
 if ($releaseTestMissing) { $releaseTestMissing | ForEach-Object { Write-Error "Missing release-v2 pgTAP boundary: $_" }; exit 1 }

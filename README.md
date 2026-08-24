@@ -104,7 +104,7 @@ npm run deploy
 
 ## オンライン対局
 
-`MatchTransport`のWebRTC DataChannel実装を使用します。Supabase RealtimeのPostgres Changesは、待機側へのparticipant限定`match_notifications`と、SDP offer/answer用`match_signaling`だけに使用します。通知を受けた待機側は即座にmatchをclaimし、heartbeat pollingは通知失敗時のfallbackとして残します。P2P接続後に着手、時計、盤面、結果をRealtimeへ送信しません。実機2台では、Auth設定、同一Supabase project、TURN/STUN設定、2台のqueue参加、DataChannel成立、両者start ACK、双方の同一棋譜・hash、結果提出の順で確認します。
+`MatchTransport`のWebRTC DataChannel実装を使用します。Supabase RealtimeのPostgres Changesは、待機側へのparticipant限定`match_notifications`と、SDP offer/answer用`match_signaling`だけに使用します。通知を受けた待機側は即座にmatchをclaimし、heartbeat pollingは通知失敗時のfallbackとして残します。P2P接続後に着手、時計、盤面、結果をRealtimeへ送信しません。protocol 1/2ともrated resultはDBがcanonical movesを合法手再生し、NORMALの終局・result・hashを導出してから確定します。実機2台では、Auth設定、同一Supabase project、TURN/STUN設定、2台のqueue参加、DataChannel成立、両者start ACK、双方の同一棋譜・hash、結果提出の順で確認します。
 
 `その他 -> アカウント`には本人のサーバー管理`ratings.current_rating`、「前日順位」、「この端末で確認した最高の前日順位」を表示します。前日順位は日本時間の前日終了時点のレートをもとに算出します。この端末の最高値は、ユーザーがアカウント画面を開き、その時点で有効な前日順位を実際に取得できた場合だけ比較・保存します。アプリ起動、foreground復帰、background処理では更新せず、画面を開かなかった日の順位も記録しません。日次順位の母集団は、東京のsnapshot cutoffから過去30日以内の半開区間に、既存の確定レート更新（`rating_history`）が1件以上ある未削除ユーザーです。順位計算にはcutoff前の最新`rating_history.rating`を使い、cutoff後の`ratings.current_rating`は前日順位へ混入しません。独自の最低対局数や仮レート条件は追加していません。Androidはsnapshot dateが東京基準の本当の前日と一致するときだけ表示・ローカル記録更新に利用します。この記録はSupabase AuthのユーザーUUIDごとに端末へ保存し、サーバーや別端末へ同期しません。対局画面には成立時に保存した相手rating snapshotだけを表示し、ニックネーム、メールアドレス、UUIDをプレイヤー名として表示しません。
 

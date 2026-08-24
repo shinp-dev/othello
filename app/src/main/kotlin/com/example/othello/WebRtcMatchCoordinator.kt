@@ -24,6 +24,36 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
+internal enum class ReleaseRenegotiationAction {
+    SKIP_TRANSIENT_RECOVERY,
+    SIGNAL_CURRENT_EPOCH,
+    START_NEW_EPOCH,
+    SYNCHRONIZE_CURRENT_EPOCH,
+    RECONCILE_TERMINAL,
+}
+
+internal fun planReleaseRenegotiation(
+    force: Boolean,
+    transportState: TransportState,
+    controllerReconnecting: Boolean,
+    currentEpoch: Int,
+    serverStatus: String,
+    serverEpoch: Int,
+): ReleaseRenegotiationAction = when {
+    serverStatus in setOf("CONFIRMED", "FORFEIT", "EXPIRED", "ABANDONED", "DISPUTED", "RESULT_PENDING") ->
+        ReleaseRenegotiationAction.RECONCILE_TERMINAL
+    serverStatus == "RECONNECTING" -> ReleaseRenegotiationAction.SIGNAL_CURRENT_EPOCH
+    serverStatus == "MATCHED" -> ReleaseRenegotiationAction.SIGNAL_CURRENT_EPOCH
+    serverStatus == "ACTIVE" && transportState == TransportState.OPEN && serverEpoch != currentEpoch ->
+        ReleaseRenegotiationAction.SYNCHRONIZE_CURRENT_EPOCH
+    serverStatus == "ACTIVE" && transportState == TransportState.OPEN && controllerReconnecting ->
+        ReleaseRenegotiationAction.SYNCHRONIZE_CURRENT_EPOCH
+    serverStatus == "ACTIVE" && transportState == TransportState.OPEN && !force ->
+        ReleaseRenegotiationAction.SKIP_TRANSIENT_RECOVERY
+    serverStatus == "ACTIVE" -> ReleaseRenegotiationAction.START_NEW_EPOCH
+    else -> ReleaseRenegotiationAction.RECONCILE_TERMINAL
+}
+
 /** Owns the P2P session outside Compose so Activity recreation does not create a second peer. */
 class WebRtcMatchCoordinator(
     context: Context,
@@ -294,9 +324,11 @@ class WebRtcMatchCoordinator(
         if (renegotiationJob?.isActive == true || closed) return
         renegotiationJob = sessionScope.launch {
             // ICE DISCONNECTED is sometimes transient during network handover. Give the
-            // existing candidate pair a short chance to recover before writing signaling.
+            // existing candidate pair a short chance to recover, then consult the server
+            // before deciding whether this was transient. OPEN alone is not authoritative:
+            // another callback may already have advanced the server negotiation epoch.
             delay(1_500)
-            if (closed || (!force && transport.diagnostics().state == TransportState.OPEN)) return@launch
+            if (closed) return@launch
             if (controller.viewState.matchState.status !in setOf(
                     com.example.othello.match.MatchStatus.P2P_CONNECTED,
                     com.example.othello.match.MatchStatus.PLAYING,
@@ -308,19 +340,37 @@ class WebRtcMatchCoordinator(
             repeat(RENEGOTIATION_ATTEMPTS) { attempt ->
                 try {
                     signalingMutex.withLock {
-                        val connectingInitially = controller.viewState.matchState.status ==
-                            com.example.othello.match.MatchStatus.P2P_CONNECTED
-                        if (connectingInitially) {
-                            val startState = repository.getMatchStartState(assignment.matchId)
-                            currentNegotiationEpoch = startState.negotiationEpoch
-                            if (startState.serverStatus in TERMINAL_SERVER_STATUSES) {
+                        val observedState = repository.getMatchStartState(assignment.matchId)
+                        val action = planReleaseRenegotiation(
+                            force = force,
+                            transportState = transport.diagnostics().state,
+                            controllerReconnecting = controller.viewState.matchState.status ==
+                                com.example.othello.match.MatchStatus.RECONNECTING,
+                            currentEpoch = currentNegotiationEpoch,
+                            serverStatus = observedState.serverStatus,
+                            serverEpoch = observedState.negotiationEpoch,
+                        )
+                        currentNegotiationEpoch = observedState.negotiationEpoch
+                        when (action) {
+                            ReleaseRenegotiationAction.SKIP_TRANSIENT_RECOVERY -> return@launch
+                            ReleaseRenegotiationAction.SYNCHRONIZE_CURRENT_EPOCH -> {
                                 controller.reconcileServerState()
                                 return@launch
                             }
-                        } else {
-                            val resumed = repository.resumeMatch(assignment.matchId)
-                            currentNegotiationEpoch = resumed.negotiationEpoch
-                            if (resumed.serverStatus !in setOf("ACTIVE", "RECONNECTING")) {
+                            ReleaseRenegotiationAction.RECONCILE_TERMINAL -> {
+                                controller.reconcileServerState()
+                                return@launch
+                            }
+                            ReleaseRenegotiationAction.START_NEW_EPOCH,
+                            ReleaseRenegotiationAction.SIGNAL_CURRENT_EPOCH,
+                            -> Unit
+                        }
+                        if (action == ReleaseRenegotiationAction.START_NEW_EPOCH ||
+                            observedState.serverStatus == "RECONNECTING"
+                        ) {
+                            val resumedState = repository.resumeMatch(assignment.matchId)
+                            currentNegotiationEpoch = resumedState.negotiationEpoch
+                            if (resumedState.serverStatus !in setOf("ACTIVE", "RECONNECTING")) {
                                 controller.reconcileServerState()
                                 return@launch
                             }

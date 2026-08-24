@@ -97,6 +97,7 @@ private class FakeOnlineRepository : OnlineMatchRepository {
     val attemptedSubmissions = mutableListOf<MatchSubmission>()
     val serverStatuses = mutableListOf("CONFIRMED")
     var startState = MatchStartAck("CREATED", localAcked = true, bothAcked = true)
+    val startStateResponses = ArrayDeque<MatchStartAck>()
     var ackCalls = 0
     var submitCalls = 0
     var abandonCalls = 0
@@ -106,8 +107,12 @@ private class FakeOnlineRepository : OnlineMatchRepository {
     var submitFailuresRemaining = 0
     var resumeResult = MatchFinishResult("ACTIVE")
     var reconcileResult = MatchFinishResult("ACTIVE")
-    override suspend fun ackMatchStarted(matchId: String): MatchStartAck { ackCalls++; return startState }
-    override suspend fun getMatchStartState(matchId: String) = startState
+    override suspend fun ackMatchStarted(matchId: String): MatchStartAck {
+        ackCalls++
+        return startStateResponses.removeFirstOrNull() ?: startState
+    }
+    override suspend fun getMatchStartState(matchId: String) =
+        startStateResponses.removeFirstOrNull() ?: startState
     override suspend fun abandonMatch(matchId: String): Boolean { abandonCalls++; return true }
     override suspend fun submitMatchResult(submission: MatchSubmission): MatchFinishResult {
         attemptedSubmissions += submission
@@ -695,7 +700,33 @@ class OnlineMatchControllerTest {
     }
 
     @Test
-    fun disconnectThenReconnectResumesAndSynchronizesWithPeer() = runBlocking {
+    fun oneSidedTransientDisconnectReturnsToOpenWithoutConsumingServerReconnect() = runBlocking {
+        val transport = FakeMatchTransport()
+        val repository = FakeOnlineRepository().apply {
+            startState = MatchStartAck("ACTIVE", localAcked = true, bothAcked = true)
+        }
+        val controller = OnlineMatchController(
+            "transient-disconnect",
+            Disc.BLACK,
+            transport,
+            repository,
+            disconnectDebounceMillis = 50,
+        )
+        controller.onDataChannelOpen()
+
+        transport.disconnect()
+        delay(10)
+        transport.reconnect()
+        delay(75)
+
+        assertEquals(0, repository.submitCalls)
+        assertEquals("ACTIVE", repository.startState.serverStatus)
+        assertEquals(MatchStatus.PLAYING, controller.viewState.matchState.status)
+        controller.close()
+    }
+
+    @Test
+    fun serverAlreadyReconnectingWhenTransportOpensCompletesAckAndSynchronizesWithPeer() = runBlocking {
         var now = 0L
         val blackTransport = FakeMatchTransport()
         val whiteTransport = FakeMatchTransport()
@@ -713,6 +744,7 @@ class OnlineMatchControllerTest {
             blackRepository,
             synchronizationTimeoutMillis = 100,
             reconnectGraceMillis = 1_000,
+            disconnectDebounceMillis = 0,
             monotonicNowMillis = { now },
         )
         val white = OnlineMatchController("reconnect", Disc.WHITE, whiteTransport, FakeOnlineRepository())
@@ -722,7 +754,16 @@ class OnlineMatchControllerTest {
         awaitCondition { black.viewState.matchState.status == MatchStatus.PLAYING }
 
         blackTransport.disconnect()
-        assertEquals(MatchStatus.RECONNECTING, black.viewState.matchState.status)
+        awaitCondition {
+            blackRepository.submitCalls == 1 &&
+                black.viewState.matchState.status == MatchStatus.RECONNECTING
+        }
+        blackRepository.startStateResponses += MatchStartAck(
+            "RECONNECTING", localAcked = true, bothAcked = false, negotiationEpoch = 1,
+        )
+        blackRepository.startStateResponses += MatchStartAck(
+            "ACTIVE", localAcked = true, bothAcked = true, negotiationEpoch = 1,
+        )
         blackTransport.reconnect()
         awaitCondition { black.viewState.matchState.status == MatchStatus.PLAYING }
 
@@ -752,6 +793,7 @@ class OnlineMatchControllerTest {
             transport,
             repository,
             reconnectGraceMillis = 10_000,
+            disconnectDebounceMillis = 0,
             disconnectReportRetryMillis = 5,
         )
         controller.onDataChannelOpen()
@@ -786,6 +828,7 @@ class OnlineMatchControllerTest {
             startConfirmationDelayMillis = 0,
             synchronizationTimeoutMillis = 100,
             reconnectGraceMillis = 20,
+            disconnectDebounceMillis = 0,
         )
         val white = OnlineMatchController(
             "deadline-reconcile",
@@ -858,6 +901,7 @@ class OnlineMatchControllerTest {
             repository,
             deliveryAckTimeoutMillis = 10_000,
             reconnectGraceMillis = 10_000,
+            disconnectDebounceMillis = 0,
         )
         controller.onDataChannelOpen()
         controller.play(Position(2, 3))

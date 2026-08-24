@@ -132,6 +132,7 @@ select ok(not exists (
    where p.pronamespace = 'public'::regnamespace
      and p.proname in (
        'enforce_release_match_transition_v2', 'release_is_legal_move_v2',
+       'enforce_match_signaling_v1_budget',
        'release_has_legal_move_v2', 'release_apply_move_v2',
        'release_replay_game_v2', 'release_assignment_row_v2',
        'release_match_state_row_v2', 'release_result_response_row_v2',
@@ -170,8 +171,10 @@ select ok(has_function_privilege('service_role',
   'public.run_match_maintenance_v2(integer)', 'execute'),
   'only service_role can execute release maintenance');
 select ok(not has_function_privilege('authenticated',
-  'public.finalize_match_v2(uuid)', 'execute'),
-  'legacy finalize helper is no longer client-callable');
+  'public.finalize_match_v2(uuid)', 'execute')
+  and not has_function_privilege('authenticated',
+  'public.enforce_match_signaling_v1_budget()', 'execute'),
+  'legacy authority and direct-INSERT trigger helpers are not client-callable');
 select ok(not has_table_privilege('authenticated',
   'public.match_signals_v2', 'insert')
   and not has_table_privilege('authenticated',
@@ -254,7 +257,7 @@ insert into auth.users (
 select ('00000000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid,
        'authenticated', 'authenticated',
        'release-' || i::text || '@example.test', '', now(), '{}', '{}'
-  from generate_series(301, 330) i;
+  from generate_series(301, 338) i;
 
 create function pg_temp.create_release_match(
   p_match_id uuid,
@@ -295,6 +298,209 @@ begin
   end if;
 end;
 $$;
+
+create function pg_temp.create_legacy_match(
+  p_match_id uuid,
+  p_black uuid,
+  p_white uuid,
+  p_started boolean default true
+)
+returns void
+language plpgsql
+set search_path = ''
+as $$
+declare
+  initial_deadline timestamptz := now() + interval '2 minutes';
+  active_deadline timestamptz := now() + interval '24 hours';
+begin
+  insert into public.matches(
+    id, black_player, white_player, status, server_status, protocol_version,
+    black_rating_at_start, white_rating_at_start, created_expires_at
+  ) values (
+    p_match_id, p_black, p_white, 'PLAYING', 'CREATED', 1,
+    (select current_rating from public.ratings where user_id = p_black),
+    (select current_rating from public.ratings where user_id = p_white),
+    initial_deadline
+  );
+  insert into public.active_match_participants(user_id, match_id, expires_at)
+  values (p_black, p_match_id, initial_deadline),
+         (p_white, p_match_id, initial_deadline);
+  if p_started then
+    insert into public.match_start_acks(match_id, user_id)
+    values (p_match_id, p_black), (p_match_id, p_white);
+    update public.matches
+       set p2p_started_at = now(), play_lease_expires_at = active_deadline
+     where id = p_match_id;
+    update public.active_match_participants
+       set expires_at = active_deadline where match_id = p_match_id;
+  end if;
+end;
+$$;
+
+-- Protocol-1 compatibility is no longer an authority downgrade ----------------
+
+select pg_temp.create_legacy_match(
+  '10000000-0000-4000-8000-000000000331',
+  '00000000-0000-4000-8000-000000000331',
+  '00000000-0000-4000-8000-000000000332');
+select set_config('request.jwt.claim.role', 'authenticated', false);
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000331', false);
+select throws_ok(
+  $$select public.submit_match_result(
+    '10000000-0000-4000-8000-000000000331', 'a1', 'BLACK_WIN',
+    '0000000000000000:1:0:1', 'NORMAL')$$,
+  'P0001', 'invalid canonical moves: ILLEGAL_MOVE',
+  'protocol-1 BLACK cannot submit an illegal canonical line for rating');
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000332', false);
+select throws_ok(
+  $$select public.submit_match_result(
+    '10000000-0000-4000-8000-000000000331', 'a1', 'BLACK_WIN',
+    '0000000000000000:1:0:1', 'NORMAL')$$,
+  'P0001', 'invalid canonical moves: ILLEGAL_MOVE',
+  'protocol-1 WHITE matching the same illegal canonical line is also rejected');
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000331', false);
+select throws_ok(
+  format(
+    $$select public.submit_match_result(
+      '10000000-0000-4000-8000-000000000331', %L, 'BLACK_WIN', %L, 'NORMAL')$$,
+    (select canonical_moves from release_fixture),
+    (select final_position_hash from release_fixture)
+  ),
+  'P0001', 'result does not match server replay',
+  'protocol-1 cannot replace the server-derived NORMAL winner');
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000332', false);
+select throws_ok(
+  format(
+    $$select public.submit_match_result(
+      '10000000-0000-4000-8000-000000000331', %L, 'WHITE_WIN',
+      '0000000000000000:1:0:64', 'NORMAL')$$,
+    (select canonical_moves from release_fixture)
+  ),
+  'P0001', 'final position hash does not match server replay',
+  'protocol-1 cannot replace the server-derived final hash');
+select is((select count(*)::integer from public.game_records
+  where match_id = '10000000-0000-4000-8000-000000000331'), 0,
+  'matching malicious protocol-1 attempts create no GameRecord');
+select is((select count(*)::integer from public.rating_history
+  where match_id = '10000000-0000-4000-8000-000000000331'), 0,
+  'matching malicious protocol-1 attempts create no rating history');
+
+select pg_temp.create_legacy_match(
+  '10000000-0000-4000-8000-000000000333',
+  '00000000-0000-4000-8000-000000000333',
+  '00000000-0000-4000-8000-000000000334');
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000333', false);
+select is((select public.submit_match_result(
+  '10000000-0000-4000-8000-000000000333', '', 'BLACK_WIN',
+  (select final_position_hash from public.release_replay_game_v2('')),
+  'RESIGNATION')::text), 'PENDING_RESULT',
+  'protocol-1 winner claim alone remains pending and unrated');
+select is((select count(*)::integer from public.rating_history
+  where match_id = '10000000-0000-4000-8000-000000000333'), 0,
+  'winner-only non-normal evidence cannot rate');
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000334', false);
+select is((select public.submit_match_result(
+  '10000000-0000-4000-8000-000000000333', '', 'BLACK_WIN',
+  (select final_position_hash from public.release_replay_game_v2('')),
+  'RESIGNATION')::text), 'CONFIRMED',
+  'the losing WHITE participant can self-confirm its adverse non-normal result');
+select ok((select result = 'BLACK_WIN' and final_position_hash =
+    (select final_position_hash from public.release_replay_game_v2(''))
+    and result_contract_version = 2
+  from public.game_records
+  where match_id = '10000000-0000-4000-8000-000000000333'),
+  'rated protocol-1 GameRecord stores the authoritative replay contract');
+select is((select count(*)::integer from public.rating_history
+  where match_id = '10000000-0000-4000-8000-000000000333'), 2,
+  'self-adverse protocol-1 evidence rates exactly once');
+
+select pg_temp.create_legacy_match(
+  '10000000-0000-4000-8000-000000000335',
+  '00000000-0000-4000-8000-000000000335',
+  '00000000-0000-4000-8000-000000000336');
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000335', false);
+select is((select public.submit_match_result(
+  '10000000-0000-4000-8000-000000000335',
+  (select canonical_moves from release_fixture), 'WHITE_WIN',
+  (select final_position_hash from release_fixture), 'NORMAL')::text),
+  'PENDING_RESULT', 'one authoritative protocol-1 NORMAL result remains pending');
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000336', false);
+select is((select public.submit_match_result(
+  '10000000-0000-4000-8000-000000000335',
+  (select canonical_moves from release_fixture), 'WHITE_WIN',
+  (select final_position_hash from release_fixture), 'NORMAL')::text),
+  'CONFIRMED', 'matching authoritative protocol-1 NORMAL evidence confirms');
+select is((select count(*)::integer from public.rating_history
+  where match_id = '10000000-0000-4000-8000-000000000335'), 2,
+  'legal terminal protocol-1 NORMAL evidence rates once');
+
+-- Protocol-1 direct INSERT signaling remains compatible but finite ------------
+
+select pg_temp.create_legacy_match(
+  '10000000-0000-4000-8000-000000000337',
+  '00000000-0000-4000-8000-000000000337',
+  '00000000-0000-4000-8000-000000000338', false);
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000337', false);
+select throws_ok(
+  $$insert into public.match_signaling(
+    match_id, sender_id, signal_type, sdp, protocol_version
+  ) values (
+    '10000000-0000-4000-8000-000000000337',
+    '00000000-0000-4000-8000-000000000337', 'ANSWER', 'wrong-role', 1)$$,
+  'P0001', 'legacy signal role does not match assigned disc',
+  'protocol-1 BLACK cannot publish ANSWER');
+insert into public.match_signaling(
+  match_id, sender_id, signal_type, sdp, protocol_version
+)
+select '10000000-0000-4000-8000-000000000337',
+       '00000000-0000-4000-8000-000000000337', 'OFFER',
+       'legacy-offer-' || i::text, 1
+  from generate_series(1, 4) i;
+select throws_ok(
+  $$insert into public.match_signaling(
+    match_id, sender_id, signal_type, sdp, protocol_version
+  ) values (
+    '10000000-0000-4000-8000-000000000337',
+    '00000000-0000-4000-8000-000000000337', 'OFFER', 'legacy-offer-5', 1)$$,
+  'P0001', 'legacy signaling sender limit exceeded',
+  'protocol-1 direct INSERT rejects signaling beyond the sender budget');
+select set_config('request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000338', false);
+insert into public.match_signaling(
+  match_id, sender_id, signal_type, sdp, protocol_version
+)
+select '10000000-0000-4000-8000-000000000337',
+       '00000000-0000-4000-8000-000000000338', 'ANSWER',
+       'legacy-answer-' || i::text, 1
+  from generate_series(1, 4) i;
+select is((select count(*)::integer from public.match_signaling
+  where match_id = '10000000-0000-4000-8000-000000000337'), 8,
+  'protocol-1 match signaling has a finite eight-row total budget');
+update public.matches set server_status = 'ABANDONED'
+ where id = '10000000-0000-4000-8000-000000000337';
+select throws_ok(
+  $$insert into public.match_signaling(
+    match_id, sender_id, signal_type, sdp, protocol_version
+  ) values (
+    '10000000-0000-4000-8000-000000000337',
+    '00000000-0000-4000-8000-000000000338', 'ANSWER', 'terminal-answer', 1)$$,
+  'P0001', 'legacy match does not accept signaling',
+  'protocol-1 terminal match rejects later direct signaling INSERT');
+select set_config('request.jwt.claim.role', 'service_role', false);
+select public.cleanup_stale_created_matches();
+select is((select count(*)::integer from public.match_signaling
+  where match_id = '10000000-0000-4000-8000-000000000337'), 0,
+  'existing protocol-1 maintenance removes disposable signaling rows');
+select set_config('request.jwt.claim.role', 'authenticated', false);
 
 -- Matchmaking response loss, queue cancellation, and pool isolation ---------
 

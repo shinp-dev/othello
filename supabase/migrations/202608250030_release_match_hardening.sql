@@ -253,6 +253,71 @@ create policy "participants write signaling"
     )
   );
 
+-- Protocol-1 APKs write directly to match_signaling, so the compatibility boundary
+-- must be enforced by a trigger rather than by replacing that INSERT with an RPC.
+-- A match-wide advisory lock makes both per-sender and whole-match counts exact even
+-- when retrying peers publish concurrently after a lost HTTP response.
+create function public.enforce_match_signaling_v1_budget()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  match_row public.matches%rowtype;
+  match_signal_count integer;
+  sender_signal_count integer;
+begin
+  if auth.uid() is null or auth.uid() is distinct from new.sender_id then
+    raise exception 'legacy signaling participant required';
+  end if;
+  if new.protocol_version is distinct from 1
+     or new.signal_type not in ('OFFER', 'ANSWER') then
+    raise exception 'invalid legacy signaling contract';
+  end if;
+
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('legacy-signal-match:' || new.match_id::text, 0)
+  );
+  select * into match_row
+    from public.matches m
+   where m.id = new.match_id
+   for share;
+  if not found or match_row.protocol_version <> 1
+     or new.sender_id not in (match_row.black_player, match_row.white_player) then
+    raise exception 'legacy signaling participant required';
+  end if;
+  if match_row.server_status <> 'CREATED'
+     or match_row.p2p_started_at is not null
+     or match_row.created_expires_at <= now() then
+    raise exception 'legacy match does not accept signaling';
+  end if;
+  if (new.signal_type = 'OFFER' and new.sender_id <> match_row.black_player)
+     or (new.signal_type = 'ANSWER' and new.sender_id <> match_row.white_player) then
+    raise exception 'legacy signal role does not match assigned disc';
+  end if;
+
+  select count(*)::integer into match_signal_count
+    from public.match_signaling s
+   where s.match_id = new.match_id;
+  select count(*)::integer into sender_signal_count
+    from public.match_signaling s
+   where s.match_id = new.match_id and s.sender_id = new.sender_id;
+  if sender_signal_count >= 4 then
+    raise exception 'legacy signaling sender limit exceeded';
+  end if;
+  if match_signal_count >= 8 then
+    raise exception 'legacy signaling match limit exceeded';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists enforce_match_signaling_v1_budget on public.match_signaling;
+create trigger enforce_match_signaling_v1_budget
+before insert on public.match_signaling
+for each row execute function public.enforce_match_signaling_v1_budget();
+
 -- A database invariant, rather than each individual RPC, owns the state graph.
 create function public.enforce_release_match_transition_v2()
 returns trigger
@@ -632,6 +697,256 @@ begin
          when white_value > black_value then 'WHITE_WIN'
          else 'DRAW' end,
     black_value, white_value, ply_value, player_value, pass_count, terminal_value;
+end;
+$$;
+
+-- Keep the protocol-1 RPC signature used by the closed-test APK, but route every
+-- result through the same deterministic rules replay used by protocol 2. Client
+-- result/hash fields are compatibility assertions, never result authority.
+create or replace function public.submit_match_result(
+  p_match_id uuid,
+  p_canonical_moves text,
+  p_result text,
+  p_final_position_hash text,
+  p_finish_reason text,
+  p_clock jsonb default null
+)
+returns public.server_match_status
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  caller_id uuid := auth.uid();
+  match_row public.matches%rowtype;
+  existing public.match_submissions%rowtype;
+  replay_row record;
+begin
+  if caller_id is null then raise exception 'authentication required'; end if;
+  if p_result is null or p_result not in ('BLACK_WIN', 'WHITE_WIN', 'DRAW') then
+    raise exception 'invalid result';
+  end if;
+  if p_finish_reason is null
+     or p_finish_reason not in ('NORMAL', 'RESIGNATION', 'TIMEOUT', 'DISCONNECT') then
+    raise exception 'invalid finish reason';
+  end if;
+  if p_clock is not null and pg_column_size(p_clock) > 4096 then
+    raise exception 'clock payload is too large';
+  end if;
+
+  -- Participant authorization intentionally precedes the bounded replay CPU work.
+  select * into match_row
+    from public.matches m
+   where m.id = p_match_id
+     and m.protocol_version = 1
+     and caller_id in (m.black_player, m.white_player)
+   for update;
+  if not found then raise exception 'match participant required'; end if;
+  if match_row.p2p_started_at is null then raise exception 'match P2P not started'; end if;
+
+  select * into existing
+    from public.match_submissions s
+   where s.match_id = p_match_id and s.player_id = caller_id;
+  if found and (
+       existing.canonical_moves is distinct from p_canonical_moves
+       or existing.result is distinct from p_result
+       or existing.final_position_hash is distinct from p_final_position_hash
+       or existing.finish_reason is distinct from p_finish_reason
+       or existing.clock is distinct from p_clock
+     ) then
+    raise exception 'submission conflict for player';
+  end if;
+  if match_row.server_status in ('CONFIRMED', 'DISPUTED', 'ABANDONED') then
+    return match_row.server_status;
+  end if;
+
+  select * into replay_row from public.release_replay_game_v2(p_canonical_moves);
+  if not replay_row.accepted then
+    raise exception 'invalid canonical moves: %', replay_row.rejection_code;
+  end if;
+  if p_final_position_hash is distinct from replay_row.final_position_hash then
+    raise exception 'final position hash does not match server replay';
+  end if;
+  if p_finish_reason = 'NORMAL' then
+    if not replay_row.terminal then raise exception 'NORMAL result is not terminal'; end if;
+    if p_result is distinct from replay_row.final_result then
+      raise exception 'result does not match server replay';
+    end if;
+  elsif p_result = 'DRAW' then
+    raise exception 'non-normal result requires a losing side';
+  end if;
+
+  if existing.match_id is null then
+    insert into public.match_submissions(
+      match_id, player_id, moves, canonical_moves, result,
+      final_position_hash, finish_reason, clock
+    ) values (
+      p_match_id, caller_id, to_jsonb(p_canonical_moves), p_canonical_moves, p_result,
+      replay_row.final_position_hash, p_finish_reason, p_clock
+    );
+  end if;
+  return public.finalize_match_v2(p_match_id);
+end;
+$$;
+
+create or replace function public.finalize_match_v2(p_match_id uuid)
+returns public.server_match_status
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  caller_id uuid := auth.uid();
+  match_row public.matches%rowtype;
+  black_submission public.match_submissions%rowtype;
+  white_submission public.match_submissions%rowtype;
+  replay_row record;
+  loser_id uuid;
+  record_inserted integer;
+  black_rating integer;
+  white_rating integer;
+  black_new_rating integer;
+  white_new_rating integer;
+  black_expected numeric;
+  white_expected numeric;
+  black_actual numeric;
+  white_actual numeric;
+begin
+  if caller_id is null then raise exception 'match access denied'; end if;
+  select * into match_row
+    from public.matches m
+   where m.id = p_match_id
+     and m.protocol_version = 1
+     and caller_id in (m.black_player, m.white_player)
+   for update;
+  if not found then raise exception 'match access denied'; end if;
+  if match_row.server_status in ('CONFIRMED', 'DISPUTED', 'ABANDONED') then
+    return match_row.server_status;
+  end if;
+
+  select * into black_submission from public.match_submissions s
+   where s.match_id = p_match_id and s.player_id = match_row.black_player;
+  select * into white_submission from public.match_submissions s
+   where s.match_id = p_match_id and s.player_id = match_row.white_player;
+  if black_submission.match_id is null or white_submission.match_id is null then
+    update public.matches
+       set server_status = 'PENDING_RESULT',
+           result_expires_at = coalesce(result_expires_at, now() + interval '30 days')
+     where id = p_match_id;
+    update public.active_match_participants as participant
+       set expires_at = (select result_expires_at from public.matches where id = p_match_id)
+     where participant.match_id = p_match_id;
+    return 'PENDING_RESULT';
+  end if;
+
+  if black_submission.canonical_moves is distinct from white_submission.canonical_moves
+     or black_submission.result is distinct from white_submission.result
+     or black_submission.final_position_hash is distinct from white_submission.final_position_hash
+     or black_submission.finish_reason is distinct from white_submission.finish_reason then
+    update public.matches set server_status = 'DISPUTED' where id = p_match_id;
+    return 'DISPUTED';
+  end if;
+
+  select * into replay_row
+    from public.release_replay_game_v2(black_submission.canonical_moves);
+  if not replay_row.accepted
+     or black_submission.final_position_hash is distinct from replay_row.final_position_hash
+     or (
+       black_submission.finish_reason = 'NORMAL'
+       and (
+         not replay_row.terminal
+         or black_submission.result is distinct from replay_row.final_result
+       )
+     )
+     or (
+       black_submission.finish_reason <> 'NORMAL'
+       and black_submission.result = 'DRAW'
+     ) then
+    update public.matches set server_status = 'DISPUTED' where id = p_match_id;
+    return 'DISPUTED';
+  end if;
+
+  if black_submission.finish_reason <> 'NORMAL' then
+    loser_id := case black_submission.result
+      when 'BLACK_WIN' then match_row.white_player
+      when 'WHITE_WIN' then match_row.black_player
+      else null
+    end;
+    -- The loser must personally submit the same evidence. The winner's claim alone
+    -- can never authorize a rated resignation, timeout, or disconnect result.
+    if loser_id is null or not exists (
+      select 1 from public.match_submissions s
+       where s.match_id = p_match_id
+         and s.player_id = loser_id
+         and s.canonical_moves is not distinct from black_submission.canonical_moves
+         and s.result is not distinct from black_submission.result
+         and s.final_position_hash is not distinct from replay_row.final_position_hash
+         and s.finish_reason is not distinct from black_submission.finish_reason
+    ) then
+      update public.matches set server_status = 'DISPUTED' where id = p_match_id;
+      return 'DISPUTED';
+    end if;
+  end if;
+
+  insert into public.game_records(
+    match_id, players, moves, canonical_moves, result, started_at, finished_at,
+    time_control, finish_reason, expires_at, final_position_hash, result_contract_version
+  ) values (
+    p_match_id, array[match_row.black_player, match_row.white_player],
+    to_jsonb(black_submission.canonical_moves), black_submission.canonical_moves,
+    black_submission.result, match_row.created_at, now(), '5m',
+    black_submission.finish_reason, now() + interval '365 days',
+    replay_row.final_position_hash, 2
+  ) on conflict (match_id) do nothing;
+  get diagnostics record_inserted = row_count;
+  if record_inserted = 1 then
+    perform 1 from public.ratings
+     where user_id in (match_row.black_player, match_row.white_player)
+     order by user_id for update;
+    select current_rating into black_rating from public.ratings
+     where user_id = match_row.black_player;
+    select current_rating into white_rating from public.ratings
+     where user_id = match_row.white_player;
+    if black_rating is null or white_rating is null then
+      raise exception 'rating bootstrap missing';
+    end if;
+    black_expected := 1.0 / (1.0 + power(10.0, (white_rating - black_rating) / 400.0));
+    white_expected := 1.0 - black_expected;
+    black_actual := case black_submission.result
+      when 'BLACK_WIN' then 1.0 when 'WHITE_WIN' then 0.0 else 0.5 end;
+    white_actual := 1.0 - black_actual;
+    black_new_rating := round(black_rating + 32 * (black_actual - black_expected));
+    white_new_rating := round(white_rating + 32 * (white_actual - white_expected));
+    insert into public.rating_history(user_id, match_id, rating, delta, algorithm_version)
+    values
+      (match_row.black_player, p_match_id, black_new_rating,
+        black_new_rating - black_rating, 'elo-v1'),
+      (match_row.white_player, p_match_id, white_new_rating,
+        white_new_rating - white_rating, 'elo-v1')
+    on conflict (user_id, match_id) where match_id is not null do nothing;
+    update public.ratings
+       set current_rating = black_new_rating,
+           peak_rating = greatest(peak_rating, black_new_rating), updated_at = now()
+     where user_id = match_row.black_player;
+    update public.ratings
+       set current_rating = white_new_rating,
+           peak_rating = greatest(peak_rating, white_new_rating), updated_at = now()
+     where user_id = match_row.white_player;
+    insert into public.user_game_records(user_id, match_id)
+    values (match_row.black_player, p_match_id), (match_row.white_player, p_match_id)
+    on conflict do nothing;
+    perform public.prune_user_game_records(match_row.black_player);
+    perform public.prune_user_game_records(match_row.white_player);
+    perform public.prune_rating_history(match_row.black_player);
+    perform public.prune_rating_history(match_row.white_player);
+    delete from public.match_submissions where match_id = p_match_id;
+  end if;
+  -- Research capture is triggered only after the authoritative GameRecord and both
+  -- rating rows exist, in this same transaction.
+  update public.matches
+     set server_status = 'CONFIRMED', confirmed_at = coalesce(confirmed_at, now())
+   where id = p_match_id;
+  return 'CONFIRMED';
 end;
 $$;
 
@@ -2145,6 +2460,14 @@ begin
    where protocol_version = 1 and server_status = 'CREATED'
      and p2p_started_at is null and created_expires_at <= now();
   get diagnostics changed_count = row_count;
+  delete from public.match_signaling s
+   using public.matches m
+   where m.id = s.match_id and m.protocol_version = 1
+     and (
+       m.server_status <> 'CREATED'
+       or m.p2p_started_at is not null
+       or m.created_expires_at <= now()
+     );
   return changed_count;
 end;
 $$;
@@ -2161,6 +2484,14 @@ begin
    where protocol_version = 1 and server_status = 'CREATED'
      and p2p_started_at is not null and play_lease_expires_at <= now();
   get diagnostics changed_count = row_count;
+  delete from public.match_signaling s
+   using public.matches m
+   where m.id = s.match_id and m.protocol_version = 1
+     and (
+       m.server_status <> 'CREATED'
+       or m.p2p_started_at is not null
+       or m.created_expires_at <= now()
+     );
   return changed_count;
 end;
 $$;
@@ -2177,6 +2508,14 @@ begin
    where protocol_version = 1 and server_status = 'PENDING_RESULT'
      and result_expires_at <= now();
   get diagnostics changed_count = row_count;
+  delete from public.match_signaling s
+   using public.matches m
+   where m.id = s.match_id and m.protocol_version = 1
+     and (
+       m.server_status <> 'CREATED'
+       or m.p2p_started_at is not null
+       or m.created_expires_at <= now()
+     );
   return changed_count;
 end;
 $$;
@@ -2211,6 +2550,8 @@ revoke all on sequence public.match_signals_v2_id_seq from public, anon, authent
 revoke all on function public.enforce_release_match_transition_v2()
   from public, anon, authenticated, service_role;
 revoke all on function public.cleanup_release_match_notifications_v2()
+  from public, anon, authenticated, service_role;
+revoke all on function public.enforce_match_signaling_v1_budget()
   from public, anon, authenticated, service_role;
 revoke all on function public.release_is_legal_move_v2(smallint[], integer, integer)
   from public, anon, authenticated, service_role;
@@ -2268,6 +2609,10 @@ grant execute on function public.run_match_maintenance_v2(integer) to service_ro
 grant execute on function public.get_match_start_state(uuid) to authenticated;
 
 -- Reassert the unchanged protocol-1 grants after replacing the compatibility bodies.
+revoke all on function public.submit_match_result(uuid, text, text, text, text, jsonb)
+  from public, anon;
+grant execute on function public.submit_match_result(uuid, text, text, text, text, jsonb)
+  to authenticated;
 grant execute on function public.enqueue_or_match() to authenticated;
 grant execute on function public.claim_waiting_match() to authenticated;
 grant execute on function public.cancel_waiting() to authenticated;

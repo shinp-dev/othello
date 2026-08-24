@@ -78,6 +78,7 @@ class OnlineMatchController(
     private val deliveryAckTimeoutMillis: Long = 750,
     private val synchronizationTimeoutMillis: Long = 3_000,
     private val reconnectGraceMillis: Long = 45_000,
+    private val disconnectDebounceMillis: Long = 1_500,
     private val disconnectReportRetryMillis: Long = 2_000,
     monotonicNowMillis: () -> Long = { System.nanoTime() / 1_000_000L },
     private val durableCheckpoint: (OnlineMatchViewState) -> Boolean = { true },
@@ -115,6 +116,7 @@ class OnlineMatchController(
     private var deliveryRetryJob: Job? = null
     private var synchronizationJob: Job? = null
     private var reconnectJob: Job? = null
+    private var disconnectDebounceJob: Job? = null
     private var disconnectReportRetryJob: Job? = null
     private var localAckRecorded = false
     private var activeSubmission: MatchSubmission? = initialPendingFinishReason?.let { reason ->
@@ -161,13 +163,21 @@ class OnlineMatchController(
         }
         stateSubscription = transport.observeState { next ->
             callbackScope.launch {
-                val previous = lastTransportState
                 lastTransportState = next
                 when (next) {
-                    TransportState.DISCONNECTED, TransportState.FAILED, TransportState.CLOSED -> handleTransportTermination()
-                    TransportState.OPEN -> if (started &&
-                        (previous == TransportState.DISCONNECTED || state.matchState.status == MatchStatus.RECONNECTING)
-                    ) handleTransportRecovered()
+                    TransportState.DISCONNECTED -> scheduleDisconnectDebounce()
+                    TransportState.FAILED, TransportState.CLOSED -> {
+                        disconnectDebounceJob?.cancel()
+                        disconnectDebounceJob = null
+                        handleTransportTermination()
+                    }
+                    TransportState.OPEN -> {
+                        disconnectDebounceJob?.cancel()
+                        disconnectDebounceJob = null
+                        if (started && state.matchState.status == MatchStatus.RECONNECTING) {
+                            handleTransportRecovered()
+                        }
+                    }
                     else -> Unit
                 }
             }
@@ -407,6 +417,17 @@ class OnlineMatchController(
                 message = "接続が切断されました",
                 error = abandonError,
             )
+        }
+    }
+
+    private fun scheduleDisconnectDebounce() {
+        if (disconnectDebounceJob?.isActive == true || closed) return
+        disconnectDebounceJob = callbackScope.launch {
+            if (disconnectDebounceMillis > 0) delay(disconnectDebounceMillis)
+            disconnectDebounceJob = null
+            if (!closed && lastTransportState == TransportState.DISCONNECTED) {
+                handleTransportTermination()
+            }
         }
     }
 
@@ -1228,6 +1249,7 @@ class OnlineMatchController(
         deliveryRetryJob?.cancel()
         synchronizationJob?.cancel()
         reconnectJob?.cancel()
+        disconnectDebounceJob?.cancel()
         disconnectReportRetryJob?.cancel()
         timeoutJob = null
         closeTransport()
