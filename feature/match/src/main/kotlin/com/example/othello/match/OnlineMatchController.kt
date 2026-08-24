@@ -623,6 +623,20 @@ class OnlineMatchController(
             applyServerResult(authoritativeState.toFinishResult())
             return true
         }
+        if (authoritativeState.serverStatus == "ACTIVE" && authoritativeState.localAcked &&
+            authoritativeState.bothAcked &&
+            authoritativeState.negotiationEpoch == reconnectProgress.completedEpoch &&
+            reconnectProgress.adoptedEpoch == null && !reconnectProgress.freshEpochRequired &&
+            state.matchState.status == MatchStatus.PLAYING && lastTransportState == TransportState.OPEN
+        ) {
+            // A delayed forced retry can arrive after this epoch already completed
+            // synchronization. Treat the authoritative row as an idempotent no-op;
+            // reopening the epoch would make the retry look like a fresh reconnect.
+            update {
+                copy(localStartAcked = true, bothStartAcked = true, error = null, message = "対局中")
+            }
+            return true
+        }
         if (authoritativeState.negotiationEpoch != reconnectProgress.adoptedEpoch) {
             update { copy(error = "新しい再接続epochを確認しました", message = "再接続状態を更新しています") }
             return false

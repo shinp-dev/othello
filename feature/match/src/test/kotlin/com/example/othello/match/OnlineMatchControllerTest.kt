@@ -875,6 +875,18 @@ class OnlineMatchControllerTest {
         assertEquals(MatchStatus.PLAYING, fixture.controller.viewState.matchState.status)
         assertEquals(0, fixture.repository.resumeCalls)
 
+        // The Coordinator's delayed force job can reconcile the same ACTIVE row
+        // after synchronization completed. It must be an idempotent no-op.
+        assertTrue(
+            fixture.controller.reconcileAuthoritativeStartState(
+                MatchStartAck("ACTIVE", localAcked = true, bothAcked = true, negotiationEpoch = 3),
+            ),
+        )
+        assertEquals(MatchStatus.PLAYING, fixture.controller.viewState.matchState.status)
+        assertNull(fixture.controller.viewState.error)
+        assertEquals(3, fixture.controller.reconnectEpochProgress.completedEpoch)
+        assertFalse(fixture.controller.reconnectEpochProgress.freshEpochRequired)
+
         // A later, genuinely new disconnect remains distinguishable and reaches
         // the server's epoch-3 budget decision instead of reusing the completed ACK.
         fixture.repository.serverStatuses.clear()
@@ -1213,6 +1225,8 @@ class OnlineMatchControllerTest {
         assertEquals(1, repository.submitCalls)
         assertEquals(epoch, controller.reconnectEpochProgress.authoritativeEpoch)
         assertNull(controller.reconnectEpochProgress.adoptedEpoch)
+        assertEquals(epoch, controller.reconnectEpochProgress.completedEpoch)
+        assertFalse(controller.reconnectEpochProgress.freshEpochRequired)
         assertEquals(MatchStatus.PLAYING, peer.viewState.matchState.status)
         return AckLossFixture(controller, peer, transport, repository)
     }

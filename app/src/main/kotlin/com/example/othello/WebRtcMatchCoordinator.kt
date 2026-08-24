@@ -10,6 +10,7 @@ import com.example.othello.match.OnlineMatchController
 import com.example.othello.match.OnlineMatchRepository
 import com.example.othello.match.MatchDiagnostics
 import com.example.othello.match.OnlineMatchViewState
+import com.example.othello.match.ReconnectEpochProgress
 import com.example.othello.matchmaking.MatchAssignment
 import com.example.othello.transport.webrtc.AndroidWebRtcTransport
 import com.example.othello.transport.webrtc.AndroidWebRtcTransportFactory
@@ -39,6 +40,7 @@ internal fun planReleaseRenegotiation(
     transportState: TransportState,
     freshReconnectEpochRequired: Boolean,
     adoptedReconnectEpoch: Int?,
+    completedReconnectEpoch: Int?,
     currentEpoch: Int,
     serverStatus: String,
     serverEpoch: Int,
@@ -56,10 +58,13 @@ internal fun planReleaseRenegotiation(
         ReleaseRenegotiationAction.START_NEW_EPOCH
     // ACTIVE is authoritative proof that both ACKs committed for its current epoch.
     // The explicit ACK columns make that invariant visible to the client and prevent
-    // an ambiguous/lost ACK HTTP response from consuming the following epoch.
-    serverStatus == "ACTIVE" && transportState == TransportState.OPEN &&
+    // an ambiguous/lost ACK HTTP response or a delayed forced retry from consuming
+    // the following epoch. A genuinely fresh disconnect is handled above first.
+    serverStatus == "ACTIVE" && !freshReconnectEpochRequired &&
+        transportState == TransportState.OPEN &&
         serverLocalAcked && serverBothAcked &&
-        (serverEpoch > currentEpoch || adoptedReconnectEpoch == serverEpoch) ->
+        (serverEpoch > currentEpoch || adoptedReconnectEpoch == serverEpoch ||
+            completedReconnectEpoch == serverEpoch) ->
         ReleaseRenegotiationAction.SYNCHRONIZE_CURRENT_EPOCH
     serverStatus == "ACTIVE" && serverEpoch < currentEpoch ->
         ReleaseRenegotiationAction.RECONCILE_TERMINAL
@@ -68,6 +73,25 @@ internal fun planReleaseRenegotiation(
     serverStatus == "ACTIVE" -> ReleaseRenegotiationAction.START_NEW_EPOCH
     else -> ReleaseRenegotiationAction.RECONCILE_TERMINAL
 }
+
+internal fun shouldAdoptReconnectEpochFromSignal(
+    negotiationEpoch: Int,
+    progress: ReconnectEpochProgress,
+): Boolean = negotiationEpoch > 0 &&
+    progress.adoptedEpoch != negotiationEpoch &&
+    progress.completedEpoch != negotiationEpoch
+
+internal fun shouldRequestReconnectEpoch(
+    action: ReleaseRenegotiationAction,
+    serverStatus: String,
+): Boolean = action == ReleaseRenegotiationAction.START_NEW_EPOCH ||
+    (action == ReleaseRenegotiationAction.SIGNAL_CURRENT_EPOCH && serverStatus == "RECONNECTING")
+
+internal suspend fun requestReconnectEpochIfRequired(
+    action: ReleaseRenegotiationAction,
+    serverStatus: String,
+    request: suspend () -> MatchStartAck,
+): MatchStartAck? = if (shouldRequestReconnectEpoch(action, serverStatus)) request() else null
 
 /** Owns the P2P session outside Compose so Activity recreation does not create a second peer. */
 class WebRtcMatchCoordinator(
@@ -416,6 +440,7 @@ class WebRtcMatchCoordinator(
                             transportState = transport.diagnostics().state,
                             freshReconnectEpochRequired = progress.freshEpochRequired,
                             adoptedReconnectEpoch = progress.adoptedEpoch,
+                            completedReconnectEpoch = progress.completedEpoch,
                             currentEpoch = currentNegotiationEpoch,
                             serverStatus = observedState.serverStatus,
                             serverEpoch = observedState.negotiationEpoch,
@@ -442,13 +467,16 @@ class WebRtcMatchCoordinator(
                             ReleaseRenegotiationAction.SIGNAL_CURRENT_EPOCH,
                             -> Unit
                         }
-                        if (action == ReleaseRenegotiationAction.START_NEW_EPOCH ||
-                            observedState.serverStatus == "RECONNECTING"
+                        val resumedState = requestReconnectEpochIfRequired(
+                            action,
+                            observedState.serverStatus,
                         ) {
-                            val resumedState = requestReconnectEpoch(
+                            requestReconnectEpoch(
                                 expectedEpoch = observedState.negotiationEpoch,
                                 acceptCompletedEpochWhenTransportOpen = true,
                             )
+                        }
+                        if (resumedState != null) {
                             currentNegotiationEpoch = resumedState.negotiationEpoch
                             if (resumedState.serverStatus !in setOf("ACTIVE", "RECONNECTING")) {
                                 controller.reconcileServerState()
@@ -549,9 +577,7 @@ class WebRtcMatchCoordinator(
             ) {
                 return@withLock
             }
-            if (currentNegotiationEpoch > 0 && progress.adoptedEpoch != currentNegotiationEpoch &&
-                progress.completedEpoch != currentNegotiationEpoch
-            ) {
+            if (shouldAdoptReconnectEpochFromSignal(currentNegotiationEpoch, progress)) {
                 // A peer can legitimately be the only side that observed DISCONNECTED.
                 // Receiving current-epoch signaling adopts that server-authoritative
                 // negotiation without manufacturing a local disconnect claim.
