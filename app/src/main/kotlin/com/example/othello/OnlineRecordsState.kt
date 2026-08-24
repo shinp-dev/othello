@@ -33,6 +33,6 @@ internal suspend fun loadOnlineRecords(
     OnlineRecordsState.Error(OnlineRecordsErrorKind.TIMEOUT)
 } catch (cancellation: CancellationException) {
     throw cancellation
-} catch (_: Throwable) {
+} catch (_: Exception) {
     OnlineRecordsState.Error(OnlineRecordsErrorKind.FETCH)
 }
