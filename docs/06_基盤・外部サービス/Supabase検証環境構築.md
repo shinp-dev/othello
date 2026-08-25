@@ -38,17 +38,23 @@ supabase db push
 
 DashboardのSQL Editorを使う場合も、`202608090001_init.sql`から`202608250030_release_match_hardening.sql`までを、028を除いて順番に適用します。途中失敗時の部分適用を避けるため、まとめて実行する場合は`begin;` / `commit;`で囲みます。027は未確認登録7日・確認済み休眠365日の削除キューと、認証済みユーザーの1日1回の最終利用時刻更新を追加します。
 
-`scripts/verify-hosted-supabase.sql`はProtocol 1共存境界の検査用で、`match_notifications`と`match_signaling`の2テーブルだけをRealtime対象として数え、旧`ack_match_started`も検査します。030適用後の`match_signals_v2`、Protocol 2のRPC、`release_status`を完全には検査しないため、030適用後の総合検証として扱ってはいけません。現行の完全な自動検証はローカルSupabaseで`supabase test db`を実行し、ホスト型環境では030のProtocol 2オブジェクト、RLS、Realtime publication、RPC権限を[リリースハードニング設計](../07_リリース・移行/リリースハードニング設計.md#マイグレーションと協調切替え)に従って別途確認します。
+`scripts/verify-hosted-supabase.sql`は、030適用後のホスト型環境がオンライン対局Protocol 2の主要契約を備えているか確認する検証スクリプトです。全マイグレーション適用後にSQL Editorで実行し、出力された`hosted_contract`の全項目が`true`であることを確認します。`protocol1_compatibility`は移行期間中の旧オブジェクトを観測する参考情報であり、Protocol 2の成功条件ではありません。
 
-Protocol 1共存境界だけを検査する場合は、`scripts/verify-hosted-supabase.sql`をSQL Editorで実行し、`realtime_tables`は`2`、ほかはすべて`true`であることを確認します。この検査で確認できるのは次の範囲です。
+この検証で確認する範囲は次のとおりです。
 
-- 対局ライフサイクル / 結果 / 開始 ACK RPC
-- Protocol 1のRealtime対象である`match_notifications`と`match_signaling`
+- `release_status`、`negotiation_epoch`、lease、再接続、結果管理に必要なカラムと制約
+- `match_start_acks_v2`、`match_result_claims_v2`、`match_results_v2`、`match_signals_v2`
+- Androidが使用するProtocol 2 RPCの正確なシグネチャと`authenticated` / `anon`の実行権限
+- 管理用RPCと正式結果確定ヘルパーをクライアントから呼び出せない権限境界
+- Protocol 2関連テーブルのRLS、直接書き込み禁止、参加者に限定した結果／signaling読み取り境界
+- Realtime対象である`match_notifications`と`match_signals_v2`
 - 初回公開版では公開プロフィール、表示名、連盟段級位、証明画像Storageを作らない最終マイグレーション
 - Androidクライアントに必要な最小データ API権限
 - アカウント削除のサービスロール（service_role）専用準備/完了RPCと匿名プロフィール tombstone
 - Researchの非公開スキーマ、同意／参加RPC、圧縮ソース、サービス限定の検証器RPC
 - 有効なResearchポリシーの`collection_enabled = false`（019適用だけでは収集開始しない）
+
+このスクリプトは、ホスト型環境へのマイグレーション反映、オブジェクト存在、シグネチャ、権限、RLS、Realtime publicationを確認するものです。トランザクション、競合、認可動作、状態遷移、冪等性などの振る舞いは検証しないため、ローカルのpgTAPを置き換えません。完全な動作検証にはローカルSupabaseで`supabase test db`を実行し、[リリースハードニング設計](../07_リリース・移行/リリースハードニング設計.md#マイグレーションと協調切替え)に従って確認します。
 
 ## Auth
 
