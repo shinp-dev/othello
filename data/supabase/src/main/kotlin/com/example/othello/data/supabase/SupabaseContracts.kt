@@ -50,6 +50,7 @@ import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.realtime.*
 import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.SupabaseClientBuilder
 import io.ktor.client.plugins.observer.ResponseObserver
 import io.ktor.http.encodedPath
 import kotlinx.coroutines.CoroutineScope
@@ -206,11 +207,28 @@ internal object SupabaseClientFactory {
                     }
                 }
             }
-            install(Auth)
-            install(Postgrest)
-            install(Realtime)
+            installApplicationSupabasePlugins()
         }
     }
+}
+
+/**
+ * Installs the single application Auth/PostgREST/Realtime stack.
+ *
+ * All PostgREST access in this application is authenticated. Requiring a valid
+ * session prevents the SDK from falling back to the publishable key while Auth
+ * is temporarily initializing during process lifecycle restore or recovering
+ * from a token refresh failure.
+ */
+@OptIn(SupabaseExperimental::class)
+internal fun SupabaseClientBuilder.installApplicationSupabasePlugins(
+    configureAuth: io.github.jan.supabase.auth.AuthConfig.() -> Unit = {},
+) {
+    install(Auth, configureAuth)
+    install(Postgrest) {
+        requireValidSession = true
+    }
+    install(Realtime)
 }
 
 @Serializable

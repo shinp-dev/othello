@@ -1,6 +1,7 @@
 package com.example.othello.transport.webrtc
 
 import android.content.Context
+import android.util.Log
 import com.example.othello.network.MatchTransport
 import com.example.othello.network.FinishCommand
 import com.example.othello.network.FinishCommandJson
@@ -14,12 +15,15 @@ import com.example.othello.network.TransportState
 import com.example.othello.network.TransportDiagnostics
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import org.webrtc.DataChannel
 import org.webrtc.IceCandidate
 import org.webrtc.MediaConstraints
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
+import org.webrtc.RTCStatsReport
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 import java.nio.ByteBuffer
@@ -33,6 +37,103 @@ import kotlin.coroutines.resumeWithException
 data class IceServerConfig(val urls: List<String>, val username: String? = null, val credential: String? = null)
 
 data class SessionDescriptionPayload(val type: String, val sdp: String)
+
+internal sealed interface NonTrickleIceReadiness {
+    data object WaitingForCandidate : NonTrickleIceReadiness
+    data class WaitingForSdpReflection(val expected: Int, val reflected: Int) : NonTrickleIceReadiness
+    data class Ready(val candidateCount: Int) : NonTrickleIceReadiness
+}
+
+internal class NoIceCandidatesException(message: String) : IllegalStateException(message)
+
+/** Tracks the callback side of one non-trickle ICE gathering generation. */
+internal class NonTrickleIceGatheringGate(
+    private val expectedServerUrls: Set<String> = emptySet(),
+    initialGeneration: Int = 0,
+) {
+    private var generation = initialGeneration
+    private var gatheringStarted = false
+    private var gatheringComplete = false
+    private var candidateCallbacks = 0
+    private val completedServerUrls = mutableSetOf<String>()
+
+    @Synchronized
+    fun reset(newGeneration: Int) {
+        generation = newGeneration
+        gatheringStarted = false
+        gatheringComplete = false
+        candidateCallbacks = 0
+        completedServerUrls.clear()
+    }
+
+    @Synchronized
+    fun onGatheringStarted(callbackGeneration: Int) {
+        if (callbackGeneration == generation) gatheringStarted = true
+    }
+
+    @Synchronized
+    fun onGatheringComplete(callbackGeneration: Int): Boolean {
+        if (callbackGeneration != generation || !gatheringStarted) return false
+        gatheringComplete = true
+        return true
+    }
+
+    @Synchronized
+    fun onCandidate(callbackGeneration: Int, serverUrl: String = ""): Int {
+        if (callbackGeneration != generation) return candidateCallbacks
+        candidateCallbacks += 1
+        serverUrl.normalizedIceServerUrl().takeIf(String::isNotEmpty)?.let(completedServerUrls::add)
+        return candidateCallbacks
+    }
+
+    @Synchronized
+    fun onCandidateError(callbackGeneration: Int, serverUrl: String) {
+        if (callbackGeneration == generation) {
+            serverUrl.normalizedIceServerUrl().takeIf(String::isNotEmpty)?.let(completedServerUrls::add)
+        }
+    }
+
+    @Synchronized
+    fun callbackCount(callbackGeneration: Int): Int =
+        if (callbackGeneration == generation) candidateCallbacks else 0
+
+    @Synchronized
+    fun externalGatheringSettled(callbackGeneration: Int): Boolean =
+        callbackGeneration == generation && expectedServerUrls.all(completedServerUrls::contains)
+
+    @Synchronized
+    fun readiness(
+        callbackGeneration: Int,
+        sdpCandidateCount: Int,
+    ): NonTrickleIceReadiness {
+        if (callbackGeneration != generation || !gatheringComplete || candidateCallbacks == 0) {
+            return NonTrickleIceReadiness.WaitingForCandidate
+        }
+        if (sdpCandidateCount < candidateCallbacks) {
+            return NonTrickleIceReadiness.WaitingForSdpReflection(candidateCallbacks, sdpCandidateCount)
+        }
+        return NonTrickleIceReadiness.Ready(candidateCallbacks)
+    }
+
+    @Synchronized
+    fun timeoutFailure(callbackGeneration: Int): IllegalStateException =
+        if (callbackGeneration == generation && candidateCallbacks == 0) {
+            NoIceCandidatesException("ICE gathering completed without a usable local candidate")
+        } else {
+            IllegalStateException("ICE candidate callbacks were not fully reflected in the local SDP")
+        }
+}
+
+private fun String.normalizedIceServerUrl(): String = trim().lowercase()
+
+internal fun countSdpCandidates(sdp: String): Int = sdp.lineSequence()
+    .count { it.trimStart().startsWith("a=candidate:") }
+
+private data class IceCandidateProgress(
+    val generation: Int,
+    val count: Int,
+    val externalGatheringSettled: Boolean,
+)
 
 interface WebRtcTransportFactory {
     fun create(matchId: String, iceServers: List<IceServerConfig>): MatchTransport
@@ -53,6 +154,10 @@ class AndroidWebRtcTransport(
     private val matchId: String,
     iceServers: List<IceServerConfig> = DefaultIceServers.publicStun,
 ) : MatchTransport {
+    private val expectedIceServerUrls = iceServers.flatMap(IceServerConfig::urls)
+        .map(String::normalizedIceServerUrl)
+        .filter(String::isNotEmpty)
+        .toSet()
     private val stateListeners = CopyOnWriteArraySet<(TransportState) -> Unit>()
     private val commandListeners = CopyOnWriteArraySet<(MoveCommand) -> Unit>()
     private val finishListeners = CopyOnWriteArraySet<(FinishCommand) -> Unit>()
@@ -67,8 +172,10 @@ class AndroidWebRtcTransport(
     private var dataChannelState = "NEW"
     @Volatile private var dataChannelOpen = kotlinx.coroutines.CompletableDeferred<Unit>()
     @Volatile private var iceGatheringComplete = kotlinx.coroutines.CompletableDeferred<Unit>()
+    @Volatile private var iceCandidateProgress = MutableStateFlow(IceCandidateProgress(0, 0, false))
     @Volatile private var negotiationGeneration = 0
     @Volatile private var iceGatheringStartedGeneration = -1
+    private val iceGatheringGate = NonTrickleIceGatheringGate(expectedIceServerUrls)
     private val closed = AtomicBoolean(false)
 
     init {
@@ -141,6 +248,7 @@ class AndroidWebRtcTransport(
         iceGatheringComplete.completeExceptionally(superseded)
         negotiationGeneration += 1
         iceGatheringStartedGeneration = -1
+        iceGatheringGate.reset(negotiationGeneration)
         dataChannel?.unregisterObserver()
         dataChannel?.close()
         dataChannel?.dispose()
@@ -148,6 +256,13 @@ class AndroidWebRtcTransport(
         dataChannelState = "NEW"
         dataChannelOpen = kotlinx.coroutines.CompletableDeferred()
         iceGatheringComplete = kotlinx.coroutines.CompletableDeferred()
+        iceCandidateProgress = MutableStateFlow(
+            IceCandidateProgress(
+                negotiationGeneration,
+                0,
+                iceGatheringGate.externalGatheringSettled(negotiationGeneration),
+            ),
+        )
         peerConnection.restartIce()
         updateState(TransportState.CONNECTING)
         if (offerer) provideOffererDataChannel()
@@ -230,10 +345,17 @@ class AndroidWebRtcTransport(
     }
 
     private suspend fun createLocalDescription(type: SessionDescription.Type): SessionDescriptionPayload {
+        trace("createLocalDescription start type=$type generation=$negotiationGeneration")
         val description = suspendCancellableCoroutine<SessionDescription> { continuation ->
             val observer = object : SdpObserver {
-                override fun onCreateSuccess(description: SessionDescription) { if (continuation.isActive) continuation.resume(description) }
-                override fun onCreateFailure(error: String) { if (continuation.isActive) continuation.resumeWithException(IllegalStateException(error)) }
+                override fun onCreateSuccess(description: SessionDescription) {
+                    trace("createLocalDescription create success type=$type generation=$negotiationGeneration")
+                    if (continuation.isActive) continuation.resume(description)
+                }
+                override fun onCreateFailure(error: String) {
+                    traceError("createLocalDescription create failure type=$type generation=$negotiationGeneration error=$error")
+                    if (continuation.isActive) continuation.resumeWithException(IllegalStateException(error))
+                }
                 override fun onSetSuccess() = Unit
                 override fun onSetFailure(error: String) = Unit
             }
@@ -242,20 +364,80 @@ class AndroidWebRtcTransport(
         }
         suspendCancellableCoroutine<Unit> { continuation ->
             peerConnection.setLocalDescription(object : SdpObserver {
-                override fun onSetSuccess() { if (continuation.isActive) continuation.resume(Unit) }
-                override fun onSetFailure(error: String) { if (continuation.isActive) continuation.resumeWithException(IllegalStateException(error)) }
+                override fun onSetSuccess() {
+                    trace("setLocalDescription success type=$type generation=$negotiationGeneration")
+                    if (continuation.isActive) continuation.resume(Unit)
+                }
+                override fun onSetFailure(error: String) {
+                    traceError("setLocalDescription failure type=$type generation=$negotiationGeneration error=$error")
+                    if (continuation.isActive) continuation.resumeWithException(IllegalStateException(error))
+                }
                 override fun onCreateSuccess(description: SessionDescription) = Unit
                 override fun onCreateFailure(error: String) = Unit
             }, description)
         }
-        if (!iceGatheringComplete.isCompleted) {
-            // Signaling is intentionally non-trickle. An unreachable STUN server
-            // must not prevent a usable host-candidate SDP from being published.
-            withTimeoutOrNull(ICE_GATHERING_TIMEOUT_MILLIS) { iceGatheringComplete.await() }
-        }
-        val gathered = peerConnection.localDescription ?: description
+        val generation = negotiationGeneration
+        val gathered = awaitNonTrickleLocalDescription(generation, description)
         return SessionDescriptionPayload(gathered.type.canonicalForm(), gathered.description)
     }
+
+    private suspend fun awaitNonTrickleLocalDescription(
+        generation: Int,
+        fallback: SessionDescription,
+    ): SessionDescription {
+        val externalGatheringSettled = try {
+            withTimeout(ICE_GATHERING_TIMEOUT_MILLIS) {
+            trace("await ICE COMPLETE generation=$generation")
+            iceGatheringComplete.await()
+            trace("ICE COMPLETE observed generation=$generation")
+            iceCandidateProgress.first { progress ->
+                progress.generation == generation && progress.count > 0
+            }
+            trace("candidate callback observed generation=$generation count=${iceGatheringGate.callbackCount(generation)}")
+                iceCandidateProgress.first { progress ->
+                    progress.generation == generation && progress.externalGatheringSettled
+                }
+                true
+            }
+        } catch (_: TimeoutCancellationException) {
+            false
+        }
+
+        val stats = awaitStatsBarrier()
+        val localDescription = peerConnection.localDescription ?: fallback
+        val statsCandidateCount = stats.localCandidateCount()
+        val sdpCandidateCount = countSdpCandidates(localDescription.description)
+        val readiness = iceGatheringGate.readiness(generation, sdpCandidateCount)
+        trace(
+            "ICE final readiness generation=$generation externalSettled=$externalGatheringSettled " +
+                "callbacks=${iceGatheringGate.callbackCount(generation)} stats=$statsCandidateCount " +
+                "sdp=$sdpCandidateCount readiness=${readiness::class.simpleName}",
+        )
+        return when (readiness) {
+            is NonTrickleIceReadiness.Ready -> localDescription
+            is NonTrickleIceReadiness.WaitingForSdpReflection -> throw IllegalStateException(
+                "ICE candidate callbacks were not reflected in the local SDP " +
+                    "(expected=${readiness.expected}, reflected=${readiness.reflected})",
+            )
+            NonTrickleIceReadiness.WaitingForCandidate -> {
+                val failure = iceGatheringGate.timeoutFailure(generation)
+                traceError(
+                    "ICE gathering timeout generation=$generation callbacks=${iceGatheringGate.callbackCount(generation)} " +
+                        "failure=${failure::class.simpleName}: ${failure.message}",
+                )
+                throw failure
+            }
+        }
+    }
+
+    private suspend fun awaitStatsBarrier(): RTCStatsReport =
+        suspendCancellableCoroutine { continuation ->
+            peerConnection.getStats { report ->
+                if (continuation.isActive) continuation.resume(report)
+            }
+        }
+
+    private fun RTCStatsReport.localCandidateCount(): Int = statsMap.values.count { it.type == "local-candidate" }
 
     private fun attach(channel: DataChannel, generation: Int) {
         if (closed.get()) {
@@ -321,18 +503,49 @@ class AndroidWebRtcTransport(
     }
 
     private inner class Observer : PeerConnection.Observer {
-        override fun onIceCandidate(candidate: IceCandidate) = Unit
+        override fun onIceCandidate(candidate: IceCandidate) {
+            if (closed.get()) return
+            val generation = negotiationGeneration
+            val count = iceGatheringGate.onCandidate(generation, candidate.serverUrl)
+            iceCandidateProgress.value = IceCandidateProgress(
+                generation,
+                count,
+                iceGatheringGate.externalGatheringSettled(generation),
+            )
+            trace(
+                "onIceCandidate generation=$generation count=$count " +
+                    "type=${candidate.sdp.candidateType()} external=${candidate.serverUrl.isNotBlank()}",
+            )
+        }
+        override fun onIceCandidateError(event: org.webrtc.IceCandidateErrorEvent) {
+            if (closed.get()) return
+            val generation = negotiationGeneration
+            iceGatheringGate.onCandidateError(generation, event.url)
+            iceCandidateProgress.value = IceCandidateProgress(
+                generation,
+                iceGatheringGate.callbackCount(generation),
+                iceGatheringGate.externalGatheringSettled(generation),
+            )
+            traceError(
+                "onIceCandidateError generation=$generation code=${event.errorCode} " +
+                    "server=${event.url.isNotBlank()}",
+            )
+        }
         override fun onIceCandidatesRemoved(candidates: Array<IceCandidate>) = Unit
         override fun onIceGatheringChange(newState: PeerConnection.IceGatheringState) {
             if (closed.get()) return
+            trace("onIceGatheringChange generation=$negotiationGeneration state=$newState")
             when (newState) {
                 PeerConnection.IceGatheringState.GATHERING -> {
                     iceGatheringStartedGeneration = negotiationGeneration
+                    iceGatheringGate.onGatheringStarted(negotiationGeneration)
                 }
                 PeerConnection.IceGatheringState.COMPLETE -> {
                     // A COMPLETE callback queued by the previous generation must not
                     // release the new offer before its own gathering cycle started.
-                    if (iceGatheringStartedGeneration == negotiationGeneration) {
+                    if (iceGatheringStartedGeneration == negotiationGeneration &&
+                        iceGatheringGate.onGatheringComplete(negotiationGeneration)
+                    ) {
                         iceGatheringComplete.complete(Unit)
                     }
                 }
@@ -387,11 +600,23 @@ class AndroidWebRtcTransport(
 
 
     private companion object {
+        const val TRACE_TAG = "Chanriva-WebRTC"
         const val MAX_PAYLOAD_BYTES = 32 * 1024
         const val DATA_CHANNEL_OPEN_TIMEOUT_MILLIS = 10_000L
         const val ICE_GATHERING_TIMEOUT_MILLIS = 10_000L
         val factoryInitialized = AtomicBoolean(false)
     }
+
+    private fun trace(message: String) {
+        if (BuildConfig.DEBUG) Log.d(TRACE_TAG, message)
+    }
+
+    private fun traceError(message: String) {
+        if (BuildConfig.DEBUG) Log.e(TRACE_TAG, message)
+    }
 }
+
+private fun String.candidateType(): String =
+    split(Regex("\\s+")).zipWithNext().firstOrNull { it.first == "typ" }?.second ?: "unknown"
 
 interface SignalingSubscription : AutoCloseable

@@ -1,6 +1,7 @@
 package com.example.othello
 
 import android.content.Context
+import android.util.Log
 import com.example.othello.data.supabase.SignalingEnvelope
 import com.example.othello.data.supabase.SupabaseSignalingDataSource
 import com.example.othello.game.CanonicalMoves
@@ -298,6 +299,15 @@ class WebRtcMatchCoordinator(
             } catch (error: kotlinx.coroutines.CancellationException) {
                 throw error
             } catch (error: Exception) {
+                if (BuildConfig.DEBUG) {
+                    Log.e(
+                        "Chanriva-WebRTC",
+                        "initial negotiation failed matchId=${assignment.matchId} " +
+                            "disc=${assignment.assignedDisc} epoch=$currentNegotiationEpoch " +
+                            "error=${error::class.simpleName}: ${error.message}",
+                        error,
+                    )
+                }
                 if (!closed) controller.reportConnectionError(error.message ?: "connection negotiation failed")
             }
         }
