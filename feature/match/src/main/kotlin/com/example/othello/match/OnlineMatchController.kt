@@ -340,6 +340,19 @@ class OnlineMatchController(
                 if (attempt + 1 < ackAttempts) delay(startConfirmationDelayMillis)
             }
             if (!localAckRecorded) {
+                startState = try {
+                    repository.getMatchStartState(matchId)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    failure = error
+                    null
+                }
+                startState?.let(::recordAuthoritativeStartState)
+                localAckRecorded = startState?.localAcked == true &&
+                    startState?.negotiationEpoch == negotiationEpoch
+            }
+            if (!localAckRecorded) {
                 update {
                     copy(
                         matchState = MatchState(MatchStatus.P2P_CONNECTED, failure?.message),

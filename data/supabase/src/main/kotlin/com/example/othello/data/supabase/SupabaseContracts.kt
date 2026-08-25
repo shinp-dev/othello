@@ -1,5 +1,6 @@
 package com.example.othello.data.supabase
 
+import android.util.Log
 import com.example.othello.auth.AuthGateway
 import com.example.othello.auth.AuthSessionStatus
 import com.example.othello.auth.SignUpResult
@@ -35,6 +36,7 @@ import com.example.othello.game.CanonicalMoves
 import com.example.othello.game.Disc
 import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.annotations.SupabaseExperimental
+import io.github.jan.supabase.annotations.SupabaseInternal
 import io.github.jan.supabase.auth.*
 import io.github.jan.supabase.auth.status.RefreshFailureCause
 import io.github.jan.supabase.auth.status.SessionStatus as SupabaseSessionStatus
@@ -48,6 +50,8 @@ import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.realtime.*
 import io.github.jan.supabase.SupabaseClient
+import io.ktor.client.plugins.observer.ResponseObserver
+import io.ktor.http.encodedPath
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
@@ -71,25 +75,99 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import java.time.Clock
 import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
 private const val EMAIL_CONFIRMATION_REDIRECT_URL = "https://chanriva.shinp-studio.com/signup-complete"
 private const val PASSWORD_RESET_REDIRECT_URL = "https://chanriva.shinp-studio.com/reset-password"
 internal const val RELEASE_NETWORK_TIMEOUT_MILLIS = 10_000L
+private const val RELEASE_MATCH_TRACE_TAG = "ReleaseMatchTrace"
+
+internal data class ReleaseNetworkTraceContext(
+    val rpcName: String,
+    val matchId: String,
+    val expectedEpoch: Int?,
+)
+
+private val releaseTraceJson = Json { ignoreUnknownKeys = true }
+private val releaseTraceUuid = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}")
+private val releaseTraceEmail = Regex("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}")
+private val releaseTraceJwt = Regex("eyJ[A-Za-z0-9_-]+\\.eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+")
+private val releaseTraceBodyFields = listOf(
+    "lifecycle_status",
+    "negotiation_epoch",
+    "local_acked",
+    "both_acked",
+    "release_deadline",
+    "reconnect_deadline",
+)
+
+private fun ReleaseNetworkTraceContext.prefix(stage: String): String =
+    "stage=$stage rpc=$rpcName matchId=$matchId expectedEpoch=${expectedEpoch ?: "none"}"
+
+private fun safeReleaseTraceMessage(message: String?): String = message
+    ?.replace(releaseTraceJwt, "<redacted-jwt>")
+    ?.replace(releaseTraceEmail, "<redacted-email>")
+    ?.replace(releaseTraceUuid, "<redacted-uuid>")
+    ?.take(500)
+    ?: "<no-message>"
+
+private fun traceRelease(context: ReleaseNetworkTraceContext, stage: String, detail: String = "") {
+    if (!BuildConfig.DEBUG) return
+    Log.d(RELEASE_MATCH_TRACE_TAG, "${context.prefix(stage)}${if (detail.isEmpty()) "" else " $detail"}")
+}
+
+private fun traceReleaseFailure(context: ReleaseNetworkTraceContext, stage: String, error: Throwable) {
+    if (!BuildConfig.DEBUG) return
+    Log.e(
+        RELEASE_MATCH_TRACE_TAG,
+        "${context.prefix(stage)} exceptionClass=${error.javaClass.name} " +
+            "message=${safeReleaseTraceMessage(error.message)}",
+    )
+}
+
+private fun safeReleaseBodySummary(body: String): String = runCatching {
+    releaseTraceJson.parseToJsonElement(body).jsonArray.joinToString(prefix = "[", postfix = "]") { element ->
+        val row = element.jsonObject
+        releaseTraceBodyFields.joinToString(prefix = "{", postfix = "}") { field ->
+            "$field=${row[field] ?: "<missing>"}"
+        }
+    }
+}.getOrElse { error ->
+    "<summary-unavailable exceptionClass=${error.javaClass.name} " +
+        "message=${safeReleaseTraceMessage(error.message)}>"
+}
+
+internal fun parsePostgrestTimestamp(value: String): Instant =
+    OffsetDateTime.parse(value, DateTimeFormatter.ISO_OFFSET_DATE_TIME).toInstant()
 
 internal class ReleaseNetworkTimeoutException(cause: Throwable) :
     IllegalStateException("Release match network operation timed out", cause)
 
 internal suspend fun <T> boundedReleaseNetwork(
     timeoutMillis: Long = RELEASE_NETWORK_TIMEOUT_MILLIS,
+    traceContext: ReleaseNetworkTraceContext? = null,
     block: suspend () -> T,
 ): T = try {
+    traceContext?.let { traceRelease(it, "bounded_network_enter", "timeoutMillis=$timeoutMillis") }
     withTimeout(timeoutMillis) { block() }
+        .also { traceContext?.let { context -> traceRelease(context, "bounded_network_success") } }
 } catch (error: TimeoutCancellationException) {
-    throw ReleaseNetworkTimeoutException(error)
+    val wrapped = ReleaseNetworkTimeoutException(error)
+    traceContext?.let { traceReleaseFailure(it, "bounded_network_timeout_wrapped", wrapped) }
+    throw wrapped
+} catch (error: CancellationException) {
+    traceContext?.let { traceReleaseFailure(it, "bounded_network_cancelled", error) }
+    throw error
+} catch (error: Exception) {
+    traceContext?.let { traceReleaseFailure(it, "bounded_network_exception", error) }
+    throw error
 }
 
 data class SupabaseConfig(val url: String, val anonKey: String) {
@@ -100,12 +178,34 @@ data class SupabaseConfig(val url: String, val anonKey: String) {
 
 class SupabaseConfigurationException(message: String) : IllegalStateException(message)
 
+@OptIn(SupabaseInternal::class)
 internal object SupabaseClientFactory {
     fun config(): SupabaseConfig = SupabaseConfig(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY)
 
     internal fun create(config: SupabaseConfig = config()): Result<SupabaseClient> = runCatching {
         config.validate().getOrThrow()
         createSupabaseClient(config.url, config.anonKey) {
+            if (BuildConfig.DEBUG) {
+                httpConfig {
+                    install(ResponseObserver) {
+                        onResponse { response ->
+                            val path = response.call.request.url.encodedPath
+                            val rpcName = path.substringAfterLast('/')
+                            if (rpcName in setOf(
+                                    "ack_match_started_v2",
+                                    "get_release_match_state_v2",
+                                    "resume_match_v2",
+                                )
+                            ) {
+                                Log.d(
+                                    RELEASE_MATCH_TRACE_TAG,
+                                    "stage=http_response rpc=$rpcName status=${response.status.value}",
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             install(Auth)
             install(Postgrest)
             install(Realtime)
@@ -272,16 +372,55 @@ private data class ReleaseMatchStateRow(
     @SerialName("final_position_hash") val finalPositionHash: String? = null,
 ) {
     private fun deadlineEpochMillis(): Long? = (reconnectDeadline ?: releaseDeadline)
-        ?.let(Instant::parse)
+        ?.let(::parsePostgrestTimestamp)
         ?.toEpochMilli()
 
-    fun toStartAck() = MatchStartAck(
-        serverStatus = lifecycleStatus,
-        localAcked = localAcked,
-        bothAcked = bothAcked,
-        deadlineEpochMillis = deadlineEpochMillis(),
-        negotiationEpoch = negotiationEpoch,
-    )
+    private fun deadlineEpochMillis(context: ReleaseNetworkTraceContext): Long? {
+        val deadline = reconnectDeadline ?: releaseDeadline
+        traceRelease(context, "deadline_parse_start", "value=${deadline ?: "null"}")
+        if (deadline == null) {
+            traceRelease(context, "deadline_parse_success", "epochMillis=null")
+            return null
+        }
+        return try {
+            parsePostgrestTimestamp(deadline).toEpochMilli().also { epochMillis ->
+                traceRelease(context, "deadline_parse_success", "epochMillis=$epochMillis")
+            }
+        } catch (error: Exception) {
+            traceReleaseFailure(context, "deadline_parse_failure", error)
+            throw error
+        }
+    }
+
+    fun toStartAck(context: ReleaseNetworkTraceContext): MatchStartAck {
+        traceRelease(
+            context,
+            "to_start_ack_start",
+            "lifecycleStatus=$lifecycleStatus negotiationEpoch=$negotiationEpoch " +
+                "localAcked=$localAcked bothAcked=$bothAcked releaseDeadline=${releaseDeadline ?: "null"} " +
+                "reconnectDeadline=${reconnectDeadline ?: "null"}",
+        )
+        return try {
+            MatchStartAck(
+                serverStatus = lifecycleStatus,
+                localAcked = localAcked,
+                bothAcked = bothAcked,
+                deadlineEpochMillis = deadlineEpochMillis(context),
+                negotiationEpoch = negotiationEpoch,
+            ).also { ack ->
+                traceRelease(
+                    context,
+                    "to_start_ack_success",
+                    "serverStatus=${ack.serverStatus} negotiationEpoch=${ack.negotiationEpoch} " +
+                        "localAcked=${ack.localAcked} bothAcked=${ack.bothAcked} " +
+                        "deadlineEpochMillis=${ack.deadlineEpochMillis ?: "null"}",
+                )
+            }
+        } catch (error: Exception) {
+            traceReleaseFailure(context, "to_start_ack_failure", error)
+            throw error
+        }
+    }
 
     fun toFinishResult() = MatchFinishResult(
         serverStatus = lifecycleStatus,
@@ -329,21 +468,93 @@ internal class SupabaseOnlineMatchRepository(private val client: SupabaseClient)
     override suspend fun ackMatchStarted(
         matchId: String,
         expectedNegotiationEpoch: Int,
-    ): MatchStartAck = boundedReleaseNetwork {
-        client.postgrest.rpc(
-            "ack_match_started_v2",
-            NegotiationEpochParams(matchId.requireUuid(), expectedNegotiationEpoch),
+    ): MatchStartAck {
+        val context = ReleaseNetworkTraceContext(
+            rpcName = "ack_match_started_v2",
+            matchId = matchId,
+            expectedEpoch = expectedNegotiationEpoch,
         )
-            .decodeList<ReleaseMatchStateRow>()
-            .single()
-            .toStartAck()
+        return releaseStartStateRpc(context) {
+            client.postgrest.rpc(
+                context.rpcName,
+                NegotiationEpochParams(matchId.requireUuid(), expectedNegotiationEpoch),
+            )
+        }
     }
 
-    override suspend fun getMatchStartState(matchId: String): MatchStartAck = boundedReleaseNetwork {
-        client.postgrest.rpc("get_release_match_state_v2", AckParams(matchId.requireUuid()))
-            .decodeList<ReleaseMatchStateRow>()
-            .single()
-            .toStartAck()
+    override suspend fun getMatchStartState(matchId: String): MatchStartAck {
+        val context = ReleaseNetworkTraceContext(
+            rpcName = "get_release_match_state_v2",
+            matchId = matchId,
+            expectedEpoch = null,
+        )
+        return releaseStartStateRpc(context) {
+            client.postgrest.rpc(context.rpcName, AckParams(matchId.requireUuid()))
+        }
+    }
+
+    private suspend fun releaseStartStateRpc(
+        context: ReleaseNetworkTraceContext,
+        request: suspend () -> io.github.jan.supabase.postgrest.result.PostgrestResult,
+    ): MatchStartAck = try {
+        boundedReleaseNetwork(traceContext = context) {
+            traceRelease(context, "rpc_request")
+            val response = try {
+                request()
+            } catch (error: Exception) {
+                traceReleaseFailure(context, "rpc_response_failure", error)
+                throw error
+            }
+            traceRelease(context, "rpc_response_acquired")
+            if (BuildConfig.DEBUG) {
+                traceRelease(
+                    context,
+                    "response_body",
+                    "received=true bodyLength=${response.data.length} safeBody=${safeReleaseBodySummary(response.data)}",
+                )
+            }
+
+            traceRelease(context, "decode_start")
+            val rows = try {
+                response.decodeList<ReleaseMatchStateRow>().also { decoded ->
+                    traceRelease(context, "decode_success", "rowCount=${decoded.size}")
+                    decoded.forEachIndexed { index, row ->
+                        traceRelease(
+                            context,
+                            "decoded_row",
+                            "index=$index lifecycleStatus=${row.lifecycleStatus} " +
+                                "negotiationEpoch=${row.negotiationEpoch} localAcked=${row.localAcked} " +
+                                "bothAcked=${row.bothAcked} releaseDeadline=${row.releaseDeadline ?: "null"} " +
+                                "reconnectDeadline=${row.reconnectDeadline ?: "null"}",
+                        )
+                    }
+                }
+            } catch (error: Exception) {
+                traceReleaseFailure(context, "decode_failure", error)
+                throw error
+            }
+
+            val row = try {
+                rows.single().also { traceRelease(context, "single_success", "rowCount=${rows.size}") }
+            } catch (error: Exception) {
+                traceReleaseFailure(context, "single_failure", error)
+                throw error
+            }
+            row.toStartAck(context)
+        }.also { ack ->
+            traceRelease(
+                context,
+                "repository_return_success",
+                "serverStatus=${ack.serverStatus} negotiationEpoch=${ack.negotiationEpoch} " +
+                    "localAcked=${ack.localAcked} bothAcked=${ack.bothAcked}",
+            )
+        }
+    } catch (error: CancellationException) {
+        traceReleaseFailure(context, "repository_boundary_cancelled", error)
+        throw error
+    } catch (error: Exception) {
+        traceReleaseFailure(context, "repository_boundary_exception", error)
+        throw error
     }
 
     override suspend fun abandonMatch(matchId: String): Boolean = boundedReleaseNetwork {
@@ -355,14 +566,18 @@ internal class SupabaseOnlineMatchRepository(private val client: SupabaseClient)
     override suspend fun resumeMatch(
         matchId: String,
         expectedNegotiationEpoch: Int,
-    ): MatchStartAck = boundedReleaseNetwork {
-        client.postgrest.rpc(
-            "resume_match_v2",
-            NegotiationEpochParams(matchId.requireUuid(), expectedNegotiationEpoch),
+    ): MatchStartAck {
+        val context = ReleaseNetworkTraceContext(
+            rpcName = "resume_match_v2",
+            matchId = matchId,
+            expectedEpoch = expectedNegotiationEpoch,
         )
-            .decodeList<ReleaseMatchStateRow>()
-            .single()
-            .toStartAck()
+        return releaseStartStateRpc(context) {
+            client.postgrest.rpc(
+                context.rpcName,
+                NegotiationEpochParams(matchId.requireUuid(), expectedNegotiationEpoch),
+            )
+        }
     }
 
     override suspend fun reconcileMatch(matchId: String): MatchFinishResult = releaseStateRpc(
@@ -512,7 +727,7 @@ private data class GameRecordRow(
 ) {
     fun toDomain() = GameRecord(
         matchId, players, CanonicalMoves.decode(canonicalMoves), MatchResult.valueOf(result),
-        Instant.parse(startedAt).toEpochMilli(), Instant.parse(finishedAt).toEpochMilli(), timeControl,
+        parsePostgrestTimestamp(startedAt).toEpochMilli(), parsePostgrestTimestamp(finishedAt).toEpochMilli(), timeControl,
         FinishReason.valueOf(finishReason), finalPositionHash,
     )
 }

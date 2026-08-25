@@ -149,6 +149,68 @@ private class FakeOnlineRepository : OnlineMatchRepository {
 
 class OnlineMatchControllerTest {
     @Test
+    fun committedInitialAckWithLostResponsesReconcilesAndEntersPlaying() = runBlocking {
+        val repository = FakeOnlineRepository().apply {
+            startState = MatchStartAck(
+                "ACTIVE",
+                localAcked = true,
+                bothAcked = true,
+                negotiationEpoch = 0,
+            )
+            ackResponseFailuresRemaining = 3
+        }
+        val controller = OnlineMatchController(
+            "initial-ack-response-loss",
+            Disc.BLACK,
+            FakeMatchTransport(),
+            repository,
+            ackAttempts = 3,
+            startConfirmationAttempts = 1,
+            startConfirmationDelayMillis = 0,
+        )
+
+        assertTrue(controller.onDataChannelOpen(0))
+
+        assertEquals(3, repository.ackCalls)
+        assertEquals(1, repository.getStartStateCalls)
+        assertEquals(MatchStatus.PLAYING, controller.viewState.matchState.status)
+        assertTrue(controller.viewState.localStartAcked)
+        assertTrue(controller.viewState.bothStartAcked)
+        controller.close()
+    }
+
+    @Test
+    fun failedInitialAckResponsesDoNotStartWhenServerHasNoLocalAck() = runBlocking {
+        val repository = FakeOnlineRepository().apply {
+            startState = MatchStartAck(
+                "MATCHED",
+                localAcked = false,
+                bothAcked = false,
+                negotiationEpoch = 0,
+            )
+            ackResponseFailuresRemaining = 1
+        }
+        val controller = OnlineMatchController(
+            "initial-ack-not-committed",
+            Disc.BLACK,
+            FakeMatchTransport(),
+            repository,
+            ackAttempts = 1,
+            startConfirmationAttempts = 1,
+            startConfirmationDelayMillis = 0,
+        )
+
+        assertFalse(controller.onDataChannelOpen(0))
+
+        assertEquals(1, repository.ackCalls)
+        assertEquals(1, repository.getStartStateCalls)
+        assertEquals(MatchStatus.P2P_CONNECTED, controller.viewState.matchState.status)
+        assertFalse(controller.viewState.localStartAcked)
+        assertFalse(controller.viewState.bothStartAcked)
+        controller.close()
+    }
+
+    @Test
     fun oneSidedStartAckDoesNotEnterPlayingAndDoubleOpenAcksOnce() = runBlocking {
         val repository = FakeOnlineRepository().apply {
             startState = MatchStartAck("CREATED", localAcked = true, bothAcked = false)

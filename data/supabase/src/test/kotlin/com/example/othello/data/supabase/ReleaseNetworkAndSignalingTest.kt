@@ -5,12 +5,49 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
+import java.time.format.DateTimeParseException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ReleaseNetworkAndSignalingTest {
+    @Test
+    fun postgrestOffsetTimestampsAreParsedAcrossSupportedIsoForms() {
+        val expectedMillis = 1_787_627_021_225L
+        assertEquals(
+            expectedMillis,
+            parsePostgrestTimestamp("2026-08-25T03:03:41.225848+00:00").toEpochMilli(),
+        )
+        assertEquals(
+            expectedMillis,
+            parsePostgrestTimestamp("2026-08-25T03:03:41.225848Z").toEpochMilli(),
+        )
+        assertEquals(
+            expectedMillis,
+            parsePostgrestTimestamp("2026-08-25T03:03:41.225Z").toEpochMilli(),
+        )
+        assertEquals(
+            expectedMillis,
+            parsePostgrestTimestamp("2026-08-25T03:03:41.225848999Z").toEpochMilli(),
+        )
+        assertEquals(
+            1_787_627_021_000L,
+            parsePostgrestTimestamp("2026-08-25T03:03:41Z").toEpochMilli(),
+        )
+        assertEquals(
+            expectedMillis,
+            parsePostgrestTimestamp("2026-08-25T12:03:41.225848+09:00").toEpochMilli(),
+        )
+    }
+
+    @Test
+    fun invalidPostgrestTimestampIsRejected() {
+        assertFailsWith<DateTimeParseException> {
+            parsePostgrestTimestamp("2026-08-25 03:03:41+00:00")
+        }
+    }
+
     @Test
     fun zeroRowRpcIsDistinctFromAMalformedMultiRowResponse() {
         assertEquals(null, emptyList<Int>().singleOrNullForRpc("claim_active_match_v2"))
