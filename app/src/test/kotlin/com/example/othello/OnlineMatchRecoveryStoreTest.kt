@@ -72,4 +72,25 @@ class OnlineMatchRecoveryStoreTest {
             )
         }
     }
+
+    @Test
+    fun recoverySnapshotStillRejectsAClockDiscThatDoesNotMatchThePosition() {
+        val game = (GameState().play(Position(2, 3)) as MoveOutcome.Played).state
+
+        assertFails {
+            OnlineMatchRecoverySnapshot(
+                userId = "user-a",
+                matchId = "match-a",
+                opponentId = "user-b",
+                assignedDisc = AssignedDisc.BLACK,
+                opponentRating = null,
+                canonicalMoves = "d3",
+                stateHash = game.stateHash(),
+                blackRemainingMillis = 1,
+                whiteRemainingMillis = 1,
+                runningDisc = Disc.BLACK,
+                updatedAtEpochMillis = 1,
+            )
+        }
+    }
 }

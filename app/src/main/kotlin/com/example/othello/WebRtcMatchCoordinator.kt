@@ -166,28 +166,10 @@ class WebRtcMatchCoordinator(
         ).joinToString("|")
         if (fingerprint == lastRecoveryFingerprint) return true
         val persisted = recoveryStore.save(
-            OnlineMatchRecoverySnapshot(
+            view.toRecoverySnapshot(
                 userId = userId,
-                matchId = assignment.matchId,
-                opponentId = assignment.opponentId,
-                assignedDisc = assignment.assignedDisc,
-                opponentRating = assignment.opponentRating,
+                assignment = assignment,
                 negotiationEpoch = currentNegotiationEpoch,
-                canonicalMoves = canonicalMoves,
-                stateHash = view.game.stateHash(),
-                blackRemainingMillis = view.blackRemainingMillis,
-                whiteRemainingMillis = view.whiteRemainingMillis,
-                runningDisc = view.game.currentPlayer.takeIf {
-                    view.matchState.status in setOf(
-                        com.example.othello.match.MatchStatus.PLAYING,
-                        com.example.othello.match.MatchStatus.MOVE_CONFIRMING,
-                        com.example.othello.match.MatchStatus.SYNCHRONIZING,
-                    )
-                },
-                pendingFinishReason = view.pendingFinishReason,
-                pendingLoserDisc = view.pendingLoserDisc,
-                pendingResultRequestId = view.pendingResultRequestId,
-                updatedAtEpochMillis = System.currentTimeMillis(),
             ),
         )
         if (persisted) lastRecoveryFingerprint = fingerprint

@@ -1147,8 +1147,12 @@ class OnlineMatchController(
         clockSnapshot: ClockSnapshot,
         finishWhenTerminal: Boolean,
     ) {
-        matchClock.adoptAndStart(clockSnapshot, resolution.state.currentPlayer)
-        val currentClock = matchClock.snapshot()
+        val currentClock = if (resolution.state.status is GameStatus.InProgress) {
+            matchClock.adoptAndStart(clockSnapshot, resolution.state.currentPlayer)
+            matchClock.snapshot()
+        } else {
+            matchClock.stop()
+        }
         update {
             copy(
                 game = resolution.state,

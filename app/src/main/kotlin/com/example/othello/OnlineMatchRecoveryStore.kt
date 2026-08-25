@@ -7,6 +7,8 @@ import com.example.othello.game.GameState
 import com.example.othello.game.MoveOutcome
 import com.example.othello.game.GameStatus
 import com.example.othello.network.ClockSnapshot
+import com.example.othello.match.MatchStatus
+import com.example.othello.match.OnlineMatchViewState
 import com.example.othello.matchmaking.AssignedDisc
 import com.example.othello.matchmaking.MatchAssignment
 import com.example.othello.network.MAX_MATCH_NEGOTIATION_EPOCH
@@ -91,6 +93,37 @@ data class OnlineMatchRecoverySnapshot(
         }
     }
 }
+
+/** Builds a checkpoint only from a logically consistent board/clock boundary. */
+internal fun OnlineMatchViewState.toRecoverySnapshot(
+    userId: String,
+    assignment: MatchAssignment,
+    negotiationEpoch: Int,
+    updatedAtEpochMillis: Long = System.currentTimeMillis(),
+): OnlineMatchRecoverySnapshot = OnlineMatchRecoverySnapshot(
+    userId = userId,
+    matchId = assignment.matchId,
+    opponentId = assignment.opponentId,
+    assignedDisc = assignment.assignedDisc,
+    opponentRating = assignment.opponentRating,
+    negotiationEpoch = negotiationEpoch,
+    canonicalMoves = CanonicalMoves.encode(moves),
+    stateHash = game.stateHash(),
+    blackRemainingMillis = blackRemainingMillis,
+    whiteRemainingMillis = whiteRemainingMillis,
+    runningDisc = game.currentPlayer.takeIf {
+        game.status is GameStatus.InProgress &&
+            matchState.status in setOf(
+                MatchStatus.PLAYING,
+                MatchStatus.MOVE_CONFIRMING,
+                MatchStatus.SYNCHRONIZING,
+            )
+    },
+    pendingFinishReason = pendingFinishReason,
+    pendingLoserDisc = pendingLoserDisc,
+    pendingResultRequestId = pendingResultRequestId,
+    updatedAtEpochMillis = updatedAtEpochMillis,
+)
 
 internal object OnlineMatchRecoveryCodec {
     private val json = Json { ignoreUnknownKeys = false }
