@@ -19,8 +19,8 @@
 
 - [Target API レベル requirement](https://developer.android.com/google/play/requirements/target-sdk): 2026年8月31日から新規アプリ・更新はAPI 36以上。
 - [16 KB page sizes](https://developer.android.com/guide/practices/page-sizes): 2025年11月1日から、Android 15以上を対象とする新規アプリ・更新は16 KiB page size対応が必要。
-- [アップロード an アプリ bundle](https://developer.android.com/studio/publish/upload-bundle): 新規PlayアプリはAABで公開し、Play アプリ 署名を利用する。
-- [Sign your アプリ](https://developer.android.com/studio/publish/app-signing): アップロード キーとPlay アプリ 署名のアプリ 署名キーを分離する運用を推奨。
+- [アプリバンドルのアップロード](https://developer.android.com/studio/publish/upload-bundle): 新規PlayアプリはAABで公開し、Playアプリ署名を利用する。
+- [アプリへの署名](https://developer.android.com/studio/publish/app-signing): アップロードキーとPlayアプリ署名のアプリ署名キーを分離する運用を推奨。
 - [Registering Play パッケージ names](https://support.google.com/googleplay/android-developer/answer/16984799): パッケージ登録とdeveloper 識別情報 検証を確認。2026年9月30日から全Play パッケージ登録が必要。
 - [アプリ testing requirements](https://support.google.com/googleplay/android-developer/answer/14151465): 2023年11月13日以後に作成した個人アカウントでは、本番 アクセス前に12人以上が14日間継続opt-inしたclosed テストが必要。
 - [データ safety](https://support.google.com/googleplay/android-developer/answer/10787469)、[アカウント削除](https://support.google.com/googleplay/android-developer/answer/13327111)、[prepare for レビュー](https://support.google.com/googleplay/android-developer/answer/9859455)、[store listing assets](https://support.google.com/googleplay/android-developer/answer/9866151)、[content レート](https://support.google.com/googleplay/android-developer/answer/9859655)

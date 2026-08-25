@@ -1,8 +1,8 @@
 # ちゃんりば（ちゃんとリバーシ）
 
-軽く一局打っても、その一局がちゃんと残り、ちゃんと振り返れて、次につながるAndroid向けリバーシアプリです。Supabase Auth・対戦相手の割り当て（matchmaking）・Realtimeを使った接続情報交換（signaling）・WebRTC DataChannelによるオンライン対局と、対局後のGameRecordをEdaxで解析するレビュー経路を実装しています。本アプリはEdax公式・公認アプリではありません。
+軽く一局打っても、その一局がちゃんと残り、ちゃんと振り返れて、次につながるAndroid向けリバーシアプリです。Supabase Auth・対戦相手の割り当て（matchmaking）・Realtimeを使った接続情報交換（signaling）・WebRTC DataChannelによるオンライン対局と、対局後のGameRecordをEdaxで解析するレビュー経路を実装しています。ローカル対局を含むAndroidアプリ全体でログインを必須とします。本アプリはEdax公式・公認アプリではありません。
 
-設計、運用、リリース、監査資料は[技術資料index](docs/README.md)から目的別に参照できます。
+設計、運用、リリース、監査資料は[技術資料インデックス](docs/README.md)から目的別に参照できます。
 
 ## 開発環境
 
@@ -51,7 +51,7 @@ Android Studioでルートを開いて同期し、`app` configurationを実行�
 
 技術資料の入口は[docs/README.md](docs/README.md)です。システム構成の正本は[システム構成](docs/01_全体設計/システム構成.md)、運用責務、定期処理、Secret境界、障害確認先の正本は[運用マップ](docs/01_全体設計/運用マップ.md)です。初期の実装計画は現行手順ではないため、[旧実装計画](docs/09_履歴/旧実装計画.md)として履歴へ分離しています。`core:game`はAndroid/Supabase/WebRTC/Rating/Edaxを参照しない純粋Kotlinです。`feature:match`は`analysis`へ依存せず、Reviewだけが`analysis:api`を参照します。
 
-WebRTC SDKとSupabase SDKの具体実装は、それぞれ`transport:webrtc`と`data:supabase`へ隔離します。`matches.server_status`はサーバーが保証できる状態だけを保持し、AndroidのP2P session stateとは別物です。
+WebRTC SDKとSupabase SDKの具体実装は、それぞれ`transport:webrtc`と`data:supabase`へ隔離します。Protocol 2では`matches.release_status`がサーバーの正式状態であり、Android端末内のP2Pセッション状態とは別物です。`matches.server_status`はProtocol 1との一時的な互換性境界で、Protocol 2の正式状態ではありません。
 WebRTC Android SDKはMaven Centralの`io.github.webrtc-sdk:android:144.7559.09`に固定しています。
 `SupabaseModule`が`data:supabase`内でSDK clientとrepositoryを組み立て、appへは自前port interfaceだけを返します。
 
@@ -63,16 +63,16 @@ Androidクライアントは、Git管理外の`local.properties`にある`supaba
 
 1. Supabase projectを作成します。
 2. `supabase/migrations`内のmigrationをファイル名順にすべてSupabase SQL EditorまたはSupabase CLIで適用します。
-3. Android側へservice-role keyを置かず、AuthユーザーのJWTと公開anon keyだけをアプリ設定へ渡します。
-4. 新規AuthユーザーはDB triggerで`profiles`/`ratings`へbootstrapされます。マッチングは`enqueue_or_match()`だけを使用し、公式Rating snapshotとTTLをDB側で管理します。
-5. 結果提出は`submit_match_result(...)`を使用します。2件目の提出時に同一transaction内で自動finalizeされ、`finalize_match_v2(...)`はreconciliation用に残します。参加者以外・二重Rating更新・不一致結果はDB側で拒否または`DISPUTED`になります。
+3. Android側へサービスロール（service_role）キーを置かず、AuthユーザーのJWTと公開anonキーだけをアプリ設定へ渡します。
+4. 新規AuthユーザーはDBトリガーで`profiles` / `ratings`へ初期登録されます。Protocol 2のマッチングは`enqueue_or_match_v2`で開始し、応答喪失時も`claim_active_match_v2`でサーバー上の割り当てを復元できます。正式なレートのスナップショットと期限はDB側で管理します。
+5. Protocol 2の結果提出には`submit_match_result_v2`を使用します。DBが正規化済み棋譜を再生し、正常終了では双方の一致する提出を確認した後、同一トランザクションでGameRecordとレートを確定します。参加者以外からの提出、レートの二重更新、不一致結果はDB側で拒否するか`DISPUTED`にします。
 6. 公開プロフィールと`display_name`は初回公開版のDBから削除済みです。対局相手ratingは参加者限定のmatchmaking RPCが成立時snapshotだけを返します。
 
 ## Cloudflare Admin
 
-`cloudflare-admin`はアカウント削除を扱う信頼済み管理BFFです。service-role keyはWorker secretにだけ置き、`ADMIN_TOKEN`もWorker secretに置きます。初回公開版に段級位申請・証明画像・verification管理機能はなく、関連DB/Storage/Worker経路も削除しています。
+`cloudflare-admin`はアカウント削除を扱う信頼済み管理BFFです。サービスロール（service_role）キーはワーカーのシークレットにだけ置き、`ADMIN_TOKEN`もワーカーのシークレットに置きます。初回公開版に段級位申請・証明画像・認証管理機能はなく、関連するDB／Storage／ワーカー経路も削除しています。
 
-削除要求は10分ごとのWorker Cronまたは管理endpointから再実行できます。私有データ削除、Research identityのunlink、Supabase Auth Admin削除、完了記録の順に処理し、途中失敗を完了扱いしません。共有棋譜に必要な内部ID tombstoneは残りますが、表示名は保持しません。ブラウザやAndroidへservice-role keyを配布しません。
+削除要求は10分ごとのワーカーCronまたは管理エンドポイントから再実行できます。非公開データの削除、Research識別子とアカウントの対応解除、Supabase Auth Adminによる削除、完了記録の順に処理し、途中失敗を完了扱いしません。共有棋譜に必要な内部IDのtombstoneは残りますが、表示名は保持しません。ブラウザやAndroidへサービスロール（service_role）キーを配布しません。
 
 ```powershell
 cd cloudflare-admin
@@ -84,7 +84,7 @@ npm run deploy
 
 ## オンライン対局
 
-`MatchTransport`のWebRTC DataChannel実装を使用します。Supabase RealtimeのPostgres Changesは、待機側へのparticipant限定`match_notifications`と、SDP offer/answer用`match_signaling`だけに使用します。通知を受けた待機側は即座にmatchをclaimし、heartbeat pollingは通知失敗時のfallbackとして残します。P2P接続後に着手、時計、盤面、結果をRealtimeへ送信しません。protocol 1/2ともrated resultはDBがcanonical movesを合法手再生し、NORMALの終局・result・hashを導出してから確定します。実機2台では、Auth設定、同一Supabase project、TURN/STUN設定、2台のqueue参加、DataChannel成立、両者start ACK、双方の同一棋譜・hash、結果提出の順で確認します。
+`MatchTransport`のWebRTC DataChannel実装を使用します。Supabase RealtimeのPostgres Changesは、待機側の参加者だけが読める`match_notifications`と、SDPのOFFER / ANSWERを扱う`match_signals_v2`に限定します。通知を受けた待機側は`claim_active_match_v2`で割り当てを復元し、通知が届かない場合は同じリクエストIDによる回数を制限した状態照合を代替経路とします。P2P接続後の着手、時計、盤面、結果をRealtimeへ送信しません。Protocol 2のレート対象結果は、DBが正規化済み棋譜を合法手として再生し、`NORMAL`の終局、結果、ハッシュを導出してから確定します。実機2台では、Auth設定、同一Supabaseプロジェクト、現在のSTUN-only設定、2台のキュー参加、DataChannel成立、双方の開始ACK、同一棋譜・ハッシュ、結果提出の順で確認します。
 
 `その他 -> アカウント`には本人のサーバー管理`ratings.current_rating`、「前日順位」、「この端末で確認した最高の前日順位」を表示します。前日順位は日本時間の前日終了時点のレートをもとに算出します。この端末の最高値は、ユーザーがアカウント画面を開き、その時点で有効な前日順位を実際に取得できた場合だけ比較・保存します。アプリ起動、foreground復帰、background処理では更新せず、画面を開かなかった日の順位も記録しません。日次順位の母集団は、東京のsnapshot cutoffから過去30日以内の半開区間に、既存の確定レート更新（`rating_history`）が1件以上ある未削除ユーザーです。順位計算にはcutoff前の最新`rating_history.rating`を使い、cutoff後の`ratings.current_rating`は前日順位へ混入しません。独自の最低対局数や仮レート条件は追加していません。Androidはsnapshot dateが東京基準の本当の前日と一致するときだけ表示・ローカル記録更新に利用します。この記録はSupabase AuthのユーザーUUIDごとに端末へ保存し、サーバーや別端末へ同期しません。対局画面には成立時に保存した相手rating snapshotだけを表示し、ニックネーム、メールアドレス、UUIDをプレイヤー名として表示しません。
 
@@ -94,7 +94,9 @@ Emulator A/Bの再現手順と、emulatorで完了できる項目・物理端末
 [`実機・エミュレーター確認`](docs/08_テスト・監査/実機・エミュレーター確認.md)を参照してください。`build/e2e/`には
 secretを含めないXML、スクリーンショット、対象tagのlogcatを保存できます。
 
-`matches`の`CREATED`リースは、接続情報交換（signaling）用に5分確保します。DataChannel成立後、両参加者が`ack_match_started`を一度呼び、クライアントが`get_match_start_state`で双方のACKを確認してから`PLAYING`へ進みます。双方のACK後は、P2P開始事実と上限24時間の対局リースを記録します。`PENDING_RESULT`の進行中予約は5分で、30日保持する監査用submissionとは分離しています。期限切れは`ABANDONED`へ遷移してから予約を解放します。対戦相手割り当ての通常経路は、呼び出し元単位の状態照合（reconciliation）とキュー期限切れだけを扱い、古い対局と終了済み記録の全体クリーンアップは保守経路で実行します。オンライン対局の定期処理は既存の`cloudflare-admin` Cronへ集約し、10分ごとにサービスロール（service_role）で`run_match_maintenance_v2(100)`と`run_legacy_match_maintenance_v1(100)`を独立実行します。後者は期限切れの旧プロトコル状態を先に永続化し、その後プロトコル1のsignaling／queueを各100行以下で削除します。オンライン対局のクリーンアップ用に追加のSupabase Cron／pg_cronは作成しません。
+Protocol 2では`matches.release_status`が`MATCHED`、`ACTIVE`、`RECONNECTING`、`RESULT_PENDING`などの正式状態を管理します。初回接続は接続世代（epoch）0、開始済み対局の再接続はepoch 1〜3を使います。DataChannelが開いただけでは対局を開始せず、双方が`ack_match_started_v2`を完了してサーバーが`ACTIVE`を返した後でだけ`PLAYING`へ進みます。`MATCHED`のリースは2分、`ACTIVE`の異常終了に対する安全網は15分、再接続と結果待ちの猶予は45秒です。応答喪失や古い端末内状態は`get_release_match_state_v2`、`resume_match_v2`、`reconcile_match_v2`などでサーバーの正式状態と照合します。詳細な契約と設計理由は[通常接続設計](docs/02_オンライン対局/通常接続設計.md)、[再接続設計](docs/02_オンライン対局/再接続設計.md)、[リリースハードニング設計](docs/07_リリース・移行/リリースハードニング設計.md)を正本とします。
+
+オンライン対局の定期処理は既存の`cloudflare-admin` Cronへ集約し、10分ごとにサービスロール（service_role）で`run_match_maintenance_v2(100)`と`run_legacy_match_maintenance_v1(100)`を独立実行します。後者は期限切れの旧プロトコル状態を先に永続化し、その後Protocol 1の接続情報とキューをそれぞれ100行以下で削除します。オンライン対局のクリーンアップ用に追加のSupabase Cron / pg_cronは作成しません。
 
 日次順位は既存の保守経路へ分散させず、Supabase Cronジョブ`daily-rating-snapshot`がAsia/Tokyoの日付境界後の毎日00:10 JSTに`select public.refresh_rating_daily_snapshot();`を実行します。関数は`SECURITY DEFINER`かつ空の`search_path`で、`PUBLIC` / `anon` / `authenticated`からEXECUTEを剥奪し、`service_role`または明示的に権限を持つDB所有者のCronだけが実行します。正式なマイグレーションは`202608220029_daily_rating_snapshot.sql`です。028は本番未適用の永久欠番であり、適用してはいけません。マイグレーション自身は関数と最新スナップショット用テーブルを追加するだけで、Cron拡張とジョブは別の本番操作として導入しています。適用監査、定期処理の方針、導入結果は[日次レートスナップショット運用](docs/04_レーティング/日次レートスナップショット運用.md)を参照してください。
 
@@ -110,7 +112,7 @@ Reviewでは実戦開始局面、任意ply、最終局面、保存前variation�
 
 ## 公開前に残る判断と実機確認
 
-- ユーザー判断: repository renameの要否、Google Playの公開version・価格・対象年齢・配信国、公開support email、TURN provider、Play App Signingとtesting/publication。
+- ユーザー判断: リポジトリ改名の要否、Google Playの公開バージョン・価格・対象年齢・配信国、公開サポートメール、TURN提供者、Play App Signingとテスト／公開。
 - 物理端末: arm64 native実性能、Edaxの持続性能・thermal・battery、Wi-Fi↔mobile/mobile↔mobile、carrier NAT/CGNAT/symmetric NAT、STUN-only成功率とTURN必要率、network handover、メーカー固有background挙動。
 
 launcher icon、アプリ内Privacy Policy導線、公開Privacy Policy（`https://chanriva.shinp-studio.com/privacy`）、アプリ不要のWeb削除受付（`https://chanriva.shinp-studio.com/account-deletion`）は実装済みです。signed release / Play生成APKでの最終runtime確認はPlay App Signing後の別ゲートです。
