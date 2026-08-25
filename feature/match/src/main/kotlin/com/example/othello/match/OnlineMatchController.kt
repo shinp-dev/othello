@@ -51,6 +51,7 @@ data class OnlineMatchViewState(
     val localStartAcked: Boolean = false,
     val bothStartAcked: Boolean = false,
     val finishResult: MatchFinishResult? = null,
+    val terminalFinishReason: FinishReason? = null,
     val blackRemainingMillis: Long = DEFAULT_TIME_CONTROL_MILLIS,
     val whiteRemainingMillis: Long = DEFAULT_TIME_CONTROL_MILLIS,
     val awaitingMoveAck: Boolean = false,
@@ -813,14 +814,38 @@ class OnlineMatchController(
     }
 
     private suspend fun applyReconciledServerResult(result: MatchFinishResult) {
-        if (result.serverStatus == "ACTIVE" && state.matchState.status == MatchStatus.RECONNECTING &&
+        val hydratedResult = hydrateRatedTerminalResult(result)
+        if (hydratedResult.serverStatus == "ACTIVE" && state.matchState.status == MatchStatus.RECONNECTING &&
             started && lastTransportState == TransportState.OPEN
         ) {
             beginRecoveredSynchronization()
         } else {
-            applyServerResult(result)
+            applyServerResult(hydratedResult)
         }
     }
+
+    /**
+     * State reconciliation intentionally returns only lifecycle data. Once a rated
+     * terminal state is observed, repeat the stable result request so both clients
+     * receive their own rating row. The server treats an identical request id and
+     * payload as an idempotent read of the already-finalized result.
+     */
+    private suspend fun hydrateRatedTerminalResult(result: MatchFinishResult): MatchFinishResult {
+        if (result.serverStatus !in RATED_TERMINAL_SERVER_STATUSES || result.hasRatingChange()) return result
+        val submission = activeSubmission ?: return result
+        return try {
+            repository.submitMatchResult(submission)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            // The authoritative terminal state remains valid even if optional
+            // presentation data could not be refreshed.
+            result
+        }
+    }
+
+    private fun MatchFinishResult.hasRatingChange(): Boolean =
+        ratingBefore != null && ratingAfter != null && ratingDelta != null
 
     fun reportConnectionError(message: String) {
         if (closed || state.matchState.status !in setOf(
@@ -1304,6 +1329,7 @@ class OnlineMatchController(
     }
 
     private fun applyServerResult(submitted: MatchFinishResult) {
+        val resolvedFinishReason = activeSubmission?.finishReason ?: state.pendingFinishReason
         val next = when (submitted.serverStatus) {
             "ACTIVE" -> if (started && state.matchState.status == MatchStatus.PLAYING &&
                 lastTransportState == TransportState.OPEN
@@ -1327,6 +1353,7 @@ class OnlineMatchController(
                 message = submitted.serverStatus,
                 error = null,
                 finishResult = submitted,
+                terminalFinishReason = if (next.isTerminal()) resolvedFinishReason else terminalFinishReason,
                 pendingFinishReason = if (next.isTerminal()) null else pendingFinishReason,
                 pendingLoserDisc = if (next.isTerminal()) null else pendingLoserDisc,
                 pendingResultRequestId = if (next.isTerminal()) null else pendingResultRequestId,
@@ -1503,6 +1530,7 @@ class OnlineMatchController(
         const val MAX_SYNC_REQUESTS = 8
         val ACTIVE_SYNC_STATUSES = setOf(MatchStatus.PLAYING, MatchStatus.MOVE_CONFIRMING, MatchStatus.SYNCHRONIZING)
         val TERMINAL_SERVER_STATUSES = setOf("CONFIRMED", "FORFEIT", "EXPIRED", "ABANDONED", "DISPUTED")
+        val RATED_TERMINAL_SERVER_STATUSES = setOf("CONFIRMED", "FORFEIT")
 
         fun replay(moves: List<Position?>): GameState {
             require(moves.size <= 120) { "online transcript is too large" }

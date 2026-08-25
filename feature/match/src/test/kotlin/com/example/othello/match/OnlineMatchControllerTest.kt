@@ -111,6 +111,7 @@ private class FakeOnlineRepository : OnlineMatchRepository {
     var ackResponseFailuresRemaining = 0
     var resumeResult = MatchStartAck("ACTIVE", localAcked = true, bothAcked = true)
     var reconcileResult = MatchFinishResult("ACTIVE")
+    var finishResultFactory: (String) -> MatchFinishResult = { MatchFinishResult(it) }
     override suspend fun ackMatchStarted(matchId: String, expectedNegotiationEpoch: Int): MatchStartAck {
         ackCalls++
         ackExpectedEpochs += expectedNegotiationEpoch
@@ -137,7 +138,7 @@ private class FakeOnlineRepository : OnlineMatchRepository {
         submitted = submission
         submissions += submission
         val status = if (serverStatuses.size > 1) serverStatuses.removeAt(0) else serverStatuses.single()
-        return MatchFinishResult(status)
+        return finishResultFactory(status)
     }
     override suspend fun resumeMatch(matchId: String, expectedNegotiationEpoch: Int): MatchStartAck {
         resumeCalls++
@@ -381,6 +382,67 @@ class OnlineMatchControllerTest {
         assertEquals("", blackRepository.submitted?.canonicalMoves)
         assertEquals("", whiteRepository.submitted?.canonicalMoves)
         assertEquals(1, blackTransport.sentFinishes.size)
+    }
+
+    @Test
+    fun ratedForfeitRetainsResignationReasonForResultPresentation() = runBlocking {
+        val repository = FakeOnlineRepository().apply {
+            serverStatuses.clear()
+            serverStatuses += "FORFEIT"
+        }
+        val controller = OnlineMatchController(
+            "rated-resignation",
+            Disc.BLACK,
+            FakeMatchTransport(),
+            repository,
+        )
+        controller.onDataChannelOpen()
+
+        assertEquals("FORFEIT", controller.resign()?.serverStatus)
+        assertEquals(MatchStatus.FORFEIT, controller.viewState.matchState.status)
+        assertEquals(FinishReason.RESIGNATION, controller.viewState.terminalFinishReason)
+        assertNull(controller.viewState.pendingFinishReason)
+        controller.close()
+    }
+
+    @Test
+    fun ratedTerminalReconciliationHydratesRatingFromIdempotentSubmission() = runBlocking {
+        val repository = FakeOnlineRepository().apply {
+            serverStatuses.clear()
+            serverStatuses += listOf("RESULT_PENDING", "FORFEIT")
+            reconcileResult = MatchFinishResult("FORFEIT")
+            finishResultFactory = { status ->
+                if (status == "FORFEIT") {
+                    MatchFinishResult(
+                        serverStatus = status,
+                        ratingBefore = 1_572,
+                        ratingAfter = 1_553,
+                        ratingDelta = -19,
+                        currentRating = 1_553,
+                        peakRating = 1_582,
+                    )
+                } else {
+                    MatchFinishResult(status)
+                }
+            }
+        }
+        val controller = OnlineMatchController(
+            "rated-reconciliation",
+            Disc.BLACK,
+            FakeMatchTransport(),
+            repository,
+        )
+        controller.onDataChannelOpen()
+
+        assertEquals("RESULT_PENDING", controller.resign()?.serverStatus)
+        assertEquals("FORFEIT", controller.reconcileServerState().serverStatus)
+
+        assertEquals(2, repository.submitCalls)
+        assertEquals(repository.submissions[0], repository.submissions[1])
+        assertEquals(-19, controller.viewState.finishResult?.ratingDelta)
+        assertEquals(FinishReason.RESIGNATION, controller.viewState.terminalFinishReason)
+        assertEquals(MatchStatus.FORFEIT, controller.viewState.matchState.status)
+        controller.close()
     }
 
     @Test

@@ -72,6 +72,7 @@ import com.example.othello.match.OnlineMatchController
 import com.example.othello.match.OnlineMatchViewState
 import com.example.othello.match.TimeWarningTracker
 import com.example.othello.matchmaking.MatchmakingStatus
+import com.example.othello.records.FinishReason
 import com.example.othello.records.GameRecord
 import com.example.othello.review.ReviewInput
 import com.example.othello.review.ReviewSession
@@ -552,13 +553,23 @@ private fun OnlineMatchScreen(
             Text("matchId: ${it.matchId}", style = MaterialTheme.typography.labelSmall)
             Text("status ${viewState.matchState.status.name} / disc ${viewState.localDisc}", style = MaterialTheme.typography.labelSmall)
         }
-        ScoreHeader(viewState.game, viewState.matchState.status.userLabel(context))
+        ScoreHeader(
+            viewState.game,
+            viewState.matchState.status.userLabel(context, viewState.terminalFinishReason),
+        )
         Text(
             "${appString(R.string.black)} ${formatClock(viewState.blackRemainingMillis)} / ${appString(R.string.white)} ${formatClock(viewState.whiteRemainingMillis)}",
             modifier = Modifier.align(Alignment.CenterHorizontally),
         )
         OnlineOthelloBoard(viewState, controller, scope)
-        Text(localizeUserMessage(context, viewState.message).orEmpty(), modifier = Modifier.align(Alignment.CenterHorizontally))
+        viewState.message
+            .takeUnless { it == viewState.finishResult?.serverStatus }
+            ?.let { message ->
+                Text(
+                    localizeUserMessage(context, message).orEmpty(),
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                )
+            }
         diagnostics?.let {
             Text(
                 "ICE ${it.iceState} / Peer ${it.peerConnectionState} / DC ${it.dataChannelState} / ack ${it.localStartAcked}/${it.bothStartAcked}",
@@ -566,7 +577,7 @@ private fun OnlineMatchScreen(
             )
             Text("ply ${viewState.game.ply} / hash ${viewState.game.stateHash()}", style = MaterialTheme.typography.labelSmall)
         }
-        viewState.finishResult?.takeIf { it.serverStatus == "CONFIRMED" }?.let { result ->
+        viewState.finishResult?.let { result ->
             val before = result.ratingBefore
             val after = result.ratingAfter
             val delta = result.ratingDelta
@@ -574,9 +585,9 @@ private fun OnlineMatchScreen(
             val peak = result.peakRating
             if (before != null && after != null && delta != null) {
                 Text(appString(R.string.rating_change, before, after, delta.withSign()))
-            }
-            if (current != null && peak != null) {
-                Text(appString(R.string.current_peak, current, peak))
+                if (current != null && peak != null) {
+                    Text(appString(R.string.current_peak, current, peak))
+                }
             }
         }
         OutlinedButton(
@@ -634,7 +645,10 @@ private fun OnlineMatchScreen(
     }
 }
 
-private fun com.example.othello.match.MatchStatus.userLabel(context: android.content.Context? = null): String = when (this) {
+private fun com.example.othello.match.MatchStatus.userLabel(
+    context: android.content.Context? = null,
+    finishReason: FinishReason? = null,
+): String = when (this) {
     com.example.othello.match.MatchStatus.P2P_CONNECTED -> context?.getString(R.string.match_status_connecting) ?: "接続確認中"
     com.example.othello.match.MatchStatus.PLAYING -> context?.getString(R.string.match_status_playing) ?: "対局中"
     com.example.othello.match.MatchStatus.MOVE_CONFIRMING -> context?.getString(R.string.match_status_move_confirming) ?: "着手確認待ち"
@@ -644,7 +658,12 @@ private fun com.example.othello.match.MatchStatus.userLabel(context: android.con
     com.example.othello.match.MatchStatus.PENDING_RESULT -> context?.getString(R.string.match_status_waiting_result) ?: "相手の結果待ち"
     com.example.othello.match.MatchStatus.CONFIRMED -> context?.getString(R.string.match_status_confirmed) ?: "結果確定"
     com.example.othello.match.MatchStatus.DISPUTED -> context?.getString(R.string.match_status_disputed) ?: "結果不一致"
-    com.example.othello.match.MatchStatus.FORFEIT -> context?.getString(R.string.match_status_forfeit) ?: "不戦による勝敗確定"
+    com.example.othello.match.MatchStatus.FORFEIT -> when (finishReason) {
+        FinishReason.RESIGNATION -> context?.getString(R.string.match_status_forfeit_resignation) ?: "投了により勝敗確定"
+        FinishReason.TIMEOUT -> context?.getString(R.string.match_status_forfeit_timeout) ?: "時間切れにより勝敗確定"
+        FinishReason.DISCONNECT -> context?.getString(R.string.match_status_forfeit_disconnect) ?: "切断により勝敗確定"
+        else -> context?.getString(R.string.match_status_forfeit) ?: "勝敗確定"
+    }
     com.example.othello.match.MatchStatus.EXPIRED -> context?.getString(R.string.match_status_expired) ?: "無効対局として終了"
     com.example.othello.match.MatchStatus.ABANDONED -> context?.getString(R.string.match_status_abandoned) ?: "対局をキャンセルしました"
     com.example.othello.match.MatchStatus.DISCONNECTED -> context?.getString(R.string.match_status_disconnected) ?: "切断"

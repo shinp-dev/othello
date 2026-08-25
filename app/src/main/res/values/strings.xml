@@ -323,7 +323,10 @@
     <string name="match_status_confirmed">Result confirmed</string>
     <string name="match_status_disputed">Result disputed</string>
     <string name="match_status_disconnected">Disconnected</string>
-    <string name="match_status_forfeit">Win/loss confirmed by forfeit</string>
+    <string name="match_status_forfeit">Result confirmed</string>
+    <string name="match_status_forfeit_resignation">Result confirmed by resignation</string>
+    <string name="match_status_forfeit_timeout">Result confirmed by timeout</string>
+    <string name="match_status_forfeit_disconnect">Result confirmed by disconnect</string>
     <string name="match_status_expired">Match ended without a result</string>
     <string name="match_status_abandoned">Match cancelled</string>
     <string name="retry_result">Retry result submission</string>

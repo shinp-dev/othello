@@ -325,7 +325,10 @@
     <string name="match_status_confirmed">結果確定</string>
     <string name="match_status_disputed">結果不一致</string>
     <string name="match_status_disconnected">切断</string>
-    <string name="match_status_forfeit">不戦による勝敗確定</string>
+    <string name="match_status_forfeit">勝敗確定</string>
+    <string name="match_status_forfeit_resignation">投了により勝敗確定</string>
+    <string name="match_status_forfeit_timeout">時間切れにより勝敗確定</string>
+    <string name="match_status_forfeit_disconnect">切断により勝敗確定</string>
     <string name="match_status_expired">無効対局として終了</string>
     <string name="match_status_abandoned">対局をキャンセルしました</string>
     <string name="retry_result">結果送信を再試行</string>
