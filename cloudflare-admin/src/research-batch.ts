@@ -69,6 +69,43 @@ export interface ResearchBatchSummary {
   generationId: number | null;
 }
 
+export type ResearchBatchStage =
+  | "configuration"
+  | "db_connect"
+  | "claim_validation"
+  | "complete_validation"
+  | "claim_aggregation"
+  | "get_aggregation_sources"
+  | "append_aggregation"
+  | "checkpoint_aggregation"
+  | "publish_aggregation"
+  | "fail_aggregation"
+  | "db_disconnect";
+
+export class ResearchBatchStageError extends Error {
+  constructor(
+    readonly stage: ResearchBatchStage,
+    readonly originalError: unknown,
+  ) {
+    super(`research batch failed at ${stage}`);
+    this.name = "ResearchBatchStageError";
+  }
+}
+
+interface ResearchBatchFailureDiagnostic {
+  event: "research_batch_failed";
+  stage: ResearchBatchStage | "unknown";
+  errorType: string;
+  postgresCode?: string;
+  nodeCode?: string;
+  severity?: string;
+  routine?: string;
+  constraint?: string;
+  schema?: string;
+  table?: string;
+  column?: string;
+}
+
 export const DEFAULT_RESEARCH_BATCH_OPTIONS: ResearchBatchOptions = {
   validationMaxGames: 200,
   validationBatchSize: 25,
@@ -85,9 +122,12 @@ export async function runResearchBatch(
   validateOptions(options);
   let validated = 0;
   while (validated < options.validationMaxGames) {
-    const rows = await store.claimValidation(
-      Math.min(options.validationBatchSize, options.validationMaxGames - validated),
-      options.validationLeaseSeconds,
+    const rows = await atStage(
+      "claim_validation",
+      () => store.claimValidation(
+        Math.min(options.validationBatchSize, options.validationMaxGames - validated),
+        options.validationLeaseSeconds,
+      ),
     );
     if (rows.length === 0) break;
     for (const row of rows) {
@@ -103,24 +143,30 @@ export async function runResearchBatch(
       } catch {
         result = { accepted: false, rejectionCode: "VALIDATOR_INTERNAL_ERROR" };
       }
-      await store.completeValidation(row, result);
+      await atStage("complete_validation", () => store.completeValidation(row, result));
       validated += 1;
     }
   }
 
-  const claim = await store.claimAggregation(options.aggregationLeaseSeconds);
+  const claim = await atStage(
+    "claim_aggregation",
+    () => store.claimAggregation(options.aggregationLeaseSeconds),
+  );
   if (claim === null) {
     return { validated, aggregationStatus: "IDLE", aggregationProcessed: 0, generationId: null };
   }
 
   let aggregationProcessed = 0;
   while (aggregationProcessed < options.aggregationMaxGames) {
-    const sources = await store.getAggregationSources(
-      claim,
-      Math.min(options.aggregationPageSize, options.aggregationMaxGames - aggregationProcessed),
+    const sources = await atStage(
+      "get_aggregation_sources",
+      () => store.getAggregationSources(
+        claim,
+        Math.min(options.aggregationPageSize, options.aggregationMaxGames - aggregationProcessed),
+      ),
     );
     if (sources.length === 0) {
-      await store.publishAggregation(claim);
+      await atStage("publish_aggregation", () => store.publishAggregation(claim));
       return {
         validated,
         aggregationStatus: "PUBLISHED",
@@ -145,7 +191,10 @@ export async function runResearchBatch(
           rulesetVersion: source.ruleset_version,
         }, contributors);
       } catch {
-        await store.failAggregation(claim, "ACCEPTED_SOURCE_INVALID");
+        await atStage(
+          "fail_aggregation",
+          () => store.failAggregation(claim, "ACCEPTED_SOURCE_INVALID"),
+        );
         return {
           validated,
           aggregationStatus: "FAILED",
@@ -153,12 +202,15 @@ export async function runResearchBatch(
           generationId: claim.generation_id,
         };
       }
-      await store.appendAggregationGame(claim, source.research_game_id, decisions);
+      await atStage(
+        "append_aggregation",
+        () => store.appendAggregationGame(claim, source.research_game_id, decisions),
+      );
       aggregationProcessed += 1;
     }
   }
 
-  await store.checkpointAggregation(claim);
+  await atStage("checkpoint_aggregation", () => store.checkpointAggregation(claim));
   return {
     validated,
     aggregationStatus: "CHECKPOINTED",
@@ -281,11 +333,82 @@ function optionFromEnvironment(name: string, fallback: number): number {
   return value;
 }
 
+async function atStage<T>(stage: ResearchBatchStage, action: () => Promise<T>): Promise<T> {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof ResearchBatchStageError) throw error;
+    throw new ResearchBatchStageError(stage, error);
+  }
+}
+
+function safeErrorRecord(error: unknown): Record<string, unknown> | null {
+  return typeof error === "object" && error !== null ? error as Record<string, unknown> : null;
+}
+
+function safeErrorType(error: unknown): string {
+  const fallback = typeof error === "object" ? "UnknownError" : typeof error;
+  try {
+    const name = error instanceof Error ? error.constructor.name : undefined;
+    return typeof name === "string" && /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(name) ? name : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function safeField(
+  error: Record<string, unknown> | null,
+  name: string,
+  pattern: RegExp,
+): string | undefined {
+  try {
+    const value = error?.[name];
+    return typeof value === "string" && pattern.test(value) ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const SAFE_NODE_ERROR_CODES = new Set([
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "ENOTFOUND",
+  "EPIPE",
+  "ETIMEDOUT",
+]);
+
+export function researchBatchFailureDiagnostic(error: unknown): ResearchBatchFailureDiagnostic {
+  const stageError = error instanceof ResearchBatchStageError ? error : null;
+  const originalError = stageError?.originalError ?? error;
+  const record = safeErrorRecord(originalError);
+  const code = safeField(record, "code", /^[A-Z0-9]{1,16}$/);
+  const diagnostic: ResearchBatchFailureDiagnostic = {
+    event: "research_batch_failed",
+    stage: stageError?.stage ?? "unknown",
+    errorType: safeErrorType(originalError),
+  };
+  if (code && /^[A-Z0-9]{5}$/.test(code)) diagnostic.postgresCode = code;
+  else if (code && SAFE_NODE_ERROR_CODES.has(code)) diagnostic.nodeCode = code;
+
+  const severity = safeField(record, "severity", /^(?:ERROR|FATAL|PANIC|WARNING|NOTICE|DEBUG|INFO|LOG)$/);
+  if (severity) diagnostic.severity = severity;
+  const databaseIdentifier = /^[A-Za-z_][A-Za-z0-9_$.-]{0,127}$/;
+  for (const name of ["routine", "constraint", "schema", "table", "column"] as const) {
+    const value = safeField(record, name, databaseIdentifier);
+    if (value) diagnostic[name] = value;
+  }
+  return diagnostic;
+}
+
 async function main(): Promise<void> {
   const connectionString = process.env.RESEARCH_BATCH_DATABASE_URL;
-  if (!connectionString) throw new Error("RESEARCH_BATCH_DATABASE_URL is required");
+  if (!connectionString) {
+    throw new ResearchBatchStageError("configuration", new Error("missing database URL"));
+  }
   const client = new Client({ connectionString, application_name: "chanriba-research-batch" });
-  await client.connect();
+  await atStage("db_connect", () => client.connect());
   try {
     const summary = await runResearchBatch(new PostgresResearchBatchStore(client), {
       ...DEFAULT_RESEARCH_BATCH_OPTIONS,
@@ -301,16 +424,13 @@ async function main(): Promise<void> {
     console.log(JSON.stringify(summary));
     if (summary.aggregationStatus === "FAILED") process.exitCode = 1;
   } finally {
-    await client.end();
+    await atStage("db_disconnect", () => client.end());
   }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch(error => {
-    const message = error instanceof Error && /^[A-Za-z0-9 _.:/-]{1,200}$/.test(error.message)
-      ? error.message
-      : "internal error";
-    console.error(`research batch failed: ${message}`);
+    console.error(JSON.stringify(researchBatchFailureDiagnostic(error)));
     process.exitCode = 1;
   });
 }

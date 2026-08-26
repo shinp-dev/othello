@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { runResearchBatch } from "../dist-batch/research-batch.js";
+import {
+  ResearchBatchStageError,
+  researchBatchFailureDiagnostic,
+  runResearchBatch,
+} from "../dist-batch/research-batch.js";
 
 const properties = Object.fromEntries(
   readFileSync(new URL("../../core/game/src/test/resources/research-validator-v1.properties", import.meta.url), "utf8")
@@ -129,7 +133,12 @@ test("bounded run checkpoints backlog and a later run resumes without duplicates
 test("failed Actions run leaves the generation resumable after lease recovery", async () => {
   const store = new FakeStore({ aggregation: [normalSource(1)] });
   store.throwOnAppend = true;
-  await assert.rejects(runResearchBatch(store, options), /transient database failure/);
+  await assert.rejects(runResearchBatch(store, options), error => {
+    assert.equal(error instanceof ResearchBatchStageError, true);
+    assert.equal(error.stage, "append_aggregation");
+    assert.equal(error.originalError?.message, "transient database failure");
+    return true;
+  });
   assert.equal(store.failed, null);
   assert.equal(store.published, false);
   assert.equal(store.processed.size, 0);
@@ -137,6 +146,44 @@ test("failed Actions run leaves the generation resumable after lease recovery", 
   const resumed = await runResearchBatch(store, options);
   assert.equal(resumed.aggregationStatus, "PUBLISHED");
   assert.equal(store.processed.size, 1);
+});
+
+test("public failure diagnostic allow-lists structure and drops sensitive values", () => {
+  class DatabaseError extends Error {}
+  const databaseError = Object.assign(
+    new DatabaseError("password=secret canonical_moves=d3c4 user@example.com"),
+    {
+      code: "42501",
+      severity: "ERROR",
+      routine: "aclcheck_error",
+      schema: "research_private",
+      table: "games",
+      column: "validation_status",
+      constraint: "games_validation_status_check",
+      detail: "match id 00000000-0000-0000-0000-000000000001",
+      connectionString: "postgresql://research_batch:secret@example.invalid/postgres",
+    },
+  );
+
+  const diagnostic = researchBatchFailureDiagnostic(
+    new ResearchBatchStageError("claim_validation", databaseError),
+  );
+  assert.deepEqual(diagnostic, {
+    event: "research_batch_failed",
+    stage: "claim_validation",
+    errorType: "DatabaseError",
+    postgresCode: "42501",
+    severity: "ERROR",
+    routine: "aclcheck_error",
+    constraint: "games_validation_status_check",
+    schema: "research_private",
+    table: "games",
+    column: "validation_status",
+  });
+  const publicLog = JSON.stringify(diagnostic);
+  for (const forbidden of ["secret", "canonical_moves", "@", "00000000"]) {
+    assert.equal(publicLog.includes(forbidden), false);
+  }
 });
 
 test("deterministically invalid ACCEPTED source fails only the new generation", async () => {
