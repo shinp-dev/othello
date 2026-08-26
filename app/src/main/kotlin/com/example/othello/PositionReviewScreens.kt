@@ -34,6 +34,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -155,8 +156,9 @@ internal fun PositionReviewInputScreen(
     onStart: (Board, Disc, String) -> Unit,
 ) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
     val defaultTitle = remember { defaultPositionReviewTitle(context) }
-    val llmPrompt = if (context.resources.configuration.locales[0].language == "ja") {
+    val llmPrompt = if (configuration.locales[0].language == "ja") {
         POSITION_IMPORT_PROMPT
     } else {
         POSITION_IMPORT_PROMPT_ENGLISH
