@@ -24,6 +24,10 @@ class PositionReviewTest {
         assertTrue(POSITION_IMPORT_PROMPT.contains("手番を推測しない"))
         assertTrue(POSITION_IMPORT_PROMPT.contains("JSONだけ"))
         assertFalse(POSITION_IMPORT_PROMPT.contains("\"turn\""))
+        assertTrue(POSITION_IMPORT_PROMPT_ENGLISH.contains("top-left square"))
+        assertTrue(POSITION_IMPORT_PROMPT_ENGLISH.contains("Do not infer which side is to move"))
+        assertTrue(POSITION_IMPORT_PROMPT_ENGLISH.contains("Return only JSON"))
+        assertFalse(POSITION_IMPORT_PROMPT_ENGLISH.contains("\"turn\""))
     }
 
     @Test

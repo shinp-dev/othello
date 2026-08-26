@@ -30,6 +30,20 @@ val POSITION_IMPORT_PROMPT = """
     }
 """.trimIndent()
 
+val POSITION_IMPORT_PROMPT_ENGLISH = """
+    Read the attached Othello board image.
+    Use a1 for the top-left square and h8 for the bottom-right square, and list the black and white disc coordinates in lowercase.
+    Count the black and white discs as well. Do not infer which side is to move from the image.
+    Do not add explanatory text or Markdown fences. Return only JSON in this format:
+    {
+      "format": "chanriva-position-v1",
+      "black": ["d4", "e5"],
+      "white": ["e4", "d5"],
+      "blackCount": 2,
+      "whiteCount": 2
+    }
+""".trimIndent()
+
 enum class PositionImportError {
     EMPTY_INPUT,
     INVALID_JSON,

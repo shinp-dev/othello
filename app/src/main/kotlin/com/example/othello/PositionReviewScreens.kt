@@ -51,6 +51,7 @@ import com.example.othello.game.Disc
 import com.example.othello.game.Position
 import com.example.othello.review.AnalysisRequestGuard
 import com.example.othello.review.POSITION_IMPORT_PROMPT
+import com.example.othello.review.POSITION_IMPORT_PROMPT_ENGLISH
 import com.example.othello.review.PositionBoardEditor
 import com.example.othello.review.PositionImportError
 import com.example.othello.review.PositionImportParser
@@ -155,6 +156,11 @@ internal fun PositionReviewInputScreen(
 ) {
     val context = LocalContext.current
     val defaultTitle = remember { defaultPositionReviewTitle(context) }
+    val llmPrompt = if (context.resources.configuration.locales[0].language == "ja") {
+        POSITION_IMPORT_PROMPT
+    } else {
+        POSITION_IMPORT_PROMPT_ENGLISH
+    }
     var jsonText by remember { mutableStateOf("") }
     var board by remember { mutableStateOf<Board?>(null) }
     var selectedSide by remember { mutableStateOf<Disc?>(null) }
@@ -181,7 +187,7 @@ internal fun PositionReviewInputScreen(
         OutlinedButton(
             onClick = {
                 val clipboard = context.getSystemService(ClipboardManager::class.java)
-                clipboard?.setPrimaryClip(ClipData.newPlainText("Chanriva position prompt", POSITION_IMPORT_PROMPT))
+                clipboard?.setPrimaryClip(ClipData.newPlainText("Chanriva position prompt", llmPrompt))
                 message = context.getString(R.string.llm_prompt_copied)
                 error = null
             },
