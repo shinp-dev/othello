@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -21,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -55,16 +57,23 @@ fun ChanrivaNavigationRow(
     onClick: (() -> Unit)?,
     supportingText: String? = null,
     trailingLabel: String? = null,
+    emphasized: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
     val enabled = onClick != null
     Column {
         Row(
-            Modifier
+            modifier
                 .fillMaxWidth()
                 .heightIn(min = 56.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(
+                    if (emphasized) ChanrivaColors.accentSoft.copy(alpha = 0.48f)
+                    else Color.Transparent,
+                )
                 .semantics { role = Role.Button }
                 .clickable(enabled = enabled) { onClick?.invoke() }
-                .padding(vertical = 14.dp),
+                .padding(horizontal = 14.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -72,7 +81,11 @@ fun ChanrivaNavigationRow(
                 Text(
                     title,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = if (enabled) MaterialTheme.colorScheme.onSurface else ChanrivaColors.textDisabled,
+                    color = when {
+                        !enabled -> ChanrivaColors.textDisabled
+                        emphasized -> ChanrivaColors.accent
+                        else -> MaterialTheme.colorScheme.onSurface
+                    },
                 )
                 supportingText?.let {
                     Text(

@@ -45,6 +45,7 @@ import com.example.othello.analysis.edax.EdaxSettingsStore
 import com.example.othello.analysis.edax.ProductionAnalysisEngine
 import com.example.othello.designsystem.ChanrivaColors
 import com.example.othello.designsystem.ChanrivaDangerButton
+import com.example.othello.designsystem.ChanrivaNavigationRow
 import com.example.othello.designsystem.ChanrivaScreenHeader
 import com.example.othello.designsystem.ChanrivaSpacing
 import com.example.othello.game.Board
@@ -94,9 +95,12 @@ internal fun PositionReviewHomeScreen(
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
     ) {
         ChanrivaScreenHeader(appString(R.string.position_review), onBack, backLabel = appString(R.string.back))
-        Button(onClick = onNew, modifier = Modifier.fillMaxWidth()) {
-            Text(appString(R.string.new_position_review))
-        }
+        ChanrivaNavigationRow(
+            title = appString(R.string.new_position_review),
+            supportingText = appString(R.string.position_review_supporting),
+            onClick = onNew,
+            emphasized = true,
+        )
         Text(appString(R.string.saved_position_reviews), style = MaterialTheme.typography.titleMedium)
         when {
             error != null -> Text(requireNotNull(error), color = MaterialTheme.colorScheme.error)

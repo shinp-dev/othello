@@ -788,12 +788,12 @@ private fun PlayScreen(
         horizontalAlignment = Alignment.Start,
     ) {
         ChanrivaScreenHeader(appString(R.string.play))
-        Text(appString(R.string.online_match), style = MaterialTheme.typography.titleMedium)
-        Button(
-            onClick = onOnlineStart,
-            enabled = state.status !in setOf(MatchmakingStatus.WAITING, MatchmakingStatus.SIGNALING),
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(appString(R.string.play_online)) }
+        ChanrivaNavigationRow(
+            title = appString(R.string.play_online),
+            supportingText = appString(R.string.play_online_supporting),
+            onClick = if (state.status !in setOf(MatchmakingStatus.WAITING, MatchmakingStatus.SIGNALING)) onOnlineStart else null,
+            emphasized = true,
+        )
         when (state.status) {
             MatchmakingStatus.WAITING -> {
                 Text(appString(R.string.opponent_waiting))
@@ -803,12 +803,17 @@ private fun PlayScreen(
             MatchmakingStatus.FAILED -> Text(localizeUserMessage(context, state.error) ?: appString(R.string.matchmaking_failed), color = MaterialTheme.colorScheme.error)
             else -> Unit
         }
-        Text(appString(R.string.device_match), style = MaterialTheme.typography.titleMedium)
-        Button(
+        ChanrivaNavigationRow(
+            title = appString(R.string.play_against_ai),
+            supportingText = appString(R.string.play_against_ai_supporting),
             onClick = onLocalAiStart,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(appString(R.string.play_against_ai)) }
-        ChanrivaNavigationRow(appString(R.string.two_player_match), onLocalHumanStart)
+            emphasized = true,
+        )
+        ChanrivaNavigationRow(
+            title = appString(R.string.two_player_match),
+            supportingText = appString(R.string.two_player_match_supporting),
+            onClick = onLocalHumanStart,
+        )
         if (failedLocalRecordSaves.isNotEmpty()) {
             Card(Modifier.fillMaxWidth()) {
                 Column(
@@ -983,12 +988,17 @@ private fun LocalAiSetupScreen(
                 color = MaterialTheme.colorScheme.error,
             )
             if (status.evaluationData == null) {
-                OutlinedButton(onClick = onOpenCommonSettings, modifier = Modifier.fillMaxWidth()) {
-                    Text(appString(R.string.set_evaluation_data))
-                }
+                ChanrivaNavigationRow(
+                    title = appString(R.string.set_evaluation_data),
+                    onClick = onOpenCommonSettings,
+                )
             }
         }
-        Button(onClick = onStart, enabled = ready, modifier = Modifier.fillMaxWidth()) { Text(appString(R.string.start_match)) }
+        ChanrivaNavigationRow(
+            title = appString(R.string.start_match),
+            onClick = if (ready) onStart else null,
+            emphasized = true,
+        )
     }
 }
 

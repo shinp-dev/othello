@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.othello.designsystem.ChanrivaSpacing
+import com.example.othello.designsystem.ChanrivaNavigationRow
 import com.example.othello.research.ResearchConsent
 import com.example.othello.research.ResearchParticipationRepository
 import com.example.othello.research.ResearchParticipationStatus
@@ -93,19 +94,16 @@ internal fun ResearchSettingsScreen(
         }
 
         if (current?.participationOn == true) {
-            OutlinedButton(
-                onClick = { update(false) },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(appString(R.string.research_off)) }
+            ChanrivaNavigationRow(
+                title = appString(R.string.research_off),
+                onClick = if (busy) null else ({ update(false) }),
+            )
         } else {
-            Button(
-                onClick = { showConsentDialog = true },
-                enabled = !busy && appHasCurrentConsent && current != null,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(appString(if (current?.reconsentRequired == true) R.string.reconsent_on else R.string.research_on))
-            }
+            ChanrivaNavigationRow(
+                title = appString(if (current?.reconsentRequired == true) R.string.reconsent_on else R.string.research_on),
+                onClick = if (!busy && appHasCurrentConsent && current != null) ({ showConsentDialog = true }) else null,
+                emphasized = true,
+            )
         }
 
         if (current?.participationOn == true) {

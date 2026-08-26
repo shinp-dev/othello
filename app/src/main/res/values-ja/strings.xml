@@ -37,6 +37,9 @@
     <string name="local_match">ローカル対局</string>
     <string name="two_player_match">ふたりで対局</string>
     <string name="play_against_ai">AIと対局</string>
+    <string name="play_online_supporting">オンラインで対戦相手と対局します</string>
+    <string name="play_against_ai_supporting">端末内AIと対局します</string>
+    <string name="two_player_match_supporting">この端末でふたりで対局します</string>
     <string name="start_match">対局開始</string>
     <string name="new_match">新しい対局</string>
     <string name="cancel">キャンセル</string>

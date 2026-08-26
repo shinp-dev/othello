@@ -475,32 +475,37 @@ internal fun CommonSettingsScreen(
     ) {
         SettingsHeader(appString(R.string.common_settings), onBack, enabled = !busy)
         AnalysisFileStatus(appString(R.string.analysis_data), status.evaluationData, required = true)
-        Button(
-            onClick = ::downloadOfficialEvaluation,
-            enabled = status.nativeAvailable && !busy,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(appString(R.string.auto_setup_eval)) }
-        OutlinedButton(
-            onClick = { evaluationPicker.launch(arrayOf("application/octet-stream", "*/*")) },
-            enabled = status.nativeAvailable && !busy,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(appString(R.string.choose_eval)) }
+        ChanrivaNavigationRow(
+            title = appString(R.string.auto_setup_eval),
+            supportingText = appString(R.string.analysis_required),
+            onClick = if (status.nativeAvailable && !busy) ::downloadOfficialEvaluation else null,
+            emphasized = true,
+        )
+        ChanrivaNavigationRow(
+            title = appString(R.string.choose_eval),
+            onClick = if (status.nativeAvailable && !busy) {
+                { evaluationPicker.launch(arrayOf("application/octet-stream", "*/*")) }
+            } else null,
+        )
         if (status.evaluationData != null) {
-            TextButton(onClick = { deleteEvaluationConfirmation = true }, enabled = !busy) {
-                Text(appString(R.string.delete_eval))
-            }
+            ChanrivaNavigationRow(
+                title = appString(R.string.delete_eval),
+                onClick = if (!busy) ({ deleteEvaluationConfirmation = true }) else null,
+            )
         }
 
         AnalysisFileStatus(appString(R.string.opening_book), status.openingBook, required = false)
-        OutlinedButton(
-            onClick = { bookPicker.launch(arrayOf("application/octet-stream", "*/*")) },
-            enabled = status.nativeAvailable && !busy,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(appString(R.string.choose_book)) }
+        ChanrivaNavigationRow(
+            title = appString(R.string.choose_book),
+            onClick = if (status.nativeAvailable && !busy) {
+                { bookPicker.launch(arrayOf("application/octet-stream", "*/*")) }
+            } else null,
+        )
         if (status.openingBook != null) {
-            TextButton(onClick = { deleteBookConfirmation = true }, enabled = !busy) {
-                Text(appString(R.string.delete_book))
-            }
+            ChanrivaNavigationRow(
+                title = appString(R.string.delete_book),
+                onClick = if (!busy) ({ deleteBookConfirmation = true }) else null,
+            )
         }
 
         if (busy) {

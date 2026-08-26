@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -110,9 +109,10 @@ internal fun AccountScreen(
         }
 
         ChanrivaNavigationRow(appString(R.string.account_deletion), onAccountDeletion)
-        OutlinedButton(onClick = onLogout, enabled = !logoutInProgress, modifier = Modifier.fillMaxWidth()) {
-            Text(appString(if (logoutInProgress) R.string.logout_in_progress else R.string.logout))
-        }
+        ChanrivaNavigationRow(
+            title = appString(if (logoutInProgress) R.string.logout_in_progress else R.string.logout),
+            onClick = if (logoutInProgress) null else onLogout,
+        )
         logoutError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }
 }

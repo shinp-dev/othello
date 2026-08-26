@@ -26,15 +26,18 @@ class GuiInformationArchitectureContractTest {
     }
 
     @Test
-    fun playScreenMakesAiASecondaryPrimaryActionAndKeepsTwoPlayerAsRow() {
+    fun playScreenUsesEmphasizedRowsAndKeepsTwoPlayerAsNormalRow() {
         val play = main.substringAfter("private fun PlayScreen(").substringBefore("internal fun opponentRatingLabel")
-        val aiButton = "Button(\n            onClick = onLocalAiStart"
-        assertTrue(play.indexOf("Text(appString(R.string.online_match)") < play.indexOf(aiButton))
-        assertTrue(play.indexOf("Text(appString(R.string.device_match)") < play.indexOf(aiButton))
-        assertTrue(play.indexOf(aiButton) < play.indexOf("R.string.two_player_match"))
+        val onlineRow = "title = appString(R.string.play_online)"
+        val aiRow = "title = appString(R.string.play_against_ai)"
+        assertTrue(play.contains("emphasized = true"))
+        assertTrue(play.indexOf(onlineRow) < play.indexOf(aiRow))
+        assertTrue(play.indexOf(aiRow) < play.indexOf("R.string.two_player_match"))
+        assertFalse(play.contains("Text(appString(R.string.online_match)"))
+        assertFalse(play.contains("Text(appString(R.string.device_match)"))
         assertTrue(play.contains("onClick = onLocalAiStart"))
         assertTrue(play.contains("R.string.play_against_ai"))
-        assertTrue(play.contains("ChanrivaNavigationRow(appString(R.string.two_player_match), onLocalHumanStart)"))
+        assertTrue(play.contains("title = appString(R.string.two_player_match)"))
     }
 
     @Test
@@ -84,7 +87,8 @@ class GuiInformationArchitectureContractTest {
     @Test
     fun positionReviewIsPrimaryAndIsolatedFromGameRecordsAndResearch() {
         val study = topLevel.substringAfter("internal fun StudyScreen(").substringBefore("internal fun MoreScreen(")
-        assertTrue(study.indexOf("Button(onClick = onPositionReview") < study.indexOf("R.string.online_records"))
+        assertTrue(study.contains("emphasized = true"))
+        assertTrue(study.indexOf("R.string.position_review") < study.indexOf("R.string.online_records"))
         assertTrue(study.indexOf("R.string.online_records") < study.indexOf("R.string.offline_records"))
         assertTrue(positionReview.contains("PositionReviewStore"))
         assertTrue(positionReview.contains("PositionReviewSession"))

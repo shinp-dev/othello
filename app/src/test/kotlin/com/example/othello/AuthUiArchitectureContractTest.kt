@@ -65,7 +65,7 @@ class AuthUiArchitectureContractTest {
         assertFalse("ログアウト" in playBody)
         assertFalse("レート" in playBody)
         assertFalse("端末内最高" in playBody)
-        assertTrue("R.string.online_match" in playBody)
+        assertTrue("R.string.play_online" in playBody)
         assertTrue("R.string.two_player_match" in playBody)
         assertTrue("R.string.play_against_ai" in playBody)
     }

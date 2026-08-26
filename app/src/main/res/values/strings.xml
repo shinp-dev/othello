@@ -37,6 +37,9 @@
     <string name="local_match">Local match</string>
     <string name="two_player_match">Two-player game</string>
     <string name="play_against_ai">Play against AI</string>
+    <string name="play_online_supporting">Play against an opponent online</string>
+    <string name="play_against_ai_supporting">Play against the AI on this device</string>
+    <string name="two_player_match_supporting">Play with two people on this device</string>
     <string name="start_match">Start match</string>
     <string name="new_match">New match</string>
     <string name="cancel">Cancel</string>
