@@ -25,6 +25,25 @@ data class LocalMatchViewState(
     val error: String? = null,
     val completedRecord: LocalGameRecord? = null,
     val finishReason: FinishReason? = null,
+    val canUndo: Boolean = false,
+    val undoUsed: Boolean = false,
+)
+
+data class LocalMatchUndoResult(
+    val invalidatedRecord: LocalGameRecord?,
+)
+
+/** Identifies one AI search against one exact local-match position. */
+class LocalAiTurnRequest internal constructor(
+    internal val requestId: Long,
+    internal val positionGeneration: Long,
+    val position: GameState,
+)
+
+private data class MoveCheckpoint(
+    val game: GameState,
+    val moves: List<Position?>,
+    val mover: Disc,
 )
 
 /** Local-only rules coordinator. It has no transport or server dependencies. */
@@ -47,6 +66,10 @@ class LocalMatchController(
     )
     private val listeners = mutableSetOf<(LocalMatchViewState) -> Unit>()
     private val startedAt = nowMillis()
+    private val moveCheckpoints = mutableListOf<MoveCheckpoint>()
+    private var positionGeneration = 0L
+    private var nextAiRequestId = 0L
+    private var activeAiRequest: LocalAiTurnRequest? = null
 
     val viewState: LocalMatchViewState get() = state
 
@@ -61,9 +84,42 @@ class LocalMatchController(
         return applyMove(position)
     }
 
-    fun playAiMove(position: Position): Boolean {
-        if (mode != LocalMatchMode.AI || state.game.status is GameStatus.Finished || state.game.currentPlayer != state.aiDisc) return false
+    fun beginAiTurn(): LocalAiTurnRequest? {
+        if (mode != LocalMatchMode.AI || state.game.status is GameStatus.Finished ||
+            state.finishReason != null || state.game.currentPlayer != state.aiDisc ||
+            state.game.legalMoves.isEmpty() || state.aiThinking || activeAiRequest != null
+        ) return null
+        val request = LocalAiTurnRequest(++nextAiRequestId, positionGeneration, state.game)
+        activeAiRequest = request
+        update { copy(aiThinking = true, error = null) }
+        return request
+    }
+
+    fun playAiMove(request: LocalAiTurnRequest, position: Position): Boolean {
+        if (!isCurrent(request) || position !in request.position.legalMoves) return false
+        activeAiRequest = null
         return applyMove(position)
+    }
+
+    fun showAiError(request: LocalAiTurnRequest, message: String): Boolean {
+        if (!isCurrent(request)) return false
+        activeAiRequest = null
+        update { copy(error = message, message = "AI cannot move", aiThinking = false) }
+        return true
+    }
+
+    fun finishAiTurn(request: LocalAiTurnRequest) {
+        if (!isCurrent(request)) return
+        activeAiRequest = null
+        update { copy(aiThinking = false) }
+    }
+
+    /** Invalidates a search even if its native cancellation completes too late. */
+    fun cancelAiTurn() {
+        if (activeAiRequest == null && !state.aiThinking) return
+        activeAiRequest = null
+        positionGeneration++
+        update { copy(aiThinking = false) }
     }
 
     fun passAiTurn(): Boolean {
@@ -72,25 +128,27 @@ class LocalMatchController(
         return true
     }
 
-    fun setAiThinking(thinking: Boolean) {
-        update { copy(aiThinking = thinking) }
-    }
-
-    fun showError(message: String) {
-        update { copy(error = message, message = "AI cannot move", aiThinking = false) }
-    }
-
     fun resign(resigningDisc: Disc = humanDisc ?: state.game.currentPlayer): LocalGameRecord? {
         if (state.game.status is GameStatus.Finished || state.finishReason != null) return null
+        invalidateAiRequest()
         val record = complete(
             result = resultFor(resigningDisc.opponent()),
             finishReason = FinishReason.RESIGNATION,
         )
-        update { copy(message = "${resigningDisc.name} resigned", finishReason = FinishReason.RESIGNATION, completedRecord = record) }
+        update {
+            copy(
+                message = "${resigningDisc.name} resigned",
+                finishReason = FinishReason.RESIGNATION,
+                completedRecord = record,
+                aiThinking = false,
+            )
+        }
         return record
     }
 
     fun reset() {
+        invalidateAiRequest()
+        moveCheckpoints.clear()
         state = LocalMatchViewState(
             mode = mode,
             humanDisc = humanDisc,
@@ -98,6 +156,31 @@ class LocalMatchController(
             message = "Black to move",
         )
         notifyListeners()
+    }
+
+    /**
+     * HUMAN mode restores one real move. AI mode restores the checkpoint before
+     * the human's latest real move and removes every later AI response.
+     */
+    fun undo(): LocalMatchUndoResult? {
+        val targetIndex = undoTargetIndex() ?: return null
+        val checkpoint = moveCheckpoints[targetIndex]
+        val invalidatedRecord = state.completedRecord
+        invalidateAiRequest()
+        moveCheckpoints.subList(targetIndex, moveCheckpoints.size).clear()
+        state = state.copy(
+            game = checkpoint.game,
+            moves = checkpoint.moves,
+            message = messageFor(checkpoint.game),
+            aiThinking = false,
+            error = null,
+            completedRecord = null,
+            finishReason = null,
+            canUndo = undoTargetIndex() != null,
+            undoUsed = state.undoUsed || mode == LocalMatchMode.AI,
+        )
+        notifyListeners()
+        return LocalMatchUndoResult(invalidatedRecord)
     }
 
     private fun canHumanAct(): Boolean = state.finishReason == null &&
@@ -108,6 +191,7 @@ class LocalMatchController(
     private fun applyMove(position: Position): Boolean {
         return when (val outcome = state.game.play(position)) {
             is MoveOutcome.Played -> {
+                moveCheckpoints += MoveCheckpoint(state.game, state.moves, state.game.currentPlayer)
                 resolveForcedPasses(outcome.state, state.moves + position)
                 true
             }
@@ -116,6 +200,7 @@ class LocalMatchController(
     }
 
     private fun resolveForcedPasses(game: GameState, moves: List<Position?>) {
+        invalidateAiRequest()
         val resolution = TurnResolver.resolveForcedPasses(game)
         val completeMoves = moves + List(resolution.forcedPasses) { null }
         if (resolution.state.status is GameStatus.Finished) {
@@ -129,6 +214,8 @@ class LocalMatchController(
                     completedRecord = record,
                     finishReason = FinishReason.NORMAL,
                     aiThinking = false,
+                    error = null,
+                    canUndo = undoTargetIndex() != null,
                 )
             }
         } else {
@@ -138,6 +225,10 @@ class LocalMatchController(
                     moves = completeMoves,
                     message = messageFor(resolution.state, resolution.forcedPasses),
                     aiThinking = false,
+                    error = null,
+                    completedRecord = null,
+                    finishReason = null,
+                    canUndo = undoTargetIndex() != null,
                 )
             }
         }
@@ -174,6 +265,23 @@ class LocalMatchController(
 
     private fun messageFor(game: GameState, forcedPasses: Int = 0): String =
         if (forcedPasses > 0) "Forced pass — ${game.currentPlayer.name} to move" else "${game.currentPlayer.name} to move"
+
+    private fun undoTargetIndex(): Int? = when (mode) {
+        LocalMatchMode.HUMAN -> moveCheckpoints.lastIndex.takeIf { it >= 0 }
+        LocalMatchMode.AI -> moveCheckpoints.indexOfLast { it.mover == humanDisc }.takeIf { it >= 0 }
+    }
+
+    private fun isCurrent(request: LocalAiTurnRequest): Boolean =
+        activeAiRequest === request &&
+            activeAiRequest?.requestId == request.requestId &&
+            request.positionGeneration == positionGeneration &&
+            request.position == state.game &&
+            state.aiThinking
+
+    private fun invalidateAiRequest() {
+        activeAiRequest = null
+        positionGeneration++
+    }
 
     private fun update(transform: LocalMatchViewState.() -> LocalMatchViewState) {
         state = state.transform()

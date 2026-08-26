@@ -694,7 +694,7 @@ private fun snapAnalysisTime(value: Float): Int {
 }
 
 @Composable
-private fun localizedAnalysisFileSize(sizeBytes: Long): String = if (sizeBytes < 1024L) {
+internal fun localizedAnalysisFileSize(sizeBytes: Long): String = if (sizeBytes < 1024L) {
     appString(R.string.file_size_under_kib, sizeBytes)
 } else {
     formatAnalysisFileSize(sizeBytes)

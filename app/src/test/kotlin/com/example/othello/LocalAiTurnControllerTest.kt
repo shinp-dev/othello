@@ -93,6 +93,28 @@ class LocalAiTurnControllerTest {
         assertEquals(1, match.viewState.moves.size)
     }
 
+    @Test
+    fun undoDuringNonCooperativeSearchCancelsAndRejectsLateAiMove() = runBlocking {
+        val match = LocalMatchController(LocalMatchMode.AI, Disc.BLACK)
+        val initial = match.viewState.game
+        assertTrue(match.play(initial.legalMoves.first()))
+        val engine = NonCooperativeEngine()
+        val controller = LocalAiTurnController(match, engine)
+        val search = async(start = CoroutineStart.DEFAULT) { controller.play(AiMoveSettings()) }
+        engine.started.await()
+
+        controller.cancelForUndo()
+        assertTrue(match.undo() != null)
+        engine.release.complete(Unit)
+
+        assertFalse(search.await())
+        assertEquals(1, engine.cancelCalls)
+        assertEquals(initial, match.viewState.game)
+        assertTrue(match.viewState.moves.isEmpty())
+        assertFalse(match.viewState.aiThinking)
+        assertTrue(match.viewState.undoUsed)
+    }
+
     private class FakeEngine : AiMoveEngine {
         var lastSettings: AiMoveSettings? = null
         var chosenMove: Position? = null
@@ -111,6 +133,22 @@ class LocalAiTurnControllerTest {
             started.complete(Unit)
             release.await()
             return AiMoveResult(position.legalMoves.first())
+        }
+    }
+
+    private class NonCooperativeEngine : AiMoveEngine {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var cancelCalls = 0
+
+        override suspend fun chooseBestMove(position: GameState, settings: AiMoveSettings): AiMoveResult {
+            started.complete(Unit)
+            release.await()
+            return AiMoveResult(position.legalMoves.first())
+        }
+
+        override fun cancel() {
+            cancelCalls++
         }
     }
 }

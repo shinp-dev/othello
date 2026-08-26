@@ -322,9 +322,17 @@
     <string name="online_resign_text">Resigning finalizes this match as a loss.</string>
     <string name="local_resign_text">This saves the match as a resignation in your local Game Records.</string>
     <string name="ai_thinking">AI is thinking…</string>
+    <string name="undo_move">Undo</string>
+    <string name="undo_unused">No undo</string>
+    <string name="undo_used">Undo used</string>
+    <string name="ai_match_condition_summary">AI Lv.%1$d · %2$dms · %3$s</string>
+    <string name="eval_short_label">Eval</string>
+    <string name="book_short_label">Book</string>
     <string name="local_record_saved">Local Game Record saved.</string>
     <string name="local_record_save_failed">Could not save the local Game Record.</string>
     <string name="local_record_saving">Saving local Game Record…</string>
+    <string name="local_record_operation_failed">Could not update %1$d local Game Record(s).</string>
+    <string name="retry_record_operation">Retry update</string>
     <string name="user_color">Your color</string>
     <string name="black_checked">✓ Black</string>
     <string name="white_checked">✓ White</string>

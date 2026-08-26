@@ -19,27 +19,34 @@ class LocalAiTurnController(
         if (match.viewState.game.legalMoves.isEmpty()) {
             return match.passAiTurn()
         }
-        match.setAiThinking(true)
+        val request = match.beginAiTurn() ?: return false
         return try {
-            val result = engine.chooseBestMove(match.viewState.game, settings)
+            val result = engine.chooseBestMove(request.position, settings)
             if (!result.available) {
-                match.showError(result.message ?: "Edax AI move is unavailable")
+                match.showAiError(request, result.message ?: "Edax AI move is unavailable")
                 false
             } else {
-                val move = result.move?.takeIf { it in match.viewState.game.legalMoves }
+                val move = result.move?.takeIf { it in request.position.legalMoves }
                 if (move == null) {
-                    match.showError("Edax returned no legal move")
+                    match.showAiError(request, "Edax returned no legal move")
                     false
-                } else match.playAiMove(move)
+                } else match.playAiMove(request, move)
             }
         } catch (cancelled: CancellationException) {
-            match.setAiThinking(false)
+            match.finishAiTurn(request)
             throw cancelled
         } catch (failure: Throwable) {
-            match.showError(failure.message ?: "AI move failed")
+            match.showAiError(request, failure.message ?: "AI move failed")
             false
         } finally {
-            if (match.viewState.aiThinking) match.setAiThinking(false)
+            match.finishAiTurn(request)
         }
     }
+
+    fun cancel() {
+        engine.cancel()
+        match.cancelAiTurn()
+    }
+
+    fun cancelForUndo() = cancel()
 }
