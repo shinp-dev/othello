@@ -99,14 +99,6 @@ internal fun ResearchSettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(appString(R.string.research_off)) }
         } else {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    checked = consentChecked,
-                    onCheckedChange = { consentChecked = it },
-                    enabled = !busy && appHasCurrentConsent,
-                )
-                Text(appString(R.string.confirm_consent))
-            }
             Button(
                 onClick = { showConsentDialog = true },
                 enabled = !busy && appHasCurrentConsent && current != null,

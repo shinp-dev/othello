@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -546,7 +547,11 @@ internal fun CommonSettingsScreen(
 }
 
 @Composable
-internal fun AboutScreen(onBack: () -> Unit, onLicenses: () -> Unit) {
+internal fun AboutScreen(
+    onBack: () -> Unit,
+    onPrivacy: () -> Unit,
+    onLicenses: () -> Unit,
+) {
     val uriHandler = LocalUriHandler.current
 
     Column(
@@ -561,15 +566,19 @@ internal fun AboutScreen(onBack: () -> Unit, onLicenses: () -> Unit) {
                 .padding(vertical = 28.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(appString(R.string.app_name), style = MaterialTheme.typography.labelLarge, color = ChanrivaColors.accent)
-            Text(appString(R.string.about_tagline), style = MaterialTheme.typography.displaySmall, color = ChanrivaColors.textPrimary)
+            Text(appString(R.string.about_tagline), style = MaterialTheme.typography.displaySmall, color = ChanrivaColors.accent)
             Spacer(Modifier.size(4.dp))
             Text(appString(R.string.about_copy), style = MaterialTheme.typography.bodyLarge, color = ChanrivaColors.textPrimary)
         }
-        Text(appString(R.string.edax_disclaimer))
-        ChanrivaNavigationRow(appString(R.string.edax_about), onClick = { uriHandler.openUri(EDAX_GUIDE_URL) }, trailingLabel = "Web")
         ChanrivaNavigationRow(appString(R.string.official_site), onClick = { uriHandler.openUri(CHANRIVA_SITE_URL) }, trailingLabel = "Web")
         ChanrivaNavigationRow(appString(R.string.source_code), onClick = { uriHandler.openUri(CHANRIVA_SOURCE_URL) }, trailingLabel = "Web")
+        ChanrivaNavigationRow(appString(R.string.privacy_policy), onPrivacy, trailingLabel = "Web")
+        ChanrivaNavigationRow(appString(R.string.edax_about), onClick = { uriHandler.openUri(EDAX_GUIDE_URL) }, trailingLabel = "Web")
+        Text(
+            appString(R.string.edax_disclaimer),
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+            color = ChanrivaColors.textSecondary,
+        )
         ChanrivaNavigationRow(appString(R.string.oss_licenses), onLicenses)
         BuildIdentityText()
     }

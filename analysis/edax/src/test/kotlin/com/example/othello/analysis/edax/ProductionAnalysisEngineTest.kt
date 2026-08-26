@@ -6,6 +6,8 @@ import com.example.othello.analysis.api.BookSource
 import com.example.othello.analysis.api.EvaluationDataSource
 import com.example.othello.analysis.api.EvaluationKind
 import com.example.othello.analysis.api.ReviewPosition
+import com.example.othello.game.Board
+import com.example.othello.game.Disc
 import com.example.othello.game.GameState
 import java.util.concurrent.CancellationException
 import java.util.concurrent.CountDownLatch
@@ -65,6 +67,21 @@ class ProductionAnalysisEngineTest {
         assertEquals(null, gateway.bookPath)
         assertEquals(2_000, gateway.timePerCandidateMs)
         assertEquals(EvaluationKind.EXACT, result.evaluations.first().score.kind)
+    }
+
+    @Test
+    fun arbitraryImportedBoardUsesTheExistingEdaxBoundary() = runBlocking {
+        val board = Board.fromRows(listOf("WB......") + List(7) { "........" })
+        val state = GameState(board = board, currentPlayer = Disc.WHITE)
+        val gateway = FakeGateway(moves = listOf(NativeMove(2, 3, EvaluationKind.HEURISTIC, 4, 100)))
+
+        val result = ProductionAnalysisEngine(gateway).analyze(ReviewPosition(state), settings("imported"))
+
+        assertTrue(result.available)
+        assertEquals(state.legalMoves, result.evaluations.map { it.move }.toSet())
+        assertEquals(1, gateway.side)
+        assertEquals(1, gateway.player.countOneBits())
+        assertEquals(1, gateway.opponent.countOneBits())
     }
 
     @Test

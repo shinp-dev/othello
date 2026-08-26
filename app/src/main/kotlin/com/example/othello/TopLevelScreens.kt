@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,6 +20,7 @@ import com.example.othello.research.RESEARCH_PUBLICATION_PRIVACY_COPY
 
 @Composable
 internal fun StudyScreen(
+    onPositionReview: () -> Unit,
     onOnlineRecords: () -> Unit,
     onOfflineRecords: () -> Unit,
 ) {
@@ -27,6 +29,9 @@ internal fun StudyScreen(
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
     ) {
         ChanrivaScreenHeader(appString(R.string.study))
+        Button(onClick = onPositionReview, modifier = Modifier.fillMaxWidth()) {
+            Text(appString(R.string.position_review))
+        }
         ChanrivaNavigationRow(
             title = appString(R.string.online_records),
             supportingText = appString(R.string.online_records_supporting),
@@ -44,7 +49,6 @@ internal fun StudyScreen(
 internal fun MoreScreen(
     onAccount: () -> Unit,
     onResearchInfo: () -> Unit,
-    onPrivacy: () -> Unit,
     onAbout: () -> Unit,
 ) {
     Column(
@@ -54,7 +58,6 @@ internal fun MoreScreen(
         ChanrivaScreenHeader(appString(R.string.more))
         ChanrivaNavigationRow(appString(R.string.account), onAccount)
         ChanrivaNavigationRow(appString(R.string.research_info), onResearchInfo)
-        ChanrivaNavigationRow(appString(R.string.privacy_policy), onPrivacy, trailingLabel = "Web")
         ChanrivaNavigationRow(appString(R.string.about_app), onAbout)
     }
 }

@@ -76,6 +76,9 @@ import com.example.othello.records.FinishReason
 import com.example.othello.records.GameRecord
 import com.example.othello.review.ReviewInput
 import com.example.othello.review.ReviewSession
+import com.example.othello.review.PositionReviewRecord
+import com.example.othello.review.PositionReviewSession
+import java.util.UUID
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -100,6 +103,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 }
+
+private data class PositionReviewWorkspace(
+    val id: String,
+    val title: String,
+    val createdAtEpochMillis: Long,
+    val session: PositionReviewSession,
+)
 
 @Composable
 private fun OthelloApp(
@@ -153,6 +163,7 @@ private fun AuthenticatedApp(
     val analysisEngine = remember { ProductionAnalysisEngine() }
     val aiMoveEngine = remember { ProductionAiMoveEngine() }
     val localRecordStore = application.localGameRecordStore
+    val positionReviewStore = application.positionReviewStore
     val localRecordPersistence = application.localGameRecordPersistence.coordinator
     val localRecordSaveStates by localRecordPersistence.saveStates.collectAsState()
     var localMatch by remember { mutableStateOf(false) }
@@ -163,6 +174,7 @@ private fun AuthenticatedApp(
     val selectedReviewSession = remember(selectedReviewInput?.id) {
         selectedReviewInput?.let(::ReviewSession)
     }
+    var positionReviewWorkspace by remember { mutableStateOf<PositionReviewWorkspace?>(null) }
     var commonSettingsBackDestination by remember { mutableStateOf(AppDestination.SETTINGS) }
     var reviewBackDestination by remember { mutableStateOf(AppDestination.STUDY) }
     var researchSettingsBackDestination by remember { mutableStateOf(AppDestination.SETTINGS) }
@@ -271,9 +283,61 @@ private fun AuthenticatedApp(
                         onBack = ::requestOnlineLeave,
                     )
                     destination == AppDestination.STUDY -> StudyScreen(
+                        onPositionReview = { destination = AppDestination.POSITION_REVIEW_HOME },
                         onOnlineRecords = { destination = AppDestination.ONLINE_RECORDS },
                         onOfflineRecords = { destination = AppDestination.OFFLINE_RECORDS },
                     )
+                    destination == AppDestination.POSITION_REVIEW_HOME -> PositionReviewHomeScreen(
+                        store = positionReviewStore,
+                        onBack = { destination = AppDestination.STUDY },
+                        onNew = {
+                            positionReviewWorkspace = null
+                            destination = AppDestination.POSITION_REVIEW_INPUT
+                        },
+                        onOpen = { record: PositionReviewRecord ->
+                            positionReviewWorkspace = PositionReviewWorkspace(
+                                id = record.id,
+                                title = record.title,
+                                createdAtEpochMillis = record.createdAtEpochMillis,
+                                session = PositionReviewSession(record),
+                            )
+                            destination = AppDestination.POSITION_REVIEW
+                        },
+                    )
+                    destination == AppDestination.POSITION_REVIEW_INPUT -> PositionReviewInputScreen(
+                        onBack = { destination = AppDestination.POSITION_REVIEW_HOME },
+                        onStart = { board, side, title ->
+                            val now = System.currentTimeMillis()
+                            positionReviewWorkspace = PositionReviewWorkspace(
+                                id = UUID.randomUUID().toString(),
+                                title = title,
+                                createdAtEpochMillis = now,
+                                session = PositionReviewSession(board, side),
+                            )
+                            destination = AppDestination.POSITION_REVIEW
+                        },
+                    )
+                    destination == AppDestination.POSITION_REVIEW && positionReviewWorkspace != null -> {
+                        val workspace = requireNotNull(positionReviewWorkspace)
+                        PositionReviewScreen(
+                            id = workspace.id,
+                            initialTitle = workspace.title,
+                            createdAtEpochMillis = workspace.createdAtEpochMillis,
+                            session = workspace.session,
+                            store = positionReviewStore,
+                            dataManager = analysisDataManager,
+                            settingsStore = edaxSettings,
+                            engine = analysisEngine,
+                            onBack = { destination = AppDestination.POSITION_REVIEW_HOME },
+                            onOpenCommonSettings = {
+                                commonSettingsBackDestination = AppDestination.POSITION_REVIEW
+                                destination = AppDestination.COMMON_SETTINGS
+                            },
+                            onSaved = { savedTitle ->
+                                positionReviewWorkspace = workspace.copy(title = savedTitle)
+                            },
+                        )
+                    }
                     destination == AppDestination.ONLINE_RECORDS -> OnlineRecordsScreen(
                         userId = session.userId,
                         repository = component.gameRecordRepository,
@@ -397,7 +461,6 @@ private fun AuthenticatedApp(
                     destination == AppDestination.MORE -> MoreScreen(
                         onAccount = { destination = AppDestination.ACCOUNT },
                         onResearchInfo = { destination = AppDestination.RESEARCH_INFO },
-                        onPrivacy = { uriHandler.openUri("https://chanriva.shinp-studio.com/privacy") },
                         onAbout = { destination = AppDestination.ABOUT },
                     )
                     destination == AppDestination.RESEARCH_INFO -> ResearchInfoScreen(
@@ -409,6 +472,7 @@ private fun AuthenticatedApp(
                     )
                     destination == AppDestination.ABOUT -> AboutScreen(
                         onBack = { destination = AppDestination.MORE },
+                        onPrivacy = { uriHandler.openUri("https://chanriva.shinp-studio.com/privacy") },
                         onLicenses = { destination = AppDestination.OSS_LICENSES },
                     )
                     destination == AppDestination.OSS_LICENSES -> OpenSourceLicensesScreen(
@@ -740,8 +804,11 @@ private fun PlayScreen(
             else -> Unit
         }
         Text(appString(R.string.device_match), style = MaterialTheme.typography.titleMedium)
+        Button(
+            onClick = onLocalAiStart,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(appString(R.string.play_against_ai)) }
         ChanrivaNavigationRow(appString(R.string.two_player_match), onLocalHumanStart)
-        ChanrivaNavigationRow(appString(R.string.play_against_ai), onLocalAiStart)
         if (failedLocalRecordSaves.isNotEmpty()) {
             Card(Modifier.fillMaxWidth()) {
                 Column(

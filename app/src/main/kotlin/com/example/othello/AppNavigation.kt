@@ -17,6 +17,9 @@ internal enum class AppDestination(@StringRes val labelRes: Int, @StringRes val 
     MORE(R.string.more, R.string.more_short),
     ONLINE_RECORDS(R.string.online_records),
     OFFLINE_RECORDS(R.string.offline_records),
+    POSITION_REVIEW_HOME(R.string.position_review),
+    POSITION_REVIEW_INPUT(R.string.new_position_review),
+    POSITION_REVIEW(R.string.position_review),
     REVIEW(R.string.review),
     ACCOUNT(R.string.account),
     ACCOUNT_DELETION(R.string.account_deletion),
@@ -56,6 +59,9 @@ internal fun backDestination(
     AppDestination.LOCAL_AI_SETUP -> AppDestination.PLAY
     AppDestination.ONLINE_RECORDS,
     AppDestination.OFFLINE_RECORDS -> AppDestination.STUDY
+    AppDestination.POSITION_REVIEW_HOME -> AppDestination.STUDY
+    AppDestination.POSITION_REVIEW_INPUT,
+    AppDestination.POSITION_REVIEW -> AppDestination.POSITION_REVIEW_HOME
     AppDestination.REVIEW -> reviewParent
     AppDestination.RESEARCH_INFO,
     AppDestination.ABOUT -> AppDestination.MORE

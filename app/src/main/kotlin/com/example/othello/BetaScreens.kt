@@ -402,7 +402,7 @@ private fun ScreenHeader(title: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun ReviewBoard(
+internal fun ReviewBoard(
     state: GameState,
     variationEnabled: Boolean,
     evaluations: Map<Position, com.example.othello.analysis.api.MoveEvaluation>,

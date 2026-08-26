@@ -11,4 +11,8 @@ class OthelloApplication : Application() {
     val localGameRecordPersistence by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         LocalGameRecordPersistenceProcessOwner(localGameRecordStore)
     }
+
+    val positionReviewStore by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        JsonFilePositionReviewStore(this)
+    }
 }

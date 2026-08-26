@@ -21,6 +21,9 @@ class AppNavigationTest {
     fun detailScreensReturnToTheirLogicalParents() {
         assertEquals(AppDestination.STUDY, backDestination(AppDestination.ONLINE_RECORDS))
         assertEquals(AppDestination.STUDY, backDestination(AppDestination.OFFLINE_RECORDS))
+        assertEquals(AppDestination.STUDY, backDestination(AppDestination.POSITION_REVIEW_HOME))
+        assertEquals(AppDestination.POSITION_REVIEW_HOME, backDestination(AppDestination.POSITION_REVIEW_INPUT))
+        assertEquals(AppDestination.POSITION_REVIEW_HOME, backDestination(AppDestination.POSITION_REVIEW))
         assertEquals(
             AppDestination.ONLINE_RECORDS,
             backDestination(AppDestination.REVIEW, reviewParent = AppDestination.ONLINE_RECORDS),
@@ -58,6 +61,13 @@ class AppNavigationTest {
             backDestination(
                 AppDestination.COMMON_SETTINGS,
                 commonSettingsParent = AppDestination.LOCAL_AI_SETUP,
+            ),
+        )
+        assertEquals(
+            AppDestination.POSITION_REVIEW,
+            backDestination(
+                AppDestination.COMMON_SETTINGS,
+                commonSettingsParent = AppDestination.POSITION_REVIEW,
             ),
         )
     }
