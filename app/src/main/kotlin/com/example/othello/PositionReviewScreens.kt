@@ -51,10 +51,12 @@ import com.example.othello.designsystem.ChanrivaSpacing
 import com.example.othello.game.Board
 import com.example.othello.game.Disc
 import com.example.othello.game.Position
-import com.example.othello.review.AnalysisRequestGuard
 import com.example.othello.review.POSITION_IMPORT_PROMPT
 import com.example.othello.review.POSITION_IMPORT_PROMPT_ENGLISH
 import com.example.othello.review.PositionBoardEditor
+import com.example.othello.review.PositionReviewAnalysisCompletion
+import com.example.othello.review.PositionReviewAnalysisCoordinator
+import com.example.othello.review.PositionReviewAnalysisStart
 import com.example.othello.review.PositionImportError
 import com.example.othello.review.PositionImportParser
 import com.example.othello.review.PositionImportResult
@@ -308,19 +310,19 @@ internal fun PositionReviewScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val guard = remember(id) { AnalysisRequestGuard() }
+    val analysisCoordinator = remember(id) { PositionReviewAnalysisCoordinator() }
     var title by remember(id) { mutableStateOf(initialTitle) }
     var revision by remember { mutableIntStateOf(0) }
-    var analysisRun by remember { mutableIntStateOf(0) }
-    var requested by remember { mutableStateOf(false) }
+    var retryGeneration by remember { mutableIntStateOf(0) }
     var running by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<AnalysisResult?>(null) }
     var message by remember { mutableStateOf(context.getString(R.string.analysis_not_started)) }
+    var analysisFailed by remember { mutableStateOf(false) }
     var saveMessage by remember { mutableStateOf<String?>(null) }
     val state = remember(revision) { session.current }
-    val dataStatus = remember(revision, analysisRun) { dataManager.commonDataStatus() }
-    val reviewSettings = remember(revision, analysisRun) { settingsStore.reviewAnalysisSettings() }
-    val settings = remember(revision, analysisRun) { dataManager.analysisSettings(reviewSettings) }
+    val dataStatus = remember(revision, retryGeneration) { dataManager.commonDataStatus() }
+    val reviewSettings = remember(revision, retryGeneration) { settingsStore.reviewAnalysisSettings() }
+    val settings = remember(revision, retryGeneration) { dataManager.analysisSettings(reviewSettings) }
     val positionKey = state.stateHash()
     val analysisIssue = when {
         !dataStatus.nativeAvailable -> context.getString(R.string.edax_engine_unavailable)
@@ -330,8 +332,7 @@ internal fun PositionReviewScreen(
 
     LaunchedEffect(
         positionKey,
-        requested,
-        analysisRun,
+        retryGeneration,
         analysisIssue,
         reviewSettings.level,
         reviewSettings.timePerCandidateMs,
@@ -339,33 +340,75 @@ internal fun PositionReviewScreen(
         dataStatus.openingBook?.sha256,
     ) {
         engine.cancel()
-        val token = guard.begin(positionKey)
         running = false
         result = null
-        if (!requested) return@LaunchedEffect
+        analysisFailed = false
+        val start = analysisCoordinator.begin(state, settings)
+        if (start == PositionReviewAnalysisStart.NoLegalMoves) {
+            message = context.getString(R.string.legal_moves_analyzed, 0)
+            return@LaunchedEffect
+        }
         if (analysisIssue != null) {
             message = analysisIssue
             return@LaunchedEffect
         }
-        running = true
-        message = context.getString(R.string.analyzing)
-        try {
-            val analyzed = session.analyze(engine, settings)
-            if (guard.isCurrent(token, session.current.stateHash())) {
-                result = analyzed
-                message = localizeUserMessage(context, analyzed.message)
-                    ?: context.getString(R.string.legal_moves_analyzed, analyzed.evaluations.size)
+
+        when (start) {
+            is PositionReviewAnalysisStart.Cached -> {
+                result = start.result
+                message = localizeUserMessage(context, start.result.message)
+                    ?: context.getString(R.string.legal_moves_analyzed, start.result.evaluations.size)
             }
-        } catch (_: CancellationException) {
-        } finally {
-            if (guard.isCurrent(token, session.current.stateHash())) running = false
+            is PositionReviewAnalysisStart.Analyze -> {
+                val request = start.request
+                running = true
+                message = context.getString(R.string.analyzing)
+                try {
+                    val analyzed = request.execute(engine)
+                    val currentSettings = dataManager.analysisSettings(settingsStore.reviewAnalysisSettings())
+                    when (analysisCoordinator.complete(request, session.current, currentSettings, analyzed)) {
+                        PositionReviewAnalysisCompletion.ACCEPTED -> {
+                            result = analyzed
+                            message = localizeUserMessage(context, analyzed.message)
+                                ?: context.getString(R.string.legal_moves_analyzed, analyzed.evaluations.size)
+                        }
+                        PositionReviewAnalysisCompletion.FAILED -> {
+                            analysisFailed = true
+                            message = localizeUserMessage(context, analyzed.message)
+                                ?: context.getString(R.string.unknown_reason)
+                        }
+                        PositionReviewAnalysisCompletion.STALE -> Unit
+                    }
+                } catch (_: CancellationException) {
+                } catch (failure: Throwable) {
+                    val currentSettings = dataManager.analysisSettings(settingsStore.reviewAnalysisSettings())
+                    if (analysisCoordinator.isCurrent(request, session.current, currentSettings)) {
+                        analysisFailed = true
+                        message = localizeUserMessage(context, failure.message)
+                            ?: context.getString(R.string.unknown_reason)
+                    }
+                } finally {
+                    val currentSettings = dataManager.analysisSettings(settingsStore.reviewAnalysisSettings())
+                    if (analysisCoordinator.isCurrent(request, session.current, currentSettings)) running = false
+                }
+            }
+            PositionReviewAnalysisStart.NoLegalMoves -> Unit
         }
     }
-    DisposableEffect(engine) {
+    DisposableEffect(engine, analysisCoordinator) {
         onDispose {
-            guard.invalidate()
+            analysisCoordinator.clear()
             engine.cancel()
         }
+    }
+
+    fun invalidateAnalysis() {
+        analysisCoordinator.invalidate()
+        engine.cancel()
+        running = false
+        result = null
+        analysisFailed = false
+        message = context.getString(R.string.analysis_not_started)
     }
 
     Column(
@@ -386,23 +429,23 @@ internal fun PositionReviewScreen(
         )
         ReviewBoard(state, true, result?.evaluations.orEmpty().associateBy { it.move }) { position ->
             if (session.play(position)) {
-                requested = false
+                invalidateAnalysis()
                 revision++
             }
         }
         OutlinedButton(
-            onClick = { requested = false; session.reset(); revision++ },
+            onClick = { session.reset(); invalidateAnalysis(); revision++ },
             enabled = session.canUndo,
             modifier = Modifier.fillMaxWidth(),
         ) { Text(appString(R.string.return_to_initial_position)) }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
-                onClick = { requested = false; session.previous(); revision++ },
+                onClick = { session.previous(); invalidateAnalysis(); revision++ },
                 enabled = session.canUndo,
                 modifier = Modifier.weight(1f),
             ) { Text(appString(R.string.previous)) }
             OutlinedButton(
-                onClick = { requested = false; session.next(); revision++ },
+                onClick = { session.next(); invalidateAnalysis(); revision++ },
                 enabled = session.canRedo,
                 modifier = Modifier.weight(1f),
             ) { Text(appString(R.string.next)) }
@@ -413,12 +456,13 @@ internal fun PositionReviewScreen(
                 Text(appString(if (dataStatus.evaluationData == null) R.string.set_evaluation_data else R.string.open_analysis_settings))
             }
         }
-        OutlinedButton(
-            onClick = { requested = !running; analysisRun++ },
-            enabled = analysisIssue == null && state.legalMoves.isNotEmpty(),
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(appString(if (running) R.string.cancel_analysis else R.string.analyze_all_legal_moves)) }
-        Text(message)
+        if (analysisIssue == null) Text(message)
+        if (analysisFailed && analysisIssue == null && state.legalMoves.isNotEmpty()) {
+            OutlinedButton(
+                onClick = { invalidateAnalysis(); retryGeneration++ },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(appString(R.string.retry)) }
+        }
         Button(
             onClick = {
                 val normalizedTitle = title.trim().ifEmpty { context.getString(R.string.position_review) }

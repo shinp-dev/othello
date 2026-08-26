@@ -106,7 +106,7 @@ Protocol 2では`matches.release_status`が`MATCHED`、`ACTIVE`、`RECONNECTING`
 
 Edaxの評価データ（`eval.dat`等）とOpening Bookは、権利をEdax本体と分離して扱い、APK/AABにもrepositoryにも同梱しません。評価データは`設定 -> 解析`から、Edax公式GitHub Releasesのv4.4 `eval.7z`から`eval.dat`だけを自動設定するか、ユーザーが正当に取得・所有するファイルをStorage Access Frameworkで選んで、アプリprivate storageへコピーできます。ダウンロード・展開・検証に成功するまで既存データは置き換えません。評価データ未設定時は偽の値を表示しません。Bookは任意で、未設定またはbook miss時は通常のEdax探索を使います。詳しい導線は`https://chanriva.shinp-studio.com/edax`を使用します。
 
-Reviewでは実戦開始局面、任意ply、最終局面、保存前variation局面を解析でき、現在手番の全合法手へ予測終局石差を盤面上表示します。完全読みの`exact`、深さ依存の`heuristic`、import済みBook由来の`book`を区別します。解析は明示操作時だけ単一background workerで実行し、ply変更・variation変更・画面離脱・新規解析でcancel/stale-result破棄を行います。
+Reviewでは実戦開始局面、任意ply、最終局面、保存前variation局面を解析でき、現在手番の全合法手へ予測終局石差を盤面上表示します。完全読みの`exact`、深さ依存の`heuristic`、import済みBook由来の`book`を区別します。棋譜Reviewは明示操作で解析し、「盤面から検討」は初期局面と局面移動のたびに自動解析します。どちらも単一background workerを使い、局面変更・画面離脱・新規解析でcancel/stale-result破棄を行います。「盤面から検討」のrequest世代管理と64局面LRUは[盤面検討自動解析設計](docs/05_解析エンジン/盤面検討自動解析.md)を参照してください。
 
 対応ABIは`arm64-v8a`と開発用`x86_64`だけです。Edaxを含む全native libraryとAPK packagingは16 KiB page-size alignmentをrelease検査します。`feature:match`と`core:game`はanalysis/JNI/Edaxへ依存せず、ranked/live DataChannel経路から解析へ到達できません。
 

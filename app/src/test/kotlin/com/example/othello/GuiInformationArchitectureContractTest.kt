@@ -96,4 +96,18 @@ class GuiInformationArchitectureContractTest {
         assertFalse(positionReview.contains("ResearchReviewPanel"))
         assertFalse(positionReview.contains("ResearchPositionRepository"))
     }
+
+    @Test
+    fun positionReviewAutomaticallyAnalyzesAndHasNoManualAnalysisButton() {
+        val screen = positionReview.substringAfter("internal fun PositionReviewScreen(")
+            .substringBefore("private fun EditablePositionBoard")
+
+        assertTrue(screen.contains("analysisCoordinator.begin(state, settings)"))
+        assertTrue(screen.contains("analysisCoordinator.complete(request, session.current, currentSettings, analyzed)"))
+        assertTrue(screen.contains("analysisCoordinator.invalidate()"))
+        assertTrue(screen.contains("engine.cancel()"))
+        assertTrue(screen.contains("result = null"))
+        assertFalse(screen.contains("R.string.analyze_all_legal_moves"))
+        assertFalse(screen.contains("R.string.cancel_analysis"))
+    }
 }
