@@ -419,12 +419,6 @@ internal fun PositionReviewScreen(
             modifier = Modifier.fillMaxWidth(),
         ) { Text(appString(if (running) R.string.cancel_analysis else R.string.analyze_all_legal_moves)) }
         Text(message)
-        result?.evaluations.orEmpty().forEach { evaluation ->
-            Text(
-                "${evaluation.move.coordinateLabel()} ${formatPositionEvaluation(evaluation.score.value)}",
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
         Button(
             onClick = {
                 val normalizedTitle = title.trim().ifEmpty { context.getString(R.string.position_review) }
@@ -503,5 +497,3 @@ private fun defaultPositionReviewTitle(context: android.content.Context): String
     R.string.position_review_default_title,
     DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault()).format(Instant.now()),
 )
-
-private fun formatPositionEvaluation(value: Int): String = if (value > 0) "+$value" else value.toString()
