@@ -15,4 +15,16 @@ class OthelloApplication : Application() {
     val positionReviewStore by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         JsonFilePositionReviewStore(this)
     }
+
+    val theorySessionStore by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        JsonFileTheorySessionStore(this)
+    }
+
+    val theorySessionPersistence by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        TheorySessionPersistenceProcessOwner(theorySessionStore)
+    }
+
+    val theoryAnalysisCache by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        JsonFileTheoryAnalysisCache(this)
+    }
 }

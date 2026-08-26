@@ -18,6 +18,7 @@ import com.example.othello.research.RESEARCH_PUBLICATION_PRIVACY_COPY
 @Composable
 internal fun StudyScreen(
     onPositionReview: () -> Unit,
+    onTheoryExploration: () -> Unit,
     onOnlineRecords: () -> Unit,
     onOfflineRecords: () -> Unit,
 ) {
@@ -31,6 +32,11 @@ internal fun StudyScreen(
             supportingText = appString(R.string.position_review_supporting),
             onClick = onPositionReview,
             emphasized = true,
+        )
+        ChanrivaNavigationRow(
+            title = appString(R.string.theory_exploration),
+            supportingText = appString(R.string.theory_exploration_supporting),
+            onClick = onTheoryExploration,
         )
         ChanrivaNavigationRow(
             title = appString(R.string.online_records),

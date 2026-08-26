@@ -19,6 +19,11 @@ $reviewViolations = $reviewSources | Select-String -Pattern 'analysis\.edax|Nati
 if ($reviewViolations) { $reviewViolations | ForEach-Object { Write-Error "feature:review leaked an implementation SDK: $_" }; exit 1 }
 $reviewBuild = Get-Content 'feature/review/build.gradle.kts' -Raw
 if ($reviewBuild -match 'analysis:edax' -or $reviewBuild -notmatch 'analysis:api') { Write-Error 'feature:review must depend on analysis:api, never analysis:edax'; exit 1 }
+$theorySources = Get-ChildItem -Path 'feature/theory/src' -Recurse -File -ErrorAction SilentlyContinue
+$theoryViolations = $theorySources | Select-String -Pattern 'analysis\.edax|NativeEdax|com\.example\.othello\.review|org\.webrtc|io\.github\.jan\.supabase' -CaseSensitive
+if ($theoryViolations) { $theoryViolations | ForEach-Object { Write-Error "feature:theory crossed a review or implementation boundary: $_" }; exit 1 }
+$theoryBuild = Get-Content 'feature/theory/build.gradle.kts' -Raw
+if ($theoryBuild -match 'analysis:edax|feature:review' -or $theoryBuild -notmatch 'analysis:api') { Write-Error 'feature:theory must depend on analysis:api directly and remain independent from review/edax implementations'; exit 1 }
 $allSources = Get-ChildItem -Path . -Recurse -File -Include *.kt,*.java -ErrorAction SilentlyContinue |
     Where-Object { $_.FullName -notmatch '[\\/]data[\\/]supabase[\\/]src[\\/]' -and $_.FullName -notmatch '[\\/]transport[\\/]webrtc[\\/]src[\\/]' -and $_.FullName -notmatch '[\\/]build[\\/]' }
 $supabaseLeaks = $allSources | Select-String -Pattern 'io\.github\.jan\.supabase' -CaseSensitive
@@ -65,4 +70,4 @@ $designSystemBuild = Get-Content 'core/designsystem/build.gradle.kts' -Raw
 if ($designSystemBuild -notmatch 'org\.jetbrains\.kotlin\.plugin\.compose') {
     Write-Error 'core:designsystem must apply the Compose compiler plugin to keep its composable ABI compatible'; exit 1
 }
-Write-Output 'dependency boundary check passed: live match is analysis/research-free; game/API/review and SDK boundaries are intact'
+Write-Output 'dependency boundary check passed: live match is analysis/research-free; game/API/review/theory and SDK boundaries are intact'

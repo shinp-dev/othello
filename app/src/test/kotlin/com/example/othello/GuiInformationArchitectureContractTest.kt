@@ -12,6 +12,7 @@ class GuiInformationArchitectureContractTest {
     private val topLevel = File("src/main/kotlin/com/example/othello/TopLevelScreens.kt").readText()
     private val research = File("src/main/kotlin/com/example/othello/ResearchSettingsScreen.kt").readText()
     private val positionReview = File("src/main/kotlin/com/example/othello/PositionReviewScreens.kt").readText()
+    private val theoryExploration = File("src/main/kotlin/com/example/othello/TheoryExplorationScreens.kt").readText()
 
     @Test
     fun playAndScoreHeaderKeepModeOutOfTheFourthColumn() {
@@ -89,6 +90,8 @@ class GuiInformationArchitectureContractTest {
         val study = topLevel.substringAfter("internal fun StudyScreen(").substringBefore("internal fun MoreScreen(")
         assertTrue(study.contains("emphasized = true"))
         assertTrue(study.indexOf("R.string.position_review") < study.indexOf("R.string.online_records"))
+        assertTrue(study.indexOf("R.string.position_review") < study.indexOf("R.string.theory_exploration"))
+        assertTrue(study.indexOf("R.string.theory_exploration") < study.indexOf("R.string.online_records"))
         assertTrue(study.indexOf("R.string.online_records") < study.indexOf("R.string.offline_records"))
         assertTrue(positionReview.contains("PositionReviewStore"))
         assertTrue(positionReview.contains("PositionReviewSession"))
@@ -109,5 +112,29 @@ class GuiInformationArchitectureContractTest {
         assertTrue(screen.contains("result = null"))
         assertFalse(screen.contains("R.string.analyze_all_legal_moves"))
         assertFalse(screen.contains("R.string.cancel_analysis"))
+    }
+
+    @Test
+    fun theoryExplorationIsDedicatedAutomaticAndRegistryDriven() {
+        assertTrue(theoryExploration.contains("TheoryExplorationSession"))
+        assertTrue(theoryExploration.contains("TheoryMetricRegistry.definitions"))
+        assertTrue(theoryExploration.contains("TheoryMetricEvaluator.evaluateAll(state)"))
+        assertTrue(theoryExploration.contains("analysisCoordinator.begin(state, settings)"))
+        assertTrue(theoryExploration.contains("analysisCoordinator.complete(request, session.current, currentSettings, analyzed)"))
+        assertTrue(theoryExploration.contains("analysisCoordinator.invalidate()"))
+        assertTrue(theoryExploration.contains("engine.cancel()"))
+        assertTrue(theoryExploration.contains("result = null"))
+        assertTrue(theoryExploration.indexOf("text = edaxText") < theoryExploration.indexOf("text = metricText"))
+        assertFalse(theoryExploration.contains("PositionReviewSession"))
+        assertFalse(theoryExploration.contains("ReviewScreenV2"))
+        assertFalse(theoryExploration.contains("LocalGameRecord"))
+        assertFalse(theoryExploration.contains("save_position_review"))
+        assertFalse(theoryExploration.contains("analyze_all_legal_moves"))
+
+        val analysisEffect = theoryExploration.substringAfter("private fun TheoryExplorationContent(")
+            .substringAfter("LaunchedEffect(")
+            .substringBefore("DisposableEffect(")
+        assertFalse(analysisEffect.contains("selectedMetric.id"))
+        assertFalse(analysisEffect.contains("selectedMetricId"))
     }
 }
