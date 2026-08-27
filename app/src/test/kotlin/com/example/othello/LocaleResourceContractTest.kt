@@ -38,7 +38,17 @@ class LocaleResourceContractTest {
         val japanese = readStrings(japaneseFile)
 
         assertEquals(english.keys, japanese.keys)
-        assertEquals(431, english.size)
+        assertEquals(435, english.size)
+        assertEquals("Analyze Any Position", english["position_review"])
+        assertEquals("任意盤面から検討", japanese["position_review"])
+        assertEquals("Position Analysis", english["study_position_analysis"])
+        assertEquals("局面の分析", japanese["study_position_analysis"])
+        assertEquals("Theory and Directional Analysis", english["study_theory_analysis"])
+        assertEquals("理論・指向性の分析", japanese["study_theory_analysis"])
+        assertEquals("Game Record Analysis", english["study_record_analysis"])
+        assertEquals("棋譜の分析", japanese["study_record_analysis"])
+        assertEquals("For enthusiasts", english["theory_enthusiast_recommended"])
+        assertEquals("ガチ勢推奨", japanese["theory_enthusiast_recommended"])
         english.forEach { (id, value) ->
             assertEquals(formatArguments(value), formatArguments(japanese.getValue(id)), id)
         }

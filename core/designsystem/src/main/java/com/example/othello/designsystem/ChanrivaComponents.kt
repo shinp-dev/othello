@@ -2,9 +2,12 @@ package com.example.othello.designsystem
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -56,6 +59,7 @@ fun ChanrivaNavigationRow(
     title: String,
     onClick: (() -> Unit)?,
     supportingText: String? = null,
+    titleBadge: String? = null,
     trailingLabel: String? = null,
     emphasized: Boolean = false,
     modifier: Modifier = Modifier,
@@ -78,14 +82,11 @@ fun ChanrivaNavigationRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = when {
-                        !enabled -> ChanrivaColors.textDisabled
-                        emphasized -> ChanrivaColors.accent
-                        else -> MaterialTheme.colorScheme.onSurface
-                    },
+                NavigationRowTitle(
+                    title = title,
+                    titleBadge = titleBadge,
+                    enabled = enabled,
+                    emphasized = emphasized,
                 )
                 supportingText?.let {
                     Text(
@@ -109,6 +110,41 @@ fun ChanrivaNavigationRow(
             )
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun NavigationRowTitle(
+    title: String,
+    titleBadge: String?,
+    enabled: Boolean,
+    emphasized: Boolean,
+) {
+    val titleColor = when {
+        !enabled -> ChanrivaColors.textDisabled
+        emphasized -> ChanrivaColors.accent
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.bodyLarge,
+            color = titleColor,
+        )
+        titleBadge?.let {
+            Text(
+                text = it,
+                modifier = Modifier
+                    .border(1.dp, ChanrivaColors.accent, RoundedCornerShape(999.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (enabled) ChanrivaColors.accent else ChanrivaColors.textDisabled,
+            )
+        }
     }
 }
 

@@ -2,6 +2,7 @@ package com.example.othello
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -11,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.example.othello.designsystem.ChanrivaNavigationRow
+import com.example.othello.designsystem.ChanrivaColors
 import com.example.othello.designsystem.ChanrivaScreenHeader
 import com.example.othello.designsystem.ChanrivaSpacing
 import com.example.othello.research.RESEARCH_PUBLICATION_PRIVACY_COPY
@@ -24,30 +26,52 @@ internal fun StudyScreen(
 ) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
-        verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
+        verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
     ) {
         ChanrivaScreenHeader(appString(R.string.study))
-        ChanrivaNavigationRow(
-            title = appString(R.string.position_review),
-            supportingText = appString(R.string.position_review_supporting),
-            onClick = onPositionReview,
-            emphasized = true,
+        StudyCategory(appString(R.string.study_position_analysis)) {
+            ChanrivaNavigationRow(
+                title = appString(R.string.position_review),
+                supportingText = appString(R.string.position_review_supporting),
+                onClick = onPositionReview,
+                emphasized = true,
+            )
+        }
+        StudyCategory(appString(R.string.study_theory_analysis)) {
+            ChanrivaNavigationRow(
+                title = appString(R.string.theory_exploration),
+                titleBadge = appString(R.string.theory_enthusiast_recommended),
+                supportingText = appString(R.string.theory_exploration_supporting),
+                onClick = onTheoryExploration,
+            )
+        }
+        StudyCategory(appString(R.string.study_record_analysis)) {
+            ChanrivaNavigationRow(
+                title = appString(R.string.online_records),
+                supportingText = appString(R.string.online_records_supporting),
+                onClick = onOnlineRecords,
+            )
+            ChanrivaNavigationRow(
+                title = appString(R.string.offline_records),
+                supportingText = appString(R.string.offline_records_supporting),
+                onClick = onOfflineRecords,
+            )
+        }
+    }
+}
+
+@Composable
+private fun StudyCategory(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.control)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = ChanrivaColors.accent,
         )
-        ChanrivaNavigationRow(
-            title = appString(R.string.theory_exploration),
-            supportingText = appString(R.string.theory_exploration_supporting),
-            onClick = onTheoryExploration,
-        )
-        ChanrivaNavigationRow(
-            title = appString(R.string.online_records),
-            supportingText = appString(R.string.online_records_supporting),
-            onClick = onOnlineRecords,
-        )
-        ChanrivaNavigationRow(
-            title = appString(R.string.offline_records),
-            supportingText = appString(R.string.offline_records_supporting),
-            onClick = onOfflineRecords,
-        )
+        Column(content = content)
     }
 }
 
