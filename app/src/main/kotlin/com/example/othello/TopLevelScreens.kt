@@ -71,7 +71,7 @@ private fun StudyCategory(
         Text(
             text = title,
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Column(content = content)
     }

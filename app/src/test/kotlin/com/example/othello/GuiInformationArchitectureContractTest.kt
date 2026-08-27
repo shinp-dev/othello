@@ -90,7 +90,7 @@ class GuiInformationArchitectureContractTest {
         val study = topLevel.substringAfter("internal fun StudyScreen(").substringBefore("internal fun MoreScreen(")
         assertTrue(study.contains("emphasized = true"))
         assertTrue(study.split("emphasized = true").size - 1 == 4)
-        assertTrue(study.contains("color = MaterialTheme.colorScheme.onSurface"))
+        assertTrue(study.contains("color = MaterialTheme.colorScheme.onSurfaceVariant"))
         assertTrue(study.indexOf("R.string.study_position_analysis") < study.indexOf("R.string.study_theory_analysis"))
         assertTrue(study.indexOf("R.string.study_theory_analysis") < study.indexOf("R.string.study_record_analysis"))
         assertTrue(study.indexOf("R.string.position_review") < study.indexOf("R.string.online_records"))
