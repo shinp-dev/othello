@@ -231,14 +231,29 @@ test("server-renders the Chanriva landing page", async () => {
   assert.match(html, /<title>ちゃんりば \| CHANRIVA/);
   assert.match(html, /打って終わりに/);
   assert.match(html, /強くなるための、/);
+  assert.match(html, /screen-match-home\.jpg/);
   assert.match(html, /screen-online-match\.png/);
   assert.match(html, /screen-review\.png/);
+  assert.match(html, /screen-position-import\.jpg/);
+  assert.match(html, /screen-position-analysis\.jpg/);
+  assert.match(html, /Edaxで全合法手を解析する/);
+  assert.match(html, /外部LLM等でJSON化/);
+  assert.match(html, /画像の読み取りとJSON化は外部サービス側/);
+  assert.match(html, /screen-theory-mobility\.jpg/);
+  assert.match(html, /screen-theory-openness\.jpg/);
+  assert.match(html, /上段にEdax評価、下段に選択中の理論指標/);
+  assert.match(html, /フロンティア石数/);
+  assert.match(html, /潜在モビリティ/);
   assert.match(html, /ANALYSIS SETUP/);
   assert.match(html, /GUIDED SETUP/);
   assert.match(html, /CUSTOM DATA/);
   assert.match(html, /Edax用の評価データやオープニングブック/);
   assert.match(html, /screen-analysis\.png/);
-  assert.match(html, /screen-login\.png/);
+  assert.doesNotMatch(html, /screen-login\.png/);
+  assert.match(html, /オンライン棋譜/);
+  assert.match(html, /オフライン棋譜/);
+  assert.match(html, /対局設定・検討設定・共通設定・研究参加・言語/);
+  assert.match(html, /アカウント・研究データについて・ちゃんりばについて/);
   assert.match(html, /COMING SOON/);
   assert.match(html, /レート帯別分析/);
   assert.doesNotMatch(html, /Your site is taking shape|Building your site/);
@@ -259,11 +274,17 @@ test("keeps metadata, responsive styling, and current assets in place", async ()
   assert.match(page, /取得・設定方法を、アプリ内で案内します。/);
   assert.match(page, /自分が所有するものへ置き換えて利用できます。/);
   assert.doesNotMatch(page, /ちゃんりばから.*ダウンロード|評価データを配布|すべて同梱/);
+  assert.match(page, /指標だけで最善手が決まるものではなく/);
+  assert.match(page, /ちゃんりばに画像認識機能が内蔵されているという案内ではありません/);
+  assert.doesNotMatch(page, /ちゃんりばが画像を自動認識|画像を自動でJSON化/);
+  assert.doesNotMatch(page, /screen-login\.png/);
   assert.match(page, /COMING SOON/);
   assert.match(css, /@media \(max-width:820px\)/);
   assert.match(css, /@media \(max-width:390px\)/);
   assert.match(css, /@media \(max-width:320px\)/);
   assert.match(css, /prefers-reduced-motion/);
+  assert.match(css, /aspect-ratio:691\/1536/);
+  assert.match(css, /overflow-x:hidden/);
 
   for (const file of [
     "app-icon.png",
@@ -271,7 +292,11 @@ test("keeps metadata, responsive styling, and current assets in place", async ()
     "screen-online-match.png",
     "screen-review.png",
     "screen-analysis.png",
-    "screen-login.png",
+    "screen-match-home.jpg",
+    "screen-position-import.jpg",
+    "screen-position-analysis.jpg",
+    "screen-theory-mobility.jpg",
+    "screen-theory-openness.jpg",
   ]) {
     assert.ok(files.includes(file), `${file} should be published`);
     await access(new URL(`public/images/${file}`, templateRoot));
