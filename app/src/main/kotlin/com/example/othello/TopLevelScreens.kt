@@ -12,7 +12,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.example.othello.designsystem.ChanrivaNavigationRow
-import com.example.othello.designsystem.ChanrivaColors
 import com.example.othello.designsystem.ChanrivaScreenHeader
 import com.example.othello.designsystem.ChanrivaSpacing
 import com.example.othello.research.RESEARCH_PUBLICATION_PRIVACY_COPY
@@ -43,6 +42,7 @@ internal fun StudyScreen(
                 titleBadge = appString(R.string.theory_enthusiast_recommended),
                 supportingText = appString(R.string.theory_exploration_supporting),
                 onClick = onTheoryExploration,
+                emphasized = true,
             )
         }
         StudyCategory(appString(R.string.study_record_analysis)) {
@@ -50,11 +50,13 @@ internal fun StudyScreen(
                 title = appString(R.string.online_records),
                 supportingText = appString(R.string.online_records_supporting),
                 onClick = onOnlineRecords,
+                emphasized = true,
             )
             ChanrivaNavigationRow(
                 title = appString(R.string.offline_records),
                 supportingText = appString(R.string.offline_records_supporting),
                 onClick = onOfflineRecords,
+                emphasized = true,
             )
         }
     }
@@ -69,7 +71,7 @@ private fun StudyCategory(
         Text(
             text = title,
             style = MaterialTheme.typography.labelLarge,
-            color = ChanrivaColors.accent,
+            color = MaterialTheme.colorScheme.onSurface,
         )
         Column(content = content)
     }
