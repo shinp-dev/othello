@@ -20,6 +20,7 @@ internal enum class AppDestination(@StringRes val labelRes: Int, @StringRes val 
     POSITION_REVIEW_HOME(R.string.position_review),
     POSITION_REVIEW_INPUT(R.string.new_position_review),
     POSITION_REVIEW(R.string.position_review),
+    THEORY_EXPLORATION(R.string.theory_exploration),
     REVIEW(R.string.review),
     ACCOUNT(R.string.account),
     ACCOUNT_DELETION(R.string.account_deletion),
@@ -62,6 +63,7 @@ internal fun backDestination(
     AppDestination.POSITION_REVIEW_HOME -> AppDestination.STUDY
     AppDestination.POSITION_REVIEW_INPUT,
     AppDestination.POSITION_REVIEW -> AppDestination.POSITION_REVIEW_HOME
+    AppDestination.THEORY_EXPLORATION -> AppDestination.STUDY
     AppDestination.REVIEW -> reviewParent
     AppDestination.RESEARCH_INFO,
     AppDestination.ABOUT -> AppDestination.MORE

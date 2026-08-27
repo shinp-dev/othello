@@ -22,6 +22,7 @@ class AppNavigationTest {
         assertEquals(AppDestination.STUDY, backDestination(AppDestination.ONLINE_RECORDS))
         assertEquals(AppDestination.STUDY, backDestination(AppDestination.OFFLINE_RECORDS))
         assertEquals(AppDestination.STUDY, backDestination(AppDestination.POSITION_REVIEW_HOME))
+        assertEquals(AppDestination.STUDY, backDestination(AppDestination.THEORY_EXPLORATION))
         assertEquals(AppDestination.POSITION_REVIEW_HOME, backDestination(AppDestination.POSITION_REVIEW_INPUT))
         assertEquals(AppDestination.POSITION_REVIEW_HOME, backDestination(AppDestination.POSITION_REVIEW))
         assertEquals(
@@ -68,6 +69,13 @@ class AppNavigationTest {
             backDestination(
                 AppDestination.COMMON_SETTINGS,
                 commonSettingsParent = AppDestination.POSITION_REVIEW,
+            ),
+        )
+        assertEquals(
+            AppDestination.THEORY_EXPLORATION,
+            backDestination(
+                AppDestination.COMMON_SETTINGS,
+                commonSettingsParent = AppDestination.THEORY_EXPLORATION,
             ),
         )
     }

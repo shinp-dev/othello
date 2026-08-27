@@ -164,6 +164,9 @@ private fun AuthenticatedApp(
     val aiMoveEngine = remember { ProductionAiMoveEngine() }
     val localRecordStore = application.localGameRecordStore
     val positionReviewStore = application.positionReviewStore
+    val theorySessionStore = application.theorySessionStore
+    val theorySessionPersistence = application.theorySessionPersistence.coordinator
+    val theoryAnalysisCache = application.theoryAnalysisCache
     val localRecordPersistence = application.localGameRecordPersistence.coordinator
     val localRecordSaveStates by localRecordPersistence.saveStates.collectAsState()
     var localMatch by remember { mutableStateOf(false) }
@@ -284,8 +287,22 @@ private fun AuthenticatedApp(
                     )
                     destination == AppDestination.STUDY -> StudyScreen(
                         onPositionReview = { destination = AppDestination.POSITION_REVIEW_HOME },
+                        onTheoryExploration = { destination = AppDestination.THEORY_EXPLORATION },
                         onOnlineRecords = { destination = AppDestination.ONLINE_RECORDS },
                         onOfflineRecords = { destination = AppDestination.OFFLINE_RECORDS },
+                    )
+                    destination == AppDestination.THEORY_EXPLORATION -> TheoryExplorationScreen(
+                        sessionStore = theorySessionStore,
+                        persistence = theorySessionPersistence,
+                        analysisCache = theoryAnalysisCache,
+                        dataManager = analysisDataManager,
+                        settingsStore = edaxSettings,
+                        engine = analysisEngine,
+                        onBack = { destination = AppDestination.STUDY },
+                        onOpenCommonSettings = {
+                            commonSettingsBackDestination = AppDestination.THEORY_EXPLORATION
+                            destination = AppDestination.COMMON_SETTINGS
+                        },
                     )
                     destination == AppDestination.POSITION_REVIEW_HOME -> PositionReviewHomeScreen(
                         store = positionReviewStore,
@@ -439,7 +456,10 @@ private fun AuthenticatedApp(
                     )
                     destination == AppDestination.COMMON_SETTINGS -> CommonSettingsScreen(
                         manager = analysisDataManager,
-                        onDataChanged = analysisEngine::clearCache,
+                        onDataChanged = {
+                            analysisEngine.clearCache()
+                            scope.launch { theoryAnalysisCache.clear() }
+                        },
                         onBack = { destination = commonSettingsBackDestination },
                     )
                     destination == AppDestination.LOCAL_AI_SETUP -> LocalAiSetupScreen(
