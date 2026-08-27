@@ -20,9 +20,23 @@ class AiMatchArchitectureContractTest {
         val localMatchBody = mainActivity.substringAfter("private fun LocalMatchScreen(")
             .substringBefore("private fun LocalAiSetupScreen(")
         assertTrue("settingsStore.aiMatchSettings()" in localMatchBody)
-        assertTrue("dataManager.aiMoveSettings" in localMatchBody)
+        assertTrue("dataManager.aiMatchConfiguration" in localMatchBody)
+        assertTrue("aiConfiguration).moveSettings" in localMatchBody)
         assertFalse("reviewAnalysisSettings" in localMatchBody)
         assertFalse("analysisSettings(" in localMatchBody)
+    }
+
+    @Test
+    fun undoIsConfinedToLocalMatchScreen() {
+        val onlineMatchBody = mainActivity.substringAfter("private fun OnlineMatchScreen(")
+            .substringBefore("private fun PlayScreen(")
+        val localMatchBody = mainActivity.substringAfter("private fun LocalMatchScreen(")
+            .substringBefore("private fun LocalAiSetupScreen(")
+
+        assertFalse("undoMove" in onlineMatchBody)
+        assertFalse("undo_move" in onlineMatchBody)
+        assertTrue("undoMove" in localMatchBody)
+        assertTrue("undo_move" in localMatchBody)
     }
 
     @Test

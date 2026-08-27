@@ -324,9 +324,17 @@
     <string name="online_resign_text">投了すると、この対局は負けとして確定処理へ進みます。</string>
     <string name="local_resign_text">この対局を投了としてローカル棋譜に保存します。</string>
     <string name="ai_thinking">AI思考中…</string>
+    <string name="undo_move">待った</string>
+    <string name="undo_unused">待ったなし</string>
+    <string name="undo_used">待ったあり</string>
+    <string name="ai_match_condition_summary">AI Lv.%1$d · %2$dms · %3$s</string>
+    <string name="eval_short_label">Eval</string>
+    <string name="book_short_label">Book</string>
     <string name="local_record_saved">ローカル棋譜を保存しました</string>
     <string name="local_record_save_failed">ローカル棋譜を保存できませんでした</string>
     <string name="local_record_saving">ローカル棋譜を保存中…</string>
+    <string name="local_record_operation_failed">ローカル棋譜の更新に失敗しました（%1$d件）</string>
+    <string name="retry_record_operation">更新を再試行</string>
     <string name="user_color">ユーザーの色</string>
     <string name="black_checked">✓ 黒</string>
     <string name="white_checked">✓ 白</string>

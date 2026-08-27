@@ -14,9 +14,11 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.CoroutineContext
 
 class LocalGameRecordPersistenceTest {
@@ -174,6 +176,46 @@ class LocalGameRecordPersistenceTest {
         processOwner.close()
     }
 
+    @Test
+    fun terminalUndoDiscardsAlreadySavedRecord() = runBlocking {
+        val store = RecordingStore()
+        val processOwner = LocalGameRecordPersistenceProcessOwner(store, Dispatchers.Default)
+        val coordinator = processOwner.coordinator
+        val record = LocalGameRecord("withdrawn", listOf(Position(2, 3)), 1, LocalRecordType.LOCAL_HUMAN)
+        coordinator.enqueue(record)?.join()
+        assertEquals(record, store.records[record.localId])
+
+        coordinator.discard(record.localId)?.join()
+
+        assertNull(store.records[record.localId])
+        assertEquals(LocalRecordSaveStatus.DISCARDED, coordinator.state(record.localId)?.status)
+        assertEquals(emptyList(), coordinator.failedRecords())
+        processOwner.close()
+    }
+
+    @Test
+    fun discardWaitsForNonCooperativeInFlightSaveThenDeletesIt() = runBlocking {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val store = NonCooperativeDelayedStore(started, release)
+        val processOwner = LocalGameRecordPersistenceProcessOwner(store, Dispatchers.Default)
+        val coordinator = processOwner.coordinator
+        val record = LocalGameRecord("racing", listOf(Position(2, 3)), 1, LocalRecordType.LOCAL_AI)
+        coordinator.enqueue(record)
+        started.await()
+
+        val discard = assertNotNull(coordinator.discard(record.localId))
+        assertEquals(LocalRecordSaveStatus.DISCARDING, coordinator.state(record.localId)?.status)
+        release.complete(Unit)
+        discard.join()
+
+        assertEquals(1, store.saveAttempts)
+        assertEquals(1, store.deleteAttempts)
+        assertNull(store.records[record.localId])
+        assertEquals(LocalRecordSaveStatus.DISCARDED, coordinator.state(record.localId)?.status)
+        processOwner.close()
+    }
+
     private class DelayedStore(
         private val started: CompletableDeferred<Unit>,
         private val release: CompletableDeferred<Unit>,
@@ -191,6 +233,31 @@ class LocalGameRecordPersistenceTest {
         }
 
         override suspend fun delete(localId: String) {
+            records.remove(localId)
+        }
+    }
+
+    private class NonCooperativeDelayedStore(
+        private val started: CompletableDeferred<Unit>,
+        private val release: CompletableDeferred<Unit>,
+    ) : LocalGameRecordStore {
+        val records = linkedMapOf<String, LocalGameRecord>()
+        var saveAttempts = 0
+        var deleteAttempts = 0
+
+        override suspend fun list(limit: Int) = records.values.take(limit)
+
+        override suspend fun save(record: LocalGameRecord) {
+            saveAttempts++
+            started.complete(Unit)
+            withContext(NonCancellable) {
+                release.await()
+                records[record.localId] = record
+            }
+        }
+
+        override suspend fun delete(localId: String) {
+            deleteAttempts++
             records.remove(localId)
         }
     }

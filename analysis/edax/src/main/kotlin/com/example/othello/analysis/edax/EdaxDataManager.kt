@@ -35,6 +35,13 @@ data class EdaxCommonDataStatus(
     val openingBook: ImportedAnalysisFile?,
 )
 
+/** Immutable engine conditions captured for one AI match. */
+data class AiMatchConfiguration(
+    val moveSettings: AiMoveSettings,
+    val evaluationData: ImportedAnalysisFile?,
+    val openingBook: ImportedAnalysisFile?,
+)
+
 internal const val EDAX_PREFERENCES = "edax-analysis"
 
 /** Deliberately separate engine and evaluation-data versions. The archive URL is pinned below. */
@@ -72,19 +79,11 @@ class EdaxDataManager(context: Context) {
         )
     }
 
-    fun aiMoveSettings(settings: AiMatchSettings): AiMoveSettings {
-        val current = commonDataStatus()
-        return AiMoveSettings(
-            level = settings.level,
-            moveTimeMs = settings.moveTimeMs,
-            evaluationData = current.evaluationData?.let {
-                EvaluationDataSource.Imported(AnalysisAsset(it.appPrivatePath, it.sha256))
-            } ?: EvaluationDataSource.None,
-            bookSource = current.openingBook?.let {
-                BookSource.ImportedBook(AnalysisAsset(it.appPrivatePath, it.sha256))
-            } ?: BookSource.None,
-        )
+    fun aiMatchConfiguration(settings: AiMatchSettings): AiMatchConfiguration {
+        return commonDataStatus().toAiMatchConfiguration(settings)
     }
+
+    fun aiMoveSettings(settings: AiMatchSettings): AiMoveSettings = aiMatchConfiguration(settings).moveSettings
 
     suspend fun importEvaluationData(uri: Uri): ImportedAnalysisFile =
         import(uri, EVAL_PREFIX, EVAL_MAX_BYTES, "dat", NativeEdax::validateEvaluationData)
@@ -273,6 +272,22 @@ class EdaxDataManager(context: Context) {
         val SHA256 = Regex("[0-9a-f]{64}")
     }
 }
+
+internal fun EdaxCommonDataStatus.toAiMatchConfiguration(settings: AiMatchSettings): AiMatchConfiguration =
+    AiMatchConfiguration(
+        moveSettings = AiMoveSettings(
+            level = settings.level,
+            moveTimeMs = settings.moveTimeMs,
+            evaluationData = evaluationData?.let {
+                EvaluationDataSource.Imported(AnalysisAsset(it.appPrivatePath, it.sha256))
+            } ?: EvaluationDataSource.None,
+            bookSource = openingBook?.let {
+                BookSource.ImportedBook(AnalysisAsset(it.appPrivatePath, it.sha256))
+            } ?: BookSource.None,
+        ),
+        evaluationData = evaluationData,
+        openingBook = openingBook,
+    )
 
 internal object OfficialEvalDownloader {
     private const val MAX_ARCHIVE_BYTES = 64L * 1024L * 1024L
