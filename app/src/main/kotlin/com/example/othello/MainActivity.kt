@@ -509,7 +509,10 @@ private fun AuthenticatedApp(
                     else -> PlayScreen(
                         state = matchmakingState,
                         failedLocalRecordSaves = localRecordSaveStates.values
-                            .filter { it.status == LocalRecordSaveStatus.FAILED },
+                            .filter {
+                                it.status == LocalRecordSaveStatus.FAILED ||
+                                    it.status == LocalRecordSaveStatus.DISCARD_FAILED
+                            },
                         onOnlineStart = { scope.launch { matchmaking.enqueue() } },
                         onCancel = { scope.launch { matchmaking.cancel() } },
                         onLocalHumanStart = {
@@ -841,14 +844,14 @@ private fun PlayScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        appString(R.string.local_save_failed, failedLocalRecordSaves.size),
+                        appString(R.string.local_record_operation_failed, failedLocalRecordSaves.size),
                         color = MaterialTheme.colorScheme.error,
                     )
                     failedLocalRecordSaves.forEach { failed ->
                         OutlinedButton(
                             onClick = { onRetryLocalRecordSave(failed.localId) },
                             modifier = Modifier.fillMaxWidth(),
-                        ) { Text(appString(R.string.retry_save)) }
+                        ) { Text(appString(R.string.retry_record_operation)) }
                     }
                 }
             }
@@ -898,8 +901,18 @@ private fun LocalMatchScreen(
     val controller = remember(mode, humanDisc) { LocalMatchController(mode = mode, humanDisc = humanDisc) }
     val aiTurnController = remember(controller, engine) { LocalAiTurnController(controller, engine) }
     var viewState by remember { mutableStateOf(controller.viewState) }
+    var aiConfiguration by remember(mode, humanDisc, dataManager, settingsStore) {
+        mutableStateOf(
+            if (mode == LocalMatchMode.AI) {
+                dataManager.aiMatchConfiguration(settingsStore.aiMatchSettings())
+            } else {
+                null
+            },
+        )
+    }
     var saveError by remember { mutableStateOf<String?>(null) }
     var confirmResign by remember { mutableStateOf(false) }
+    var matchGeneration by remember(mode, humanDisc) { mutableStateOf(0) }
     val saveStates by persistence.saveStates.collectAsState()
     DisposableEffect(controller, persistence) {
         val closeable = controller.observe { next ->
@@ -908,18 +921,40 @@ private fun LocalMatchScreen(
         }
         onDispose { closeable.close() }
     }
-    LaunchedEffect(controller, viewState.game.ply, viewState.game.currentPlayer, viewState.completedRecord) {
+    LaunchedEffect(controller, matchGeneration, viewState.game, viewState.completedRecord, aiConfiguration) {
         if (mode == LocalMatchMode.AI && viewState.aiDisc == viewState.game.currentPlayer &&
             !viewState.aiThinking && viewState.completedRecord == null && viewState.game.status is com.example.othello.game.GameStatus.InProgress
         ) {
-            runCatching {
-                aiTurnController.play(dataManager.aiMoveSettings(settingsStore.aiMatchSettings()))
+            try {
+                aiTurnController.play(requireNotNull(aiConfiguration).moveSettings)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Throwable) {
+                saveError = localizeUserMessage(context, failure.message) ?: context.getString(R.string.ai_match_unavailable)
             }
-                .onFailure { if (it !is CancellationException) saveError = localizeUserMessage(context, it.message) ?: context.getString(R.string.ai_match_unavailable) }
         }
     }
-    DisposableEffect(engine) {
-        onDispose { engine.cancel() }
+    DisposableEffect(aiTurnController) {
+        onDispose { aiTurnController.cancel() }
+    }
+    fun undoMove() {
+        if (!viewState.canUndo) return
+        if (mode == LocalMatchMode.AI) aiTurnController.cancelForUndo()
+        controller.undo()?.let { result ->
+            result.invalidatedRecord?.let { persistence.discard(it.localId) }
+            saveError = null
+            confirmResign = false
+        }
+    }
+    fun resetMatch() {
+        if (mode == LocalMatchMode.AI) {
+            aiTurnController.cancel()
+            aiConfiguration = dataManager.aiMatchConfiguration(settingsStore.aiMatchSettings())
+        }
+        controller.reset()
+        matchGeneration++
+        saveError = null
+        confirmResign = false
     }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
@@ -934,6 +969,7 @@ private fun LocalMatchScreen(
         LocalOthelloBoard(viewState, controller)
         Text(localizeUserMessage(context, viewState.message).orEmpty(), style = MaterialTheme.typography.titleMedium, modifier = Modifier.align(Alignment.CenterHorizontally))
         if (viewState.aiThinking) Text(appString(R.string.ai_thinking), modifier = Modifier.align(Alignment.CenterHorizontally))
+        aiConfiguration?.let { AiMatchConditions(it, viewState.undoUsed) }
         localizeUserMessage(context, viewState.error)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         saveError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         viewState.completedRecord?.let { record ->
@@ -949,15 +985,23 @@ private fun LocalMatchScreen(
                 LocalRecordSaveStatus.PENDING,
                 LocalRecordSaveStatus.SAVING,
                 null -> Text(appString(R.string.local_record_saving))
+                LocalRecordSaveStatus.DISCARDING,
+                LocalRecordSaveStatus.DISCARDED,
+                LocalRecordSaveStatus.DISCARD_FAILED -> Unit
             }
         }
+        OutlinedButton(
+            onClick = ::undoMove,
+            enabled = viewState.canUndo,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(appString(R.string.undo_move)) }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
                 onClick = { confirmResign = true },
                 enabled = viewState.finishReason == null && !viewState.aiThinking,
                 modifier = Modifier.weight(1f),
             ) { Text(appString(R.string.resign)) }
-            Button(onClick = controller::reset, modifier = Modifier.weight(1f)) { Text(appString(R.string.new_match)) }
+            Button(onClick = ::resetMatch, modifier = Modifier.weight(1f)) { Text(appString(R.string.new_match)) }
         }
     }
     if (confirmResign) {
