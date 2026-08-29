@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Edax評価データの設定 | ちゃんりば",
@@ -10,7 +11,7 @@ export default function EdaxPage() {
   return (
     <main className="policy-page">
       <div className="policy-page-inner">
-        <a className="policy-back" href="/">← ちゃんりばトップへ</a>
+        <Link className="policy-back" href="/">← ちゃんりばトップへ</Link>
         <p className="section-kicker">CHANRIVA / EDAX</p>
         <h1>Edax評価データの設定</h1>
         <p className="policy-notice">
@@ -45,7 +46,7 @@ export default function EdaxPage() {
           評価データはCHANRIVAのAPK/AABにも、Shinp Studioのサイトにも配布・同梱していません。ちゃんりばはEdax公式・公認アプリではありません。
         </p>
         <div className="policy-footer">
-          <a className="policy-back" href="/">← トップへ戻る</a>
+          <Link className="policy-back" href="/">← トップへ戻る</Link>
         </div>
       </div>
     </main>

@@ -8,10 +8,22 @@
 - Android namespace / Kotlin パッケージ: 既存の `com.example.othello` 系を維持
 - label: `ちゃんりば`
 - 正式アイコン: `landing-page/public/images/app-icon.png`（今回の作業では変更しない）
-- versionCode: `1`
+- versionCode: `2`
 - versionName: `0.1.0`
 - minSdk: `26`
 - targetSdk: `36`（Android 16 / API 36）
+
+現在のversionCodeは[`app/build.gradle.kts`](../../../app/build.gradle.kts)を正本とする。Play提出前にこの値とAABのversionCodeを照合し、資料だけを先行更新しない。
+
+## リリース署名のidentity
+
+- 正式アップロード証明書SHA-256: `47:87:8B:52:E9:3A:9C:FD:5F:D9:0C:DE:BF:E3:B6:E4:02:9D:BF:8F:FB:A9:B4:48:14:0B:05:DB:A8:1C:79:DD`
+- alias: `chanriva-upload`
+- 正式アップロードkeystoreのファイル名: `chanriva-upload-v3.jks`（所有者確認済み。2026年8月18日作成、Git外で保管）
+- `chanriva-upload-v2.jks`という既存資料の記録は古い。ファイル名だけをidentityとして扱わず、上記fingerprintおよびPlay Consoleの登録証明書との一致を優先する。
+- 既存manifestで`v3`と記録されたローカルAABから抽出した証明書SHA-256は`3A:6B:5A:94:62:45:6B:DE:65:B7:12:C0:66:B0:5C:A0:CB:96:52:2B:26:42:16:12:D5:FD:FD:95:E0:3E:0A:16`で、正式fingerprintと一致しない。この成果物をPlayへ提出しない。
+- 所有者はGit外の`chanriva-upload-v3.jks`の公開証明書SHA-256を正式fingerprintおよびPlay Consoleの登録値と照合し、一致確認後にだけ`CHANRIVA_UPLOAD_KEYSTORE_PATH`へ設定して最終AABを再生成する。
+- `./gradlew verifyPlayReleaseSigning`はAAB内の公開証明書を正式fingerprintと照合し、不一致をfail-closedで拒否する。
 
 ## 公式要件の確認日
 
