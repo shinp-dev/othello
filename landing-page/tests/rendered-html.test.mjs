@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { access, readFile, readdir } from "node:fs/promises";
 import test from "node:test";
+import {
+  resolveSignupConfirmationState,
+  SIGNUP_CONFIRMATION_MESSAGE,
+  SIGNUP_CONFIRMATION_STATE,
+} from "../app/signup-complete/confirmation-state.js";
 
 const templateRoot = new URL("../", import.meta.url);
 
@@ -91,9 +96,24 @@ test("renders the email confirmation completion page without an app redirect", a
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /CHANRIVA \/ SIGN-UP/);
-  assert.match(html, /メールアドレスの確認が完了しました/);
-  assert.match(html, /アプリに戻ってログインしてください/);
+  assert.match(html, /メールアドレスの確認結果を確認しています/);
   assert.doesNotMatch(html, /intent:|android-app:|market:\/\//i);
+});
+
+test("distinguishes successful, expired, and failed email confirmation redirects", () => {
+  assert.equal(resolveSignupConfirmationState(), SIGNUP_CONFIRMATION_STATE.SUCCESS);
+  assert.equal(
+    resolveSignupConfirmationState("#error=access_denied&error_code=otp_expired&error_description=Email+link+has+expired"),
+    SIGNUP_CONFIRMATION_STATE.EXPIRED,
+  );
+  assert.equal(
+    resolveSignupConfirmationState("", "?error=access_denied&error_code=validation_failed"),
+    SIGNUP_CONFIRMATION_STATE.FAILURE,
+  );
+  assert.equal(SIGNUP_CONFIRMATION_MESSAGE.success.title, "登録完了");
+  assert.match(SIGNUP_CONFIRMATION_MESSAGE.success.action, /アプリに戻ってログイン/);
+  assert.match(SIGNUP_CONFIRMATION_MESSAGE.expired.action, /確認メールをもう一度送信/);
+  assert.match(SIGNUP_CONFIRMATION_MESSAGE.failure.title, /確認できませんでした/);
 });
 
 test("renders the web deletion email confirmation page without an app redirect", async () => {
