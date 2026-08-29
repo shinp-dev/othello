@@ -383,6 +383,8 @@
     <string name="legal_moves_analyzed">合法手 %1$d 件を解析しました</string>
     <string name="discard_variation">変化を破棄</string>
     <string name="save_variation_local">変化をローカル棋譜に保存</string>
+    <string name="saving_variation">保存中…</string>
+    <string name="variation_saved">保存済み</string>
     <string name="research_record_saved">研究棋譜をローカルに保存しました</string>
     <string name="research_record_save_failed">研究棋譜を保存できませんでした</string>
     <string name="open_analysis_settings">解析設定を開く</string>

@@ -381,6 +381,8 @@
     <string name="legal_moves_analyzed">Analyzed %1$d legal moves.</string>
     <string name="discard_variation">Discard variation</string>
     <string name="save_variation_local">Save variation as a local Game Record</string>
+    <string name="saving_variation">Saving…</string>
+    <string name="variation_saved">Saved</string>
     <string name="research_record_saved">Research Game Record saved on this device.</string>
     <string name="research_record_save_failed">Could not save the Research Game Record.</string>
     <string name="open_analysis_settings">Open analysis settings</string>
