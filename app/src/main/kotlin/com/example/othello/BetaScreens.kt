@@ -147,6 +147,7 @@ internal fun ReviewScreen(
     val dataStatus = remember(revision, analysisRun) { dataManager.commonDataStatus() }
     val reviewSettings = remember(revision, analysisRun) { settingsStore.reviewAnalysisSettings() }
     val settings = remember(revision, analysisRun) { dataManager.analysisSettings(reviewSettings) }
+    val navigation = review.navigationState
     val positionKey = state.stateHash()
 
     LaunchedEffect(
@@ -203,10 +204,10 @@ internal fun ReviewScreen(
             if (review.playVariation(position)) revision++
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            OutlinedButton(onClick = { review.seek(0); revision++ }, enabled = !review.isInVariation) { Text(appString(R.string.first)) }
-            OutlinedButton(onClick = { review.previous(); revision++ }, enabled = !review.isInVariation) { Text(appString(R.string.previous)) }
-            OutlinedButton(onClick = { review.next(); revision++ }, enabled = !review.isInVariation) { Text(appString(R.string.next)) }
-            OutlinedButton(onClick = { review.seek(review.mainLineLastPly); revision++ }, enabled = !review.isInVariation) { Text(appString(R.string.last)) }
+            OutlinedButton(onClick = { review.seek(0); revision++ }, enabled = navigation.canGoToFirst) { Text(appString(R.string.first)) }
+            OutlinedButton(onClick = { review.previous(); revision++ }, enabled = navigation.canGoToPrevious) { Text(appString(R.string.previous)) }
+            OutlinedButton(onClick = { review.next(); revision++ }, enabled = navigation.canGoToNext) { Text(appString(R.string.next)) }
+            OutlinedButton(onClick = { review.seek(review.mainLineLastPly); revision++ }, enabled = navigation.canGoToLast) { Text(appString(R.string.last)) }
         }
         Slider(
             value = review.cursor.toFloat(),
@@ -730,6 +731,7 @@ internal fun ReviewScreenV2(
     val status = remember(revision, analysisRun) { dataManager.commonDataStatus() }
     val reviewSettings = remember(revision, analysisRun) { settingsStore.reviewAnalysisSettings() }
     val settings = remember(revision, analysisRun) { dataManager.analysisSettings(reviewSettings) }
+    val navigation = review.navigationState
     val positionKey = state.stateHash()
     val analysisIssue = when {
         !status.nativeAvailable -> edaxUnavailable
@@ -797,10 +799,10 @@ internal fun ReviewScreenV2(
             if (review.playVariation(position)) revision++
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            OutlinedButton(onClick = { review.seek(0); revision++ }, enabled = !review.isInVariation) { Text(appString(R.string.first)) }
-            OutlinedButton(onClick = { review.previous(); revision++ }, enabled = !review.isInVariation) { Text(appString(R.string.previous)) }
-            OutlinedButton(onClick = { review.next(); revision++ }, enabled = !review.isInVariation) { Text(appString(R.string.next)) }
-            OutlinedButton(onClick = { review.seek(review.mainLineLastPly); revision++ }, enabled = !review.isInVariation) { Text(appString(R.string.last)) }
+            OutlinedButton(onClick = { review.seek(0); revision++ }, enabled = navigation.canGoToFirst) { Text(appString(R.string.first)) }
+            OutlinedButton(onClick = { review.previous(); revision++ }, enabled = navigation.canGoToPrevious) { Text(appString(R.string.previous)) }
+            OutlinedButton(onClick = { review.next(); revision++ }, enabled = navigation.canGoToNext) { Text(appString(R.string.next)) }
+            OutlinedButton(onClick = { review.seek(review.mainLineLastPly); revision++ }, enabled = navigation.canGoToLast) { Text(appString(R.string.last)) }
         }
         Slider(value = review.cursor.toFloat(), onValueChange = { review.seek(it.toInt()); revision++ }, valueRange = 0f..review.mainLineLastPly.coerceAtLeast(1).toFloat(), steps = (review.mainLineLastPly - 1).coerceAtLeast(0), enabled = !review.isInVariation)
         if (!review.isInVariation) {
