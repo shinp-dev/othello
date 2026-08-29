@@ -14,6 +14,13 @@ import com.example.othello.records.MatchResult
 
 data class Variation(val parentPly: Int, val moves: List<Position?>)
 
+data class ReviewNavigationState(
+    val canGoToFirst: Boolean,
+    val canGoToPrevious: Boolean,
+    val canGoToNext: Boolean,
+    val canGoToLast: Boolean,
+)
+
 data class ReviewInput(
     val id: String,
     val moves: List<Position?>,
@@ -50,9 +57,20 @@ class ReviewSession(private val input: ReviewInput) {
     val currentVariations: List<Variation> get() = variations.toList()
     val isInVariation: Boolean get() = activeVariationState != null
     val mainLineLastPly: Int get() = states.lastIndex
+    val navigationState: ReviewNavigationState
+        get() {
+            val canMoveBackward = !isInVariation && cursor > 0
+            val canMoveForward = !isInVariation && cursor < states.lastIndex
+            return ReviewNavigationState(
+                canGoToFirst = canMoveBackward,
+                canGoToPrevious = canMoveBackward,
+                canGoToNext = canMoveForward,
+                canGoToLast = canMoveForward,
+            )
+        }
 
-    fun next() { if (!isInVariation && cursor < states.lastIndex) cursor++ }
-    fun previous() { if (!isInVariation && cursor > 0) cursor-- }
+    fun next() { if (navigationState.canGoToNext) cursor++ }
+    fun previous() { if (navigationState.canGoToPrevious) cursor-- }
     fun seek(ply: Int) { if (!isInVariation) cursor = ply.coerceIn(0, states.lastIndex) }
     fun branch(moves: List<Position?>) { variations += Variation(cursor, moves.toList()) }
 
