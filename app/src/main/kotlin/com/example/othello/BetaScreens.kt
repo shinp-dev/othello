@@ -15,9 +15,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -62,6 +65,7 @@ import com.example.othello.records.MatchResult
 import com.example.othello.review.ReviewSession
 import com.example.othello.review.AnalysisRequestGuard
 import com.example.othello.review.ReviewInput
+import com.example.othello.review.VariationSaveTracker
 import com.example.othello.records.LocalGameRecord
 import com.example.othello.records.LocalGameRecordReadResult
 import com.example.othello.records.LocalGameRecordStore
@@ -723,11 +727,18 @@ internal fun ReviewScreenV2(
     var running by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<AnalysisResult?>(null) }
     var message by remember { mutableStateOf(analysisNotStarted) }
-    var saveMessage by remember { mutableStateOf<String?>(null) }
+    var variationSaveRevision by remember { mutableIntStateOf(0) }
+    var variationSaveInProgress by remember { mutableStateOf(false) }
+    var variationSaveError by remember { mutableStateOf<String?>(null) }
+    val variationSaveTracker = remember(input.id) { VariationSaveTracker() }
     var showMemoDialog by remember { mutableStateOf(false) }
     var memoDraft by remember { mutableStateOf(input.localMemo.orEmpty()) }
     var currentMemo by remember(input.id) { mutableStateOf(input.localMemo) }
     val state = remember(revision) { review.current }
+    val currentVariationLine = remember(revision) { review.currentVariationLine }
+    val isCurrentVariationSaved = remember(revision, variationSaveRevision) {
+        variationSaveTracker.isSaved(currentVariationLine)
+    }
     val status = remember(revision, analysisRun) { dataManager.commonDataStatus() }
     val reviewSettings = remember(revision, analysisRun) { settingsStore.reviewAnalysisSettings() }
     val settings = remember(revision, analysisRun) { dataManager.analysisSettings(reviewSettings) }
@@ -796,7 +807,10 @@ internal fun ReviewScreenV2(
         }
         Text(appString(R.string.ply_variation, review.cursor, review.mainLineLastPly, if (review.isInVariation) appString(R.string.variation_suffix) else ""))
         ReviewBoard(state, review.isInVariation, result?.evaluations.orEmpty().associateBy { it.move }) { position ->
-            if (review.playVariation(position)) revision++
+            if (review.playVariation(position)) {
+                variationSaveError = null
+                revision++
+            }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             OutlinedButton(onClick = { review.seek(0); revision++ }, enabled = navigation.canGoToFirst) { Text(appString(R.string.first)) }
@@ -806,19 +820,50 @@ internal fun ReviewScreenV2(
         }
         Slider(value = review.cursor.toFloat(), onValueChange = { review.seek(it.toInt()); revision++ }, valueRange = 0f..review.mainLineLastPly.coerceAtLeast(1).toFloat(), steps = (review.mainLineLastPly - 1).coerceAtLeast(0), enabled = !review.isInVariation)
         if (!review.isInVariation) {
-            OutlinedButton(onClick = { review.beginVariation(); revision++ }, modifier = Modifier.fillMaxWidth()) { Text(appString(R.string.start_variation)) }
+            OutlinedButton(onClick = {
+                variationSaveError = null
+                review.beginVariation()
+                revision++
+            }, modifier = Modifier.fillMaxWidth()) { Text(appString(R.string.start_variation)) }
         } else {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { review.cancelVariation(); revision++ }, modifier = Modifier.weight(1f)) { Text(appString(R.string.discard_variation)) }
                 OutlinedButton(onClick = {
-                    val completeLine = review.saveVariationAndReturn()
+                    variationSaveError = null
+                    review.cancelVariation()
                     revision++
-                    if (completeLine != null) scope.launch {
-                        runCatching {
-                            localStore.save(LocalGameRecord(java.util.UUID.randomUUID().toString(), completeLine, System.currentTimeMillis(), LocalRecordType.RESEARCH_LINE))
-                        }.onSuccess { saveMessage = context.getString(R.string.research_record_saved) }.onFailure { saveMessage = it.message ?: context.getString(R.string.research_record_save_failed) }
+                }, modifier = Modifier.weight(1f)) { Text(appString(R.string.discard_variation)) }
+                OutlinedButton(onClick = {
+                    val completeLine = currentVariationLine ?: return@OutlinedButton
+                    variationSaveError = null
+                    variationSaveInProgress = true
+                    scope.launch {
+                        try {
+                            variationSaveTracker.save(completeLine) { savedLine ->
+                                localStore.save(LocalGameRecord(java.util.UUID.randomUUID().toString(), savedLine, System.currentTimeMillis(), LocalRecordType.RESEARCH_LINE))
+                            }.onSuccess {
+                                variationSaveRevision++
+                            }.onFailure {
+                                variationSaveError = it.message ?: context.getString(R.string.research_record_save_failed)
+                            }
+                        } finally {
+                            variationSaveInProgress = false
+                        }
                     }
-                }, modifier = Modifier.weight(1f)) { Text(appString(R.string.save_variation_local)) }
+                }, enabled = currentVariationLine != null && !isCurrentVariationSaved && !variationSaveInProgress, modifier = Modifier.weight(1f)) {
+                    if (isCurrentVariationSaved) {
+                        Icon(Icons.Filled.Check, contentDescription = null)
+                        Spacer(Modifier.size(8.dp))
+                    }
+                    Text(
+                        appString(
+                            when {
+                                variationSaveInProgress -> R.string.saving_variation
+                                isCurrentVariationSaved -> R.string.variation_saved
+                                else -> R.string.save_variation_local
+                            },
+                        ),
+                    )
+                }
             }
         }
         analysisIssue?.let { issue ->
@@ -835,7 +880,7 @@ internal fun ReviewScreenV2(
             modifier = Modifier.fillMaxWidth(),
         ) { Text(appString(if (running) R.string.cancel_analysis else R.string.analyze_all_legal_moves)) }
         Text(message)
-        saveMessage?.let { Text(it) }
+        variationSaveError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         result?.evaluations.orEmpty().forEach { evaluation -> Text("${evaluation.move.coordinateLabel()} ${formatEvaluation(evaluation.score.value)}", style = MaterialTheme.typography.bodySmall) }
         if (researchParticipationRepository != null && researchPositionRepository != null) ResearchReviewPanel(state, researchParticipationRepository, researchPositionRepository)
     }

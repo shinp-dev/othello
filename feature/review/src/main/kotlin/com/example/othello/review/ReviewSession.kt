@@ -56,6 +56,12 @@ class ReviewSession(private val input: ReviewInput) {
     val reviewInput: ReviewInput get() = input
     val currentVariations: List<Variation> get() = variations.toList()
     val isInVariation: Boolean get() = activeVariationState != null
+    val currentVariationLine: List<Position?>?
+        get() {
+            val parent = variationParentPly ?: return null
+            return (input.moves.take(parent) + activeVariationMoves)
+                .takeIf { activeVariationMoves.isNotEmpty() }
+        }
     val mainLineLastPly: Int get() = states.lastIndex
     val navigationState: ReviewNavigationState
         get() {

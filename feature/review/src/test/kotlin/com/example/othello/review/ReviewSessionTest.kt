@@ -9,6 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
 
 class ReviewSessionTest {
     private val record = GameRecord(
@@ -91,5 +92,45 @@ class ReviewSessionTest {
         assertEquals(GameState(), session.current)
         session.seek(Int.MAX_VALUE)
         assertEquals(2, session.cursor)
+    }
+
+    @Test
+    fun currentVariationLineTracksThePersistableContentWithoutEndingEditing() {
+        val session = ReviewSession(record)
+        session.seek(1)
+        session.beginVariation()
+
+        assertEquals(null, session.currentVariationLine)
+        assertTrue(session.playVariation(session.current.legalMoves.first()))
+        val firstDraft = session.currentVariationLine
+
+        assertTrue(session.isInVariation)
+        assertEquals(record.moves.take(1), firstDraft?.take(1))
+
+        assertTrue(session.playVariation(session.current.legalMoves.first()))
+        assertTrue(session.isInVariation)
+        assertFalse(firstDraft == session.currentVariationLine)
+    }
+
+    @Test
+    fun variationSaveStateFollowsPersistenceResultsAndContentChanges() = runBlocking {
+        val tracker = VariationSaveTracker()
+        val initialDraft = listOf(Position(2, 3))
+        val editedDraft = initialDraft + Position(2, 2)
+
+        assertFalse(tracker.isSaved(initialDraft))
+
+        val firstSave = tracker.save(initialDraft) { }
+        assertTrue(firstSave.isSuccess)
+        assertTrue(tracker.isSaved(initialDraft))
+
+        assertFalse(tracker.isSaved(editedDraft))
+        val failedSave = tracker.save(editedDraft) { error("persistence failed") }
+        assertTrue(failedSave.isFailure)
+        assertFalse(tracker.isSaved(editedDraft))
+
+        val secondSave = tracker.save(editedDraft) { }
+        assertTrue(secondSave.isSuccess)
+        assertTrue(tracker.isSaved(editedDraft))
     }
 }
