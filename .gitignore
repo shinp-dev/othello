@@ -6,6 +6,33 @@ local.properties
 *.keystore
 signing*.properties
 key.properties
+
+# Environment and local secret configuration
+.env
+.env.*
+!.env.example
+!.env.*.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+!.dev.vars.*.example
+secrets.properties
+
+# Local credential files
+credentials*.json
+service-account*.json
+.npmrc
+
+# Private-key and certificate containers
+*.p12
+*.pfx
+*.key
+
+# Android release artifacts
+*.aab
+*.apk
+*.apks
+
 .idea/
 *.iml
 captures/
