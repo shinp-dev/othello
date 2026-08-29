@@ -25,6 +25,10 @@ class LocaleResourceContractTest {
         assertTrue("<string name=\"local_match_resigned\">%1\$sが投了しました</string>" in japaneseText)
         assertTrue("<string name=\"email_format_invalid\">Enter a valid email address.</string>" in defaultText)
         assertTrue("<string name=\"email_format_invalid\">メールアドレスの形式を確認してください。</string>" in japaneseText)
+        assertTrue("<string name=\"show_password\">Show password</string>" in defaultText)
+        assertTrue("<string name=\"show_password\">パスワードを表示</string>" in japaneseText)
+        assertTrue("<string name=\"hide_password\">Hide password</string>" in defaultText)
+        assertTrue("<string name=\"hide_password\">パスワードを非表示</string>" in japaneseText)
         assertFalse(legacyEnglishDirectory.exists())
     }
 
@@ -44,7 +48,7 @@ class LocaleResourceContractTest {
         val japanese = readStrings(japaneseFile)
 
         assertEquals(english.keys, japanese.keys)
-        assertEquals(437, english.size)
+        assertEquals(439, english.size)
         english.forEach { (id, value) ->
             assertEquals(formatArguments(value), formatArguments(japanese.getValue(id)), id)
         }
