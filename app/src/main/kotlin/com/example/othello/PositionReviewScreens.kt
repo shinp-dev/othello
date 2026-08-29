@@ -452,8 +452,10 @@ internal fun PositionReviewScreen(
         }
         analysisIssue?.let { issue ->
             Text(issue, color = MaterialTheme.colorScheme.error)
-            OutlinedButton(onClick = onOpenCommonSettings, modifier = Modifier.fillMaxWidth()) {
-                Text(appString(if (dataStatus.evaluationData == null) R.string.set_evaluation_data else R.string.open_analysis_settings))
+            if (dataStatus.evaluationData == null) {
+                OutlinedButton(onClick = onOpenCommonSettings, modifier = Modifier.fillMaxWidth()) {
+                    Text(appString(R.string.open_analysis_settings))
+                }
             }
         }
         if (analysisIssue == null) Text(message)

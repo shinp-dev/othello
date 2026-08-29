@@ -823,9 +823,9 @@ internal fun ReviewScreenV2(
         }
         analysisIssue?.let { issue ->
             Text(issue, color = MaterialTheme.colorScheme.error)
-            if (status.nativeAvailable || status.evaluationData == null) {
+            if (status.evaluationData == null) {
                 OutlinedButton(onClick = onOpenCommonSettings, modifier = Modifier.fillMaxWidth()) {
-                    Text(appString(if (status.evaluationData == null) R.string.set_evaluation_data else R.string.open_analysis_settings))
+                    Text(appString(R.string.open_analysis_settings))
                 }
             }
         }

@@ -327,13 +327,10 @@ private fun TheoryExplorationContent(
         val visibleIssue = analysisIssue.takeIf { result == null }
         if (visibleIssue != null) {
             Text(visibleIssue, color = MaterialTheme.colorScheme.error)
-            OutlinedButton(onClick = onOpenCommonSettings, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    appString(
-                        if (dataStatus.evaluationData == null) R.string.set_evaluation_data
-                        else R.string.open_analysis_settings,
-                    ),
-                )
+            if (dataStatus.evaluationData == null) {
+                OutlinedButton(onClick = onOpenCommonSettings, modifier = Modifier.fillMaxWidth()) {
+                    Text(appString(R.string.open_analysis_settings))
+                }
             }
         } else if (message.isNotBlank()) {
             Text(message)
