@@ -19,6 +19,7 @@ class LocalMatchControllerTest {
     fun initialPositionCannotBeUndone() {
         val controller = LocalMatchController()
 
+        assertEquals(LocalMatchStatusMessage.Turn(Disc.BLACK), controller.viewState.message)
         assertFalse(controller.viewState.canUndo)
         assertNull(controller.undo())
         assertFalse(controller.viewState.undoUsed)
@@ -86,10 +87,15 @@ class LocalMatchControllerTest {
 
         assertTrue(controller.play(move))
         assertEquals(null, controller.viewState.moves.last())
+        assertEquals(
+            LocalMatchStatusMessage.Turn(controller.viewState.game.currentPlayer, forcedPass = true),
+            controller.viewState.message,
+        )
         assertNotNull(controller.undo())
 
         assertEquals(position, controller.viewState.game)
         assertEquals(emptyList(), controller.viewState.moves)
+        assertEquals(LocalMatchStatusMessage.Turn(position.currentPlayer), controller.viewState.message)
     }
 
     @Test
@@ -127,6 +133,8 @@ class LocalMatchControllerTest {
         assertEquals(LocalRecordType.LOCAL_HUMAN, controller.viewState.completedRecord?.type)
         assertEquals(FinishReason.NORMAL, controller.viewState.completedRecord?.finishReason)
         assertEquals(controller.viewState.moves, controller.viewState.completedRecord?.moves)
+        val result = assertNotNull(controller.viewState.completedRecord?.result)
+        assertEquals(LocalMatchStatusMessage.GameResult(result), controller.viewState.message)
     }
 
     @Test
@@ -134,6 +142,7 @@ class LocalMatchControllerTest {
         val controller = LocalMatchController(humanDisc = Disc.BLACK)
         assertNotNull(controller.resign(Disc.BLACK))
         assertEquals(FinishReason.RESIGNATION, controller.viewState.completedRecord?.finishReason)
+        assertEquals(LocalMatchStatusMessage.Resigned(Disc.BLACK), controller.viewState.message)
         assertFalse(LocalMatchController().viewState.completedRecord != null)
     }
 
@@ -247,6 +256,7 @@ class LocalMatchControllerTest {
         assertTrue(controller.viewState.undoUsed)
 
         controller.reset()
+        assertEquals(LocalMatchStatusMessage.Turn(Disc.BLACK), controller.viewState.message)
         assertFalse(controller.viewState.undoUsed)
         assertFalse(controller.viewState.canUndo)
     }

@@ -36,6 +36,11 @@
     <string name="online_match">オンライン対局</string>
     <string name="local_match">ローカル対局</string>
     <string name="two_player_match">ふたりで対局</string>
+    <string name="local_match_to_move">%1$sの手番</string>
+    <string name="local_match_forced_pass">パス — %1$sの手番</string>
+    <string name="local_match_resigned">%1$sが投了しました</string>
+    <string name="local_match_wins">%1$sの勝ち</string>
+    <string name="local_match_ai_cannot_move">AIが着手できません</string>
     <string name="play_against_ai">AIと対局</string>
     <string name="play_online_supporting">オンラインで対戦相手と対局します</string>
     <string name="play_against_ai_supporting">端末内AIと対局します</string>

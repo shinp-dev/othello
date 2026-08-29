@@ -14,12 +14,19 @@ import java.util.UUID
 
 enum class LocalMatchMode { HUMAN, AI }
 
+sealed interface LocalMatchStatusMessage {
+    data class Turn(val disc: Disc, val forcedPass: Boolean = false) : LocalMatchStatusMessage
+    data class Resigned(val disc: Disc) : LocalMatchStatusMessage
+    data class GameResult(val result: MatchResult) : LocalMatchStatusMessage
+    data object AiCannotMove : LocalMatchStatusMessage
+}
+
 data class LocalMatchViewState(
     val game: GameState = GameState(),
     val mode: LocalMatchMode = LocalMatchMode.HUMAN,
     val humanDisc: Disc? = null,
     val aiDisc: Disc? = null,
-    val message: String = "Black to move",
+    val message: LocalMatchStatusMessage = LocalMatchStatusMessage.Turn(Disc.BLACK),
     val moves: List<Position?> = emptyList(),
     val aiThinking: Boolean = false,
     val error: String? = null,
@@ -104,7 +111,7 @@ class LocalMatchController(
     fun showAiError(request: LocalAiTurnRequest, message: String): Boolean {
         if (!isCurrent(request)) return false
         activeAiRequest = null
-        update { copy(error = message, message = "AI cannot move", aiThinking = false) }
+        update { copy(error = message, message = LocalMatchStatusMessage.AiCannotMove, aiThinking = false) }
         return true
     }
 
@@ -137,7 +144,7 @@ class LocalMatchController(
         )
         update {
             copy(
-                message = "${resigningDisc.name} resigned",
+                message = LocalMatchStatusMessage.Resigned(resigningDisc),
                 finishReason = FinishReason.RESIGNATION,
                 completedRecord = record,
                 aiThinking = false,
@@ -153,7 +160,7 @@ class LocalMatchController(
             mode = mode,
             humanDisc = humanDisc,
             aiDisc = humanDisc?.opponent(),
-            message = "Black to move",
+            message = LocalMatchStatusMessage.Turn(Disc.BLACK),
         )
         notifyListeners()
     }
@@ -210,7 +217,7 @@ class LocalMatchController(
                 copy(
                     game = resolution.state,
                     moves = completeMoves,
-                    message = result.label(),
+                    message = LocalMatchStatusMessage.GameResult(result),
                     completedRecord = record,
                     finishReason = FinishReason.NORMAL,
                     aiThinking = false,
@@ -257,14 +264,8 @@ class LocalMatchController(
         else -> MatchResult.DRAW
     }
 
-    private fun MatchResult.label(): String = when (this) {
-        MatchResult.BLACK_WIN -> "Black wins"
-        MatchResult.WHITE_WIN -> "White wins"
-        MatchResult.DRAW -> "Draw"
-    }
-
-    private fun messageFor(game: GameState, forcedPasses: Int = 0): String =
-        if (forcedPasses > 0) "Forced pass — ${game.currentPlayer.name} to move" else "${game.currentPlayer.name} to move"
+    private fun messageFor(game: GameState, forcedPasses: Int = 0): LocalMatchStatusMessage =
+        LocalMatchStatusMessage.Turn(game.currentPlayer, forcedPasses > 0)
 
     private fun undoTargetIndex(): Int? = when (mode) {
         LocalMatchMode.HUMAN -> moveCheckpoints.lastIndex.takeIf { it >= 0 }

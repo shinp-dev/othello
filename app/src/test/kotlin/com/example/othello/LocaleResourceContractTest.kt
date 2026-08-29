@@ -19,6 +19,10 @@ class LocaleResourceContractTest {
 
         assertTrue("<string name=\"language_setting\">Language</string>" in defaultText)
         assertTrue("<string name=\"language_setting\">言語</string>" in japaneseText)
+        assertTrue("<string name=\"local_match_to_move\">%1\$s to move</string>" in defaultText)
+        assertTrue("<string name=\"local_match_to_move\">%1\$sの手番</string>" in japaneseText)
+        assertTrue("<string name=\"local_match_resigned\">%1\$s resigned</string>" in defaultText)
+        assertTrue("<string name=\"local_match_resigned\">%1\$sが投了しました</string>" in japaneseText)
         assertFalse(legacyEnglishDirectory.exists())
     }
 
@@ -38,7 +42,7 @@ class LocaleResourceContractTest {
         val japanese = readStrings(japaneseFile)
 
         assertEquals(english.keys, japanese.keys)
-        assertEquals(431, english.size)
+        assertEquals(436, english.size)
         english.forEach { (id, value) ->
             assertEquals(formatArguments(value), formatArguments(japanese.getValue(id)), id)
         }
