@@ -107,12 +107,16 @@ internal class AuthSessionController(
         }
     }
 
-    suspend fun signIn(email: String, password: String): Result<Unit> = withGateway { gateway ->
-        val session = gateway.signIn(email, password)
-        transitionToAuthenticated(gateway, session)
+    suspend fun signIn(email: String, password: String): Result<Unit> {
+        if (!EmailAddressValidator.isValid(email)) return Result.failure(InvalidEmailAddressException())
+        return withGateway { gateway ->
+            val session = gateway.signIn(email, password)
+            transitionToAuthenticated(gateway, session)
+        }
     }
 
     suspend fun signUp(email: String, password: String): Result<SignUpResult> {
+        if (!EmailAddressValidator.isValid(email)) return Result.failure(InvalidEmailAddressException())
         val gateway = gatewayResult.getOrElse { return Result.failure(it) }
         return runCatching { gateway.signUp(email, password) }
             .onSuccess { result ->
@@ -122,8 +126,11 @@ internal class AuthSessionController(
             }
     }
 
-    suspend fun requestPasswordReset(email: String): Result<Unit> = withGateway { gateway ->
-        gateway.requestPasswordReset(email)
+    suspend fun requestPasswordReset(email: String): Result<Unit> {
+        if (!EmailAddressValidator.isValid(email)) return Result.failure(InvalidEmailAddressException())
+        return withGateway { gateway ->
+            gateway.requestPasswordReset(email)
+        }
     }
 
     suspend fun signOut(): Result<Unit> {

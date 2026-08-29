@@ -56,6 +56,18 @@ class AuthUiArchitectureContractTest {
     }
 
     @Test
+    fun emailValidationIsShownAtTheInputAndKeptSeparateFromResetFailures() {
+        assertTrue("isError = emailError != null" in authGate)
+        assertTrue("supportingText = emailError?.let" in authGate)
+        assertTrue("failure.emailInputErrorResource()" in authGate)
+
+        val passwordReset = authGate.substringAfter("onPasswordReset = {")
+            .substringBefore("        )\n    }")
+        assertTrue("if (!showEmailInputError(it))" in passwordReset)
+        assertTrue("R.string.reset_email_failed" in passwordReset)
+    }
+
+    @Test
     fun playScreenContainsOnlyMatchActionsAndNoAuthFormOrLogout() {
         val playBody = mainActivity.substringAfter("private fun PlayScreen(")
             .substringBefore("internal fun opponentRatingLabel")

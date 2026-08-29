@@ -107,6 +107,7 @@ class AuthSessionControllerTest {
 
         assertTrue(controller.signIn("person@example.test", "password").isSuccess)
         assertEquals(UserSession("login-user"), assertIs<AuthState.Authenticated>(controller.state.value).session)
+        assertEquals(1, gateway.emailSignInCalls)
         assertEquals(1, gateway.touchCalls)
 
         val failingGateway = FakeAuthGateway(
@@ -118,6 +119,19 @@ class AuthSessionControllerTest {
         assertTrue(failingController.signIn("person@example.test", "bad-password").isFailure)
         assertEquals(AuthState.Unauthenticated, failingController.state.value)
         assertEquals(0, failingGateway.touchCalls)
+    }
+
+    @Test
+    fun invalidEmailDoesNotCallLoginGateway() = runBlocking {
+        val gateway = FakeAuthGateway(current = null)
+        val controller = AuthSessionController(Result.success(gateway))
+        controller.restoreSession()
+
+        val result = controller.signIn("name", "password")
+
+        assertIs<InvalidEmailAddressException>(result.exceptionOrNull())
+        assertEquals(0, gateway.emailSignInCalls)
+        assertEquals(AuthState.Unauthenticated, controller.state.value)
     }
 
     @Test
@@ -176,6 +190,19 @@ class AuthSessionControllerTest {
         assertTrue(controller.signOut().isSuccess)
         assertEquals(1, gateway.signOutCalls)
         assertEquals(1, cleanupCalls)
+        assertEquals(AuthState.Unauthenticated, controller.state.value)
+    }
+
+    @Test
+    fun invalidEmailDoesNotCallPasswordResetGateway() = runBlocking {
+        val gateway = FakeAuthGateway(current = null)
+        val controller = AuthSessionController(Result.success(gateway))
+        controller.restoreSession()
+
+        val result = controller.requestPasswordReset("name")
+
+        assertIs<InvalidEmailAddressException>(result.exceptionOrNull())
+        assertEquals(0, gateway.passwordResetCalls)
         assertEquals(AuthState.Unauthenticated, controller.state.value)
     }
 

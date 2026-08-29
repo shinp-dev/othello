@@ -71,14 +71,22 @@ private fun LoginRoute(sessionOwner: OnlineSessionViewModel) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var emailError by remember { mutableStateOf<String?>(null) }
     var loginError by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var noticeIsError by remember { mutableStateOf(false) }
 
     fun clearMessages() {
+        emailError = null
         loginError = null
         notice = null
         noticeIsError = false
+    }
+
+    fun showEmailInputError(failure: Throwable): Boolean {
+        val resource = failure.emailInputErrorResource() ?: return false
+        emailError = context.getString(resource)
+        return true
     }
 
     Surface(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -87,17 +95,25 @@ private fun LoginRoute(sessionOwner: OnlineSessionViewModel) {
             email = email,
             password = password,
             busy = busy,
+            emailError = emailError,
             loginError = loginError,
             notice = notice,
             noticeIsError = noticeIsError,
-            onEmailChange = { email = it },
+            onEmailChange = {
+                email = it
+                emailError = null
+            },
             onPasswordChange = { password = it },
             onLogin = {
                 scope.launch {
                     busy = true
                     clearMessages()
                     sessionOwner.signIn(email, password)
-                        .onFailure { loginError = authErrorMessage(AuthOperation.LOGIN, it, context) }
+                        .onFailure {
+                            if (!showEmailInputError(it)) {
+                                loginError = authErrorMessage(AuthOperation.LOGIN, it, context)
+                            }
+                        }
                     busy = false
                 }
             },
@@ -118,8 +134,10 @@ private fun LoginRoute(sessionOwner: OnlineSessionViewModel) {
                             }
                         }
                         .onFailure {
-                            notice = authErrorMessage(AuthOperation.SIGN_UP, it, context)
-                            noticeIsError = true
+                            if (!showEmailInputError(it)) {
+                                notice = authErrorMessage(AuthOperation.SIGN_UP, it, context)
+                                noticeIsError = true
+                            }
                         }
                     busy = false
                 }
@@ -137,8 +155,10 @@ private fun LoginRoute(sessionOwner: OnlineSessionViewModel) {
                             notice = context.getString(R.string.reset_email_sent)
                         }
                         .onFailure {
-                            notice = context.getString(R.string.reset_email_failed)
-                            noticeIsError = true
+                            if (!showEmailInputError(it)) {
+                                notice = context.getString(R.string.reset_email_failed)
+                                noticeIsError = true
+                            }
                         }
                     busy = false
                 }
@@ -153,6 +173,7 @@ private fun LoginScreen(
     email: String,
     password: String,
     busy: Boolean,
+    emailError: String?,
     loginError: String?,
     notice: String?,
     noticeIsError: Boolean,
@@ -194,6 +215,8 @@ private fun LoginScreen(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
             singleLine = true,
             enabled = !busy,
+            isError = emailError != null,
+            supportingText = emailError?.let { message -> { Text(message) } },
             modifier = Modifier.fillMaxWidth(),
         )
         OutlinedTextField(
