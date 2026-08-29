@@ -60,6 +60,8 @@
     <string name="email_format_invalid">メールアドレスの形式を確認してください。</string>
     <string name="password">パスワード</string>
     <string name="chanriva_password">ちゃんりば用パスワード</string>
+    <string name="show_password">パスワードを表示</string>
+    <string name="hide_password">パスワードを非表示</string>
     <string name="login">ログイン</string>
     <string name="create_account">アカウント作成</string>
     <string name="create_account_action">アカウントを作成</string>

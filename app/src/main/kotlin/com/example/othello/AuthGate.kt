@@ -11,8 +11,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -31,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
@@ -186,6 +192,7 @@ private fun LoginScreen(
     onPasswordReset: () -> Unit,
 ) {
     val iconDescription = appString(R.string.app_icon_description)
+    var passwordVisible by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
@@ -223,10 +230,23 @@ private fun LoginScreen(
             value = password,
             onValueChange = onPasswordChange,
             label = { Text(appString(if (mode == LoginMode.LOGIN) R.string.password else R.string.chanriva_password)) },
-            visualTransformation = PasswordVisualTransformation(),
+            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
             singleLine = true,
             enabled = !busy,
+            trailingIcon = {
+                IconButton(
+                    onClick = { passwordVisible = !passwordVisible },
+                    enabled = !busy,
+                ) {
+                    Icon(
+                        imageVector = if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                        contentDescription = appString(
+                            if (passwordVisible) R.string.hide_password else R.string.show_password,
+                        ),
+                    )
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
         )
         if (mode == LoginMode.SIGN_UP) {
