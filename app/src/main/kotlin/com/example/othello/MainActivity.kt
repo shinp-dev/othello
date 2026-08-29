@@ -864,7 +864,6 @@ internal fun opponentRatingLabel(rating: Int?, context: android.content.Context?
 
 @Composable
 private fun MatchScreen(onBack: () -> Unit) {
-    val context = LocalContext.current
     val controller = remember { LocalMatchController() }
     var viewState by remember { mutableStateOf<LocalMatchViewState>(controller.viewState) }
     DisposableEffect(controller) {
@@ -882,7 +881,7 @@ private fun MatchScreen(onBack: () -> Unit) {
         }
         ScoreHeader(viewState)
         OthelloBoard(viewState, controller)
-        Text(localizeUserMessage(context, viewState.message).orEmpty(), style = MaterialTheme.typography.titleMedium, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text(localMatchStatusText(viewState.message), style = MaterialTheme.typography.titleMedium, modifier = Modifier.align(Alignment.CenterHorizontally))
         Button(onClick = controller::reset, modifier = Modifier.fillMaxWidth()) { Text(appString(R.string.new_match)) }
     }
 }
@@ -967,7 +966,7 @@ private fun LocalMatchScreen(
         }
         ScoreHeader(viewState.game)
         LocalOthelloBoard(viewState, controller)
-        Text(localizeUserMessage(context, viewState.message).orEmpty(), style = MaterialTheme.typography.titleMedium, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text(localMatchStatusText(viewState.message), style = MaterialTheme.typography.titleMedium, modifier = Modifier.align(Alignment.CenterHorizontally))
         if (viewState.aiThinking) Text(appString(R.string.ai_thinking), modifier = Modifier.align(Alignment.CenterHorizontally))
         aiConfiguration?.let { AiMatchConditions(it, viewState.undoUsed) }
         localizeUserMessage(context, viewState.error)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
