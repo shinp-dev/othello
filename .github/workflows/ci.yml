@@ -14,10 +14,15 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: cloudflare-admin/package-lock.json
+          cache-dependency-path: |
+            cloudflare-admin/package-lock.json
+            landing-page/package-lock.json
       - run: npm ci --prefix cloudflare-admin
       - run: npm run typecheck --prefix cloudflare-admin
       - run: npm test --prefix cloudflare-admin
+      - run: npm ci --prefix landing-page
+      - run: npm run lint --prefix landing-page
+      - run: npm test --prefix landing-page
       - run: ./gradlew test
       - run: ./gradlew :data:supabase:testReleaseSupabaseConfig
       - run: ./gradlew lint

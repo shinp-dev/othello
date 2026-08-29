@@ -1,4 +1,6 @@
-import java.util.zip.ZipFile
+import java.security.MessageDigest
+import java.security.cert.X509Certificate
+import java.util.jar.JarFile
 
 fun chanrivaGitOutput(vararg arguments: String): String? = runCatching {
     val output = providers.exec {
@@ -23,6 +25,8 @@ val chanrivaSigningEnvironmentNames = listOf(
     "CHANRIVA_UPLOAD_STORE_PASSWORD",
     "CHANRIVA_UPLOAD_KEY_PASSWORD",
 )
+val chanrivaExpectedUploadCertificateSha256 =
+    "47:87:8B:52:E9:3A:9C:FD:5F:D9:0C:DE:BF:E3:B6:E4:02:9D:BF:8F:FB:A9:B4:48:14:0B:05:DB:A8:1C:79:DD"
 val chanrivaSigningEnvironmentValues = chanrivaSigningEnvironmentNames.associateWith { name ->
     System.getenv(name)?.takeIf { it.isNotEmpty() }
 }
@@ -96,18 +100,54 @@ tasks.register("verifyPlayReleaseSigning") {
             throw GradleException("Signed Play release artifact was not found: ${bundle.name}")
         }
 
-        val hasJarSignature = ZipFile(bundle).use { zip ->
-            zip.entries().asSequence().any { entry ->
-                val entryName = entry.name.uppercase()
-                entryName.startsWith("META-INF/") &&
-                    (entryName.endsWith(".RSA") || entryName.endsWith(".DSA") || entryName.endsWith(".EC"))
+        val signingCertificateFingerprints = mutableSetOf<String>()
+        try {
+            JarFile(bundle, true).use { jar ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                jar.entries().asSequence()
+                    .filterNot { entry -> entry.isDirectory || entry.name.startsWith("META-INF/", ignoreCase = true) }
+                    .forEach { entry ->
+                        jar.getInputStream(entry).use { input ->
+                            while (input.read(buffer) != -1) {
+                                // Reading every signed entry makes JarFile verify the signature and expose its certificate.
+                            }
+                        }
+                        val entryFingerprints = entry.certificates
+                            ?.filterIsInstance<X509Certificate>()
+                            ?.mapTo(mutableSetOf()) { certificate ->
+                                MessageDigest.getInstance("SHA-256")
+                                    .digest(certificate.encoded)
+                                    .joinToString(":") { byte -> "%02X".format(byte.toInt() and 0xFF) }
+                            }
+                            .orEmpty()
+                        if (chanrivaExpectedUploadCertificateSha256 !in entryFingerprints) {
+                            throw GradleException(
+                                "The Play release artifact contains an entry that is not signed with the " +
+                                    "expected upload certificate: ${entry.name}",
+                            )
+                        }
+                        signingCertificateFingerprints += entryFingerprints
+                    }
             }
-        }
-        if (!hasJarSignature) {
-            throw GradleException("The Play release artifact is not signed: ${bundle.name}")
+        } catch (failure: SecurityException) {
+            throw GradleException("The Play release artifact signature is invalid: ${bundle.name}", failure)
         }
 
-        logger.lifecycle("Verified signed Play release artifact: ${bundle.name}")
+        if (signingCertificateFingerprints.isEmpty()) {
+            throw GradleException("The Play release artifact is not signed: ${bundle.name}")
+        }
+        if (chanrivaExpectedUploadCertificateSha256 !in signingCertificateFingerprints) {
+            throw GradleException(
+                "The Play release artifact is signed with an unexpected certificate. " +
+                    "Expected SHA-256: $chanrivaExpectedUploadCertificateSha256; " +
+                    "actual SHA-256: ${signingCertificateFingerprints.sorted().joinToString()}",
+            )
+        }
+
+        logger.lifecycle(
+            "Verified signed Play release artifact: ${bundle.name}; " +
+                "upload certificate SHA-256: $chanrivaExpectedUploadCertificateSha256",
+        )
     }
 }
 
