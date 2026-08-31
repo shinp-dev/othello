@@ -1,6 +1,7 @@
 package com.example.othello
 
 import java.io.File
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.junit.Test
@@ -86,13 +87,23 @@ class GuiInformationArchitectureContractTest {
     }
 
     @Test
-    fun positionReviewIsPrimaryAndIsolatedFromGameRecordsAndResearch() {
+    fun studyNavigationGroupsFourEqualFeaturesIntoAnalysisCategories() {
         val study = topLevel.substringAfter("internal fun StudyScreen(").substringBefore("internal fun MoreScreen(")
-        assertTrue(study.contains("emphasized = true"))
-        assertTrue(study.indexOf("R.string.position_review") < study.indexOf("R.string.online_records"))
+
+        assertEquals(4, study.split("ChanrivaNavigationRow(").size - 1)
+        assertEquals(4, study.split("emphasized = true").size - 1)
+        assertTrue(study.indexOf("R.string.study_position_analysis") < study.indexOf("R.string.study_theory_analysis"))
+        assertTrue(study.indexOf("R.string.study_theory_analysis") < study.indexOf("R.string.study_record_analysis"))
         assertTrue(study.indexOf("R.string.position_review") < study.indexOf("R.string.theory_exploration"))
         assertTrue(study.indexOf("R.string.theory_exploration") < study.indexOf("R.string.online_records"))
         assertTrue(study.indexOf("R.string.online_records") < study.indexOf("R.string.offline_records"))
+        assertEquals(1, study.split("titleBadge =").size - 1)
+        assertTrue(study.contains("titleBadge = appString(R.string.theory_enthusiast_recommended)"))
+        assertTrue(study.contains("onClick = onPositionReview"))
+        assertTrue(study.contains("onClick = onTheoryExploration"))
+        assertTrue(study.contains("onClick = onOnlineRecords"))
+        assertTrue(study.contains("onClick = onOfflineRecords"))
+        assertTrue(study.contains("color = MaterialTheme.colorScheme.onSurfaceVariant"))
         assertTrue(positionReview.contains("PositionReviewStore"))
         assertTrue(positionReview.contains("PositionReviewSession"))
         assertFalse(positionReview.contains("LocalGameRecord"))
