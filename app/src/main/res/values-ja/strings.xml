@@ -137,10 +137,14 @@
     <string name="research_data">研究データ</string>
     <string name="online_records_supporting">サーバー上の対局棋譜</string>
     <string name="offline_records_supporting">この端末に保存した棋譜</string>
-    <string name="position_review">盤面から検討</string>
+    <string name="position_review">任意盤面から検討</string>
     <string name="position_review_supporting">外部の盤面を取り込み、Edaxで検討します</string>
     <string name="theory_exploration">理論探求</string>
     <string name="theory_exploration_supporting">Edaxと盤面由来の理論指標を変化ごとに比較します</string>
+    <string name="study_position_analysis">局面の分析</string>
+    <string name="study_theory_analysis">理論・指向性の分析</string>
+    <string name="study_record_analysis">棋譜の分析</string>
+    <string name="theory_enthusiast_recommended">ガチ勢推奨</string>
     <string name="theory_session_loading">前回の探求セッションを復元中…</string>
     <string name="theory_session_save_failed">一時的な探求セッションを保存できませんでした。</string>
     <string name="theory_choose_continuation">進む分岐を選択</string>

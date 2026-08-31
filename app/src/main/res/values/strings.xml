@@ -135,10 +135,14 @@
     <string name="research_data">Research data</string>
     <string name="online_records_supporting">Game records stored on the server</string>
     <string name="offline_records_supporting">Game records saved on this device</string>
-    <string name="position_review">Analyze Position</string>
+    <string name="position_review">Analyze Any Position</string>
     <string name="position_review_supporting">Import an external board position and analyze it with Edax</string>
     <string name="theory_exploration">Theory Exploration</string>
     <string name="theory_exploration_supporting">Compare Edax with board-derived theory metrics across variations</string>
+    <string name="study_position_analysis">Position Analysis</string>
+    <string name="study_theory_analysis">Theory and Directional Analysis</string>
+    <string name="study_record_analysis">Game Record Analysis</string>
+    <string name="theory_enthusiast_recommended">For enthusiasts</string>
     <string name="theory_session_loading">Restoring the previous exploration session…</string>
     <string name="theory_session_save_failed">Could not save the temporary exploration session.</string>
     <string name="theory_choose_continuation">Choose a continuation</string>
