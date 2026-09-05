@@ -34,10 +34,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.othello.analysis.api.AnalysisEngine
 import com.example.othello.analysis.api.AnalysisResult
 import com.example.othello.analysis.edax.EdaxDataManager
@@ -414,7 +411,7 @@ private fun TheoryExplorationBoard(
     val metricName = selectedMetric.text(languageTag).displayName
     val legalMoves = state.legalMoves
     val bestScore = evaluations.maxOfOrNull { it.value.score.value }
-    val cellTextStyle = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 11.sp)
+    val boardTextSize = remember(context) { TheoryBoardTextSettingsStore(context).textSize }
 
     CoordinateBoard { position, cellModifier ->
         val disc = state.board[position]
@@ -470,29 +467,12 @@ private fun TheoryExplorationBoard(
                         .border(1.dp, ChanrivaColors.discOutline, CircleShape),
                 )
             } else if (legal) {
-                Column(
-                    Modifier.fillMaxWidth().padding(horizontal = 1.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        text = edaxText,
-                        modifier = Modifier.fillMaxWidth(),
-                        color = if (isBestMove) ChanrivaColors.evaluation else MaterialTheme.colorScheme.onSurface,
-                        style = cellTextStyle,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
-                    )
-                    Text(
-                        text = metricText,
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = cellTextStyle,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
-                    )
-                }
+                TheoryBoardCandidateLabels(
+                    edaxText = edaxText,
+                    metricText = metricText,
+                    isBestMove = isBestMove,
+                    textSize = boardTextSize,
+                )
             }
         }
     }

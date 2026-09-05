@@ -345,6 +345,7 @@ internal fun ReviewSettingsScreen(
             steps = analysisTimeSliderSteps,
             modifier = Modifier.fillMaxWidth(),
         )
+        TheoryBoardTextSizeSetting()
     }
 
     if (showHighLoadWarning) {
