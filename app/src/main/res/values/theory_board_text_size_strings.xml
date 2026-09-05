@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="theory_board_text_size">Board text size</string>
+    <string name="theory_board_text_size_description">Changes the two-line candidate values shown on the Theory Exploration board. Extra large automatically shrinks only when needed to keep the values inside each square.</string>
+    <string name="theory_board_text_size_standard">Standard</string>
+    <string name="theory_board_text_size_large">Large</string>
+    <string name="theory_board_text_size_extra_large">Extra large</string>
+</resources>
