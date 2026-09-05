@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="theory_board_text_size">盤面内の文字サイズ</string>
-    <string name="theory_board_text_size_description">理論探求の盤面に表示する2段の候補手数値を大きくします。特大はマス内に収まる範囲で自動調整します。</string>
+    <string name="theory_board_text_size_description">棋譜分析・局面検討・理論探求の盤面に表示する評価値や候補手数値を大きくします。特大はマス内に収まる範囲で自動調整します。</string>
     <string name="theory_board_text_size_standard">標準</string>
     <string name="theory_board_text_size_large">大</string>
     <string name="theory_board_text_size_extra_large">特大</string>
