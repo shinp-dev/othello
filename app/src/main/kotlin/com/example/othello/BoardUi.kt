@@ -3,6 +3,7 @@ package com.example.othello
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,10 +18,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.othello.designsystem.ChanrivaColors
 import com.example.othello.game.Position
 
@@ -35,6 +40,10 @@ internal fun Position.coordinateLabel(): String = "${('a'.code + column).toChar(
 internal fun CoordinateBoard(
     cellContent: @Composable (Position, Modifier) -> Unit,
 ) {
+    val context = LocalContext.current
+    val boardTextSize = remember(context) { TheoryBoardTextSettingsStore(context).textSize }
+    val density = LocalDensity.current
+
     Box(
         Modifier
             .fillMaxWidth()
@@ -66,13 +75,30 @@ internal fun CoordinateBoard(
                         textAlign = TextAlign.Center,
                     )
                     repeat(BOARD_SIZE) { column ->
-                        cellContent(
-                            Position(row, column),
+                        BoxWithConstraints(
                             Modifier
                                 .fillMaxHeight()
                                 .weight(1f, fill = true)
                                 .border(0.5.dp, ChanrivaColors.boardGrid),
-                        )
+                        ) {
+                            val fontSizeSp = resolveTheoryBoardTextSizeSp(
+                                textSize = boardTextSize,
+                                cellHeightDp = maxHeight.value,
+                                fontScale = density.fontScale,
+                                lineCount = 1,
+                            )
+                            val inheritedTypography = MaterialTheme.typography
+                            MaterialTheme(
+                                typography = inheritedTypography.copy(
+                                    labelSmall = inheritedTypography.labelSmall.copy(
+                                        fontSize = fontSizeSp.sp,
+                                        lineHeight = (fontSizeSp * THEORY_BOARD_LINE_HEIGHT_FACTOR).sp,
+                                    ),
+                                ),
+                            ) {
+                                cellContent(Position(row, column), Modifier.fillMaxSize())
+                            }
+                        }
                     }
                     Spacer(Modifier.width(CoordinateGutter))
                 }
