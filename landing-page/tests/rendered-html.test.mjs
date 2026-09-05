@@ -116,7 +116,7 @@ test("distinguishes successful, expired, and failed email confirmation redirects
   assert.match(SIGNUP_CONFIRMATION_MESSAGE.failure.title, /確認できませんでした/);
 });
 
-test("renders the web deletion email confirmation page without app redirect", async () => {
+test("renders the web deletion email confirmation page without an app redirect", async () => {
   const response = await render("/account-deletion/confirm");
   assert.equal(response.status, 200);
   const html = await response.text();
