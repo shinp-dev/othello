@@ -20,7 +20,7 @@ export default function Home() {
           <h1 id="hero-title">対局を、<br /><em>もっと深く。</em></h1>
           <p className="hero-lead">対局して終わりではなく、<br />振り返って、試して、次の一局へ。</p>
           <p className="hero-body">対局 → 検討 → 次の対局。ちゃんりばは、一局ごとの気づきを次の一手につなげます。</p>
-          <a className="button button-primary" href="#start">ちゃんりばを始める <span aria-hidden="true">↗</span></a>
+          <a className="button button-primary" href="https://play.google.com/store/apps/details?id=com.shinpstudio.chanriva">Google Playで入手 <span aria-hidden="true">↗</span></a>
           <p className="hero-note">解析にはEdaxを使用しています。</p>
         </div>
         <div className="hero-mark" aria-hidden="true">C<span>/</span>R</div>
@@ -68,8 +68,8 @@ export default function Home() {
         <h2 id="start-title">その一局を、<br /><em>次の一手へ。</em></h2>
         <div className="closure-copy"><p>対局する。</p><p>振り返る。</p><p>気になった局面を試す。</p><p>そして、もう一度対局する。</p></div>
         <p className="closure-lead">ちゃんりばは、一局ごとの気づきを次の対局につなげます。</p>
-        <a className="button button-primary" href="#top">ちゃんりばを始める <span aria-hidden="true">↗</span></a>
-        <small>サービスの公開準備中です。最新情報をお待ちください。</small>
+        <a className="button button-primary" href="https://play.google.com/store/apps/details?id=com.shinpstudio.chanriva">Google Playで入手 <span aria-hidden="true">↗</span></a>
+        <small>Android向けにGoogle Playで公開中です。</small>
       </section>
 
       <section className="deep-research-intro" id="deep-research" aria-labelledby="deep-research-title">
