@@ -14,6 +14,7 @@ class GuiInformationArchitectureContractTest {
     private val research = File("src/main/kotlin/com/example/othello/ResearchSettingsScreen.kt").readText()
     private val positionReview = File("src/main/kotlin/com/example/othello/PositionReviewScreens.kt").readText()
     private val theoryExploration = File("src/main/kotlin/com/example/othello/TheoryExplorationScreens.kt").readText()
+    private val theoryBoardText = File("src/main/kotlin/com/example/othello/TheoryBoardTextSettings.kt").readText()
 
     @Test
     fun playAndScoreHeaderKeepModeOutOfTheFourthColumn() {
@@ -135,7 +136,7 @@ class GuiInformationArchitectureContractTest {
         assertTrue(theoryExploration.contains("analysisCoordinator.invalidate()"))
         assertTrue(theoryExploration.contains("engine.cancel()"))
         assertTrue(theoryExploration.contains("result = null"))
-        assertTrue(theoryExploration.indexOf("text = edaxText") < theoryExploration.indexOf("text = metricText"))
+        assertTrue(theoryBoardText.indexOf("text = edaxText") < theoryBoardText.indexOf("text = metricText"))
         assertFalse(theoryExploration.contains("PositionReviewSession"))
         assertFalse(theoryExploration.contains("ReviewScreenV2"))
         assertFalse(theoryExploration.contains("LocalGameRecord"))
