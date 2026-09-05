@@ -203,7 +203,7 @@ test("keeps the password reset API same-origin and fail-closed without its runti
 test("keeps passwordless deletion generic and reuses the authenticated deletion RPC", async t => {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("email-deletion-test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
+  const { default: worker } = await import(workerUrl.href)).default;
   const env = {
     ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
     SUPABASE_URL: "https://example.supabase.co",
@@ -264,7 +264,7 @@ test("server-renders the Chanriva landing page", async () => {
   assert.match(html, /潜在モビリティ/);
   assert.match(html, /ADVANCED RESEARCH/);
   assert.match(html, /実際の対局データ/);
-  assert.match(html, /サービスの公開準備中/);
+  assert.match(html, /Android向けにGoogle Playで公開中/);
   assert.doesNotMatch(html, /screen-login\.png/);
   assert.doesNotMatch(html, /Your site is taking shape|Building your site/);
 });
