@@ -111,6 +111,7 @@ internal fun TheoryBoardCandidateLabels(
             textSize = textSize,
             cellHeightDp = maxHeight.value,
             fontScale = LocalDensity.current.fontScale,
+            lineCount = 2,
         )
         val textStyle = MaterialTheme.typography.labelSmall.copy(
             fontSize = fontSizeSp.sp,
@@ -144,6 +145,34 @@ internal fun TheoryBoardCandidateLabels(
     }
 }
 
+@Composable
+internal fun ReviewBoardEvaluationLabel(
+    text: String,
+    isBestMove: Boolean,
+    textSize: TheoryBoardTextSize,
+) {
+    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        val fontSizeSp = resolveTheoryBoardTextSizeSp(
+            textSize = textSize,
+            cellHeightDp = maxHeight.value,
+            fontScale = LocalDensity.current.fontScale,
+            lineCount = 1,
+        )
+        Text(
+            text = text,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 1.dp),
+            color = if (isBestMove) ChanrivaColors.evaluation else MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = fontSizeSp.sp,
+                lineHeight = (fontSizeSp * THEORY_BOARD_LINE_HEIGHT_FACTOR).sp,
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
 internal const val THEORY_BOARD_LINE_HEIGHT_FACTOR = 1.1f
 private const val THEORY_BOARD_VERTICAL_SAFETY_DP = 4f
 
@@ -151,9 +180,12 @@ internal fun resolveTheoryBoardTextSizeSp(
     textSize: TheoryBoardTextSize,
     cellHeightDp: Float,
     fontScale: Float,
+    lineCount: Int = 2,
 ): Float {
     val safeFontScale = fontScale.coerceAtLeast(0.1f)
+    val safeLineCount = lineCount.coerceAtLeast(1)
     val availableHeightDp = (cellHeightDp - THEORY_BOARD_VERTICAL_SAFETY_DP).coerceAtLeast(1f)
-    val maxByHeightSp = availableHeightDp / (2f * THEORY_BOARD_LINE_HEIGHT_FACTOR * safeFontScale)
+    val maxByHeightSp = availableHeightDp /
+        (safeLineCount * THEORY_BOARD_LINE_HEIGHT_FACTOR * safeFontScale)
     return min(textSize.targetSp, maxByHeightSp).coerceAtLeast(1f)
 }
