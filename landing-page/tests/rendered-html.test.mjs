@@ -116,7 +116,7 @@ test("distinguishes successful, expired, and failed email confirmation redirects
   assert.match(SIGNUP_CONFIRMATION_MESSAGE.failure.title, /確認できませんでした/);
 });
 
-test("renders the web deletion email confirmation page without an app redirect", async () => {
+test("renders the web deletion email confirmation page without app redirect", async () => {
   const response = await render("/account-deletion/confirm");
   assert.equal(response.status, 200);
   const html = await response.text();
@@ -203,7 +203,7 @@ test("keeps the password reset API same-origin and fail-closed without its runti
 test("keeps passwordless deletion generic and reuses the authenticated deletion RPC", async t => {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("email-deletion-test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href)).default;
+  const { default: worker } = await import(workerUrl.href);
   const env = {
     ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
     SUPABASE_URL: "https://example.supabase.co",
