@@ -28,6 +28,20 @@ class TheoryBoardTextSettingsTest {
     }
 
     @Test
+    fun oneLineReviewEvaluationCanUseTheSameExtraLargeTarget() {
+        assertEquals(
+            16f,
+            resolveTheoryBoardTextSizeSp(
+                TheoryBoardTextSize.EXTRA_LARGE,
+                cellHeightDp = 40f,
+                fontScale = 1.3f,
+                lineCount = 1,
+            ),
+            0.001f,
+        )
+    }
+
+    @Test
     fun unknownStoredValueFallsBackToStandard() {
         assertEquals(TheoryBoardTextSize.STANDARD, TheoryBoardTextSize.fromStoredValue("unexpected"))
         assertEquals(TheoryBoardTextSize.STANDARD, TheoryBoardTextSize.fromStoredValue(null))
