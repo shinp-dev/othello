@@ -42,8 +42,8 @@ class TheoryBoardTextSettingsTest {
     }
 
     @Test
-    fun unknownStoredValueFallsBackToStandard() {
-        assertEquals(TheoryBoardTextSize.STANDARD, TheoryBoardTextSize.fromStoredValue("unexpected"))
-        assertEquals(TheoryBoardTextSize.STANDARD, TheoryBoardTextSize.fromStoredValue(null))
+    fun missingOrUnknownStoredValueFallsBackToLarge() {
+        assertEquals(TheoryBoardTextSize.LARGE, TheoryBoardTextSize.fromStoredValue("unexpected"))
+        assertEquals(TheoryBoardTextSize.LARGE, TheoryBoardTextSize.fromStoredValue(null))
     }
 }
