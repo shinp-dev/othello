@@ -39,7 +39,7 @@ internal enum class TheoryBoardTextSize(
 
     companion object {
         fun fromStoredValue(value: String?): TheoryBoardTextSize =
-            values().firstOrNull { it.storedValue == value } ?: STANDARD
+            values().firstOrNull { it.storedValue == value } ?: LARGE
     }
 }
 
