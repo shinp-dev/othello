@@ -26,7 +26,7 @@
     <string name="standard_ai_next_reward_opponent">Win this match to reveal the next opponent</string>
     <string name="standard_ai_next_reward_wild">One more win unlocks the Wild stage</string>
     <string name="standard_ai_next_reward_conquer">One more win conquers the Animal Challenge</string>
-    <string name="standard_ai_opponent_unknown">???</string>
+    <string name="standard_ai_opponent_unknown">\?\?\?</string>
     <string name="standard_ai_opponent_status_teaser">NEXT</string>
     <string name="standard_ai_locked_opponent_description">Locked AI opponent at level %1$d</string>
     <string name="standard_ai_clutch_title">Clutch victory!</string>
