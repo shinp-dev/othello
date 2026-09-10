@@ -25,15 +25,19 @@ class StandardLocalAiCoordinatorTest {
     private val evaluation = StandardEvaluationAsset("/standard/eval.dat", "sha256")
 
     @Test
-    fun passesDedicatedLevelAndEvaluationToStandardEngine() = runBlocking {
+    fun passesDedicatedLevelAndEvaluationAndWaitsOnlyForRemainingTargetTime() = runBlocking {
         val match = LocalMatchController(LocalMatchMode.AI, Disc.BLACK)
         assertTrue(match.play(Position(2, 3)))
         val provider = RecordingProvider()
+        val waits = mutableListOf<Long>()
+        val times = ArrayDeque(listOf(1_000L, 1_200L))
         val coordinator = StandardLocalAiCoordinator(
             match = match,
             engine = StandardAiEngine(provider),
             config = standardCampaignAiConfig(StandardAiLevel.LV3),
             evaluationData = evaluation,
+            monotonicMillis = { times.removeFirst() },
+            waitMillis = { waits += it },
         )
 
         assertTrue(coordinator.play())
@@ -41,6 +45,28 @@ class StandardLocalAiCoordinatorTest {
         assertEquals(3, provider.edaxLevel)
         assertEquals(evaluation, provider.evaluation)
         assertEquals(provider.selectedMove, match.viewState.moves.last())
+        assertEquals(listOf(320L), waits)
+        assertFalse(match.viewState.aiThinking)
+    }
+
+    @Test
+    fun doesNotAddDelayWhenEvaluationAlreadyExceedsTargetThinkingTime() = runBlocking {
+        val match = LocalMatchController(LocalMatchMode.AI, Disc.BLACK)
+        assertTrue(match.play(Position(2, 3)))
+        val waits = mutableListOf<Long>()
+        val times = ArrayDeque(listOf(1_000L, 2_000L))
+        val coordinator = StandardLocalAiCoordinator(
+            match = match,
+            engine = StandardAiEngine(RecordingProvider()),
+            config = standardCampaignAiConfig(StandardAiLevel.LV3),
+            evaluationData = evaluation,
+            monotonicMillis = { times.removeFirst() },
+            waitMillis = { waits += it },
+        )
+
+        assertTrue(coordinator.play())
+
+        assertTrue(waits.isEmpty())
         assertFalse(match.viewState.aiThinking)
     }
 
@@ -55,6 +81,8 @@ class StandardLocalAiCoordinatorTest {
             engine = StandardAiEngine(provider),
             config = standardCampaignAiConfig(StandardAiLevel.LV1),
             evaluationData = evaluation,
+            monotonicMillis = { 0L },
+            waitMillis = {},
         )
         val search = async(start = CoroutineStart.DEFAULT) { coordinator.play() }
         provider.started.await()
@@ -83,9 +111,8 @@ class StandardLocalAiCoordinatorTest {
         ): StandardCandidateResult {
             this.edaxLevel = edaxLevel
             evaluation = evaluationData
-            // Keep this coordinator contract deterministic. Natural-play randomness is
-            // covered in analysis:api tests; here the alternatives are intentionally
-            // far enough behind that the policy must choose the best candidate.
+            // Keep the coordinator contract deterministic. Personality randomness belongs
+            // to analysis:api tests; alternatives here are intentionally far behind.
             val ranked = position.legalMoves.mapIndexed { index, move ->
                 StandardMoveCandidate(move, score = 100 - index * 100)
             }
