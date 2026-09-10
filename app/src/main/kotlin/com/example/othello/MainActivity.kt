@@ -1068,7 +1068,7 @@ private fun LocalAiSetupScreen(
 }
 
 @Composable
-private fun LocalOthelloBoard(viewState: LocalMatchViewState, controller: LocalMatchController) {
+internal fun LocalOthelloBoard(viewState: LocalMatchViewState, controller: LocalMatchController) {
     val canPlay = !viewState.aiThinking && viewState.finishReason == null &&
         viewState.game.status is com.example.othello.game.GameStatus.InProgress &&
         (viewState.mode == LocalMatchMode.HUMAN || viewState.game.currentPlayer == viewState.humanDisc)
@@ -1094,7 +1094,7 @@ private fun LocalOthelloBoard(viewState: LocalMatchViewState, controller: LocalM
 private fun ScoreHeader(viewState: LocalMatchViewState) = ScoreHeader(viewState.game)
 
 @Composable
-private fun ScoreHeader(game: com.example.othello.game.GameState, status: String? = null) {
+internal fun ScoreHeader(game: com.example.othello.game.GameState, status: String? = null) {
     Card(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(ChanrivaSpacing.card)) {
             Text(appString(R.string.black_count, game.board.count(Disc.BLACK)), modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)

@@ -26,9 +26,9 @@ class StandardModeNavigationTest {
     }
 
     @Test
-    fun everyStandardHomeCardOpensItsComingSoonDestination() {
+    fun standardHomeRoutesAiAndUnfinishedFeaturesToTheirDestinations() {
         assertEquals(
-            AuthenticatedModeDestination.STANDARD_AI_COMING_SOON,
+            AuthenticatedModeDestination.STANDARD_AI,
             destinationFor(StandardFeature.AI),
         )
         assertEquals(
@@ -42,9 +42,9 @@ class StandardModeNavigationTest {
     }
 
     @Test
-    fun comingSoonScreensReturnToStandardHome() {
+    fun standardFeatureScreensReturnToStandardHome() {
         listOf(
-            AuthenticatedModeDestination.STANDARD_AI_COMING_SOON,
+            AuthenticatedModeDestination.STANDARD_AI,
             AuthenticatedModeDestination.STANDARD_ONLINE_COMING_SOON,
             AuthenticatedModeDestination.STANDARD_REAL_EVENT_COMING_SOON,
         ).forEach { destination ->

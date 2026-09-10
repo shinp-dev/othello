@@ -27,9 +27,10 @@ class StandardModeUiContractTest {
     }
 
     @Test
-    fun allFeaturesShareOneComingSoonComposable() {
+    fun unfinishedFeaturesShareOneComingSoonComposable() {
         assertEquals(1, source.split("private fun StandardComingSoonScreen(").size - 1)
         assertTrue("R.string.feature_coming_soon" in source)
         assertTrue("R.string.back_to_standard_home" in source)
+        assertTrue("AuthenticatedModeDestination.STANDARD_AI -> StandardAiRoute(" in source)
     }
 }
