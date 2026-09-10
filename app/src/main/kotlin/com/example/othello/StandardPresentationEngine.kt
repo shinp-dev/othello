@@ -13,9 +13,12 @@ internal enum class StandardSoundCue {
     STONE_PLACED,
     OPPONENT_APPEARED,
     HUMAN_WIN,
+    CLUTCH_WIN,
+    COMEBACK_WIN,
     HUMAN_LOSS,
     DRAW,
     LEVEL_CLEAR,
+    WILD_STAGE_AWAKENED,
     CAMPAIGN_CONQUERED,
 }
 
@@ -64,6 +67,8 @@ internal sealed interface StandardPresentationEvent {
         val outcome: StandardAiHumanOutcome,
         val firstClear: Boolean,
         val conquered: Boolean,
+        val winReward: StandardWinReward = StandardWinReward.NONE,
+        val wildStageAwakened: Boolean = false,
     ) : StandardPresentationEvent
     data object Reset : StandardPresentationEvent
 }
@@ -137,7 +142,10 @@ internal class StandardPresentationEngine(
 
         val cue = when {
             event.conquered -> StandardSoundCue.CAMPAIGN_CONQUERED
+            event.wildStageAwakened -> StandardSoundCue.WILD_STAGE_AWAKENED
             event.firstClear -> StandardSoundCue.LEVEL_CLEAR
+            event.winReward == StandardWinReward.COMEBACK -> StandardSoundCue.COMEBACK_WIN
+            event.winReward == StandardWinReward.CLUTCH -> StandardSoundCue.CLUTCH_WIN
             event.outcome == StandardAiHumanOutcome.WIN -> StandardSoundCue.HUMAN_WIN
             event.outcome == StandardAiHumanOutcome.LOSS -> StandardSoundCue.HUMAN_LOSS
             else -> StandardSoundCue.DRAW
