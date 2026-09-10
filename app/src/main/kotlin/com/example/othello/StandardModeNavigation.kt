@@ -51,6 +51,7 @@ internal enum class AuthenticatedModeDestination {
     MODE_SELECTION,
     STANDARD_HOME,
     STANDARD_AI,
+    STANDARD_GACHA,
     STANDARD_COLLECTION,
     STANDARD_ONLINE_COMING_SOON,
     STANDARD_REAL_EVENT_COMING_SOON,
@@ -76,6 +77,7 @@ internal fun authenticatedModeBackDestination(
 ): AuthenticatedModeDestination? = when (current) {
     AuthenticatedModeDestination.STANDARD_HOME -> AuthenticatedModeDestination.MODE_SELECTION
     AuthenticatedModeDestination.STANDARD_AI,
+    AuthenticatedModeDestination.STANDARD_GACHA,
     AuthenticatedModeDestination.STANDARD_COLLECTION,
     AuthenticatedModeDestination.STANDARD_ONLINE_COMING_SOON,
     AuthenticatedModeDestination.STANDARD_REAL_EVENT_COMING_SOON -> AuthenticatedModeDestination.STANDARD_HOME
@@ -102,12 +104,18 @@ internal fun AuthenticatedModeRoute(
         )
         AuthenticatedModeDestination.STANDARD_HOME -> StandardHomeScreen(
             onFeature = { destination = destinationFor(it) },
+            onGacha = { destination = AuthenticatedModeDestination.STANDARD_GACHA },
             onCollection = { destination = AuthenticatedModeDestination.STANDARD_COLLECTION },
             onSwitchMode = { destination = AuthenticatedModeDestination.MODE_SELECTION },
         )
         AuthenticatedModeDestination.STANDARD_AI -> StandardAiRoute(
             userId = userId,
             onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
+        )
+        AuthenticatedModeDestination.STANDARD_GACHA -> StandardGachaRoute(
+            userId = userId,
+            onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
+            onCollection = { destination = AuthenticatedModeDestination.STANDARD_COLLECTION },
         )
         AuthenticatedModeDestination.STANDARD_COLLECTION -> StandardCollectionRoute(
             userId = userId,
@@ -150,6 +158,7 @@ private fun ModeSelectionScreen(onSelect: (AppMode) -> Unit) {
 @Composable
 private fun StandardHomeScreen(
     onFeature: (StandardFeature) -> Unit,
+    onGacha: () -> Unit,
     onCollection: () -> Unit,
     onSwitchMode: () -> Unit,
 ) {
@@ -163,6 +172,11 @@ private fun StandardHomeScreen(
         StandardOpponentPackPreviewCard(
             pack = StandardOpponentPacks.animal,
             onClick = { onFeature(StandardFeature.AI) },
+        )
+        ModeCard(
+            title = appString(R.string.standard_gacha_title),
+            supportingText = appString(R.string.standard_gacha_home_supporting),
+            onClick = onGacha,
         )
         ModeCard(
             title = appString(R.string.standard_collection_title),

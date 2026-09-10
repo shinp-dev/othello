@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="standard_gacha_title">オセロガチャ</string>
+    <string name="standard_gacha_home_supporting">無料で1枚引いて、オセロ図鑑を増やす</string>
+    <string name="standard_gacha_supporting">雑学・歴史・オセロ本などが出ます。何回引いても無料です。</string>
+    <string name="standard_gacha_loading">ガチャを準備しています…</string>
+    <string name="standard_gacha_load_error">ガチャを開けませんでした。取得済み情報は変更されていません。</string>
+    <string name="standard_gacha_draw_free">無料で1回まわす</string>
+    <string name="standard_gacha_draw_again">もう1回まわす</string>
+    <string name="standard_gacha_drawing">抽選中…</string>
+    <string name="standard_gacha_machine_idle">何が出るかな？</string>
+    <string name="standard_gacha_machine_revealing">開封中…</string>
+    <string name="standard_gacha_new">NEW!</string>
+    <string name="standard_gacha_duplicate">取得済み</string>
+    <string name="standard_gacha_open_collection">オセロ図鑑を見る</string>
+    <string name="standard_gacha_progress">図鑑 %1$d / %2$d</string>
+    <string name="standard_gacha_new_priority_supporting">未取得カードがある間は、まだ持っていない1枚が出ます。</string>
+    <string name="standard_gacha_complete_supporting">図鑑コンプリート。集めたカードを何度でもランダムに楽しめます。</string>
+    <string name="standard_gacha_empty">まだガチャから出せるカードがありません。</string>
+    <string name="standard_gacha_author">著者：%1$s</string>
+</resources>
