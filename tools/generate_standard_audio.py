@@ -52,8 +52,7 @@ def note_mix(t: float, notes: list[tuple[float, float, float, float]]) -> float:
     return sum(gain * bell(t - start, freq, decay) for start, freq, gain, decay in notes)
 
 
-def write_wav(path: Path, seconds: float, fn) -> None:
-    rng = random.Random(SEED ^ sum(path.name.encode("utf-8")))
+def write_wav(path: Path, seconds: float, fn, rng: random.Random) -> None:
     count = int(SAMPLE_RATE * seconds)
     samples: list[float] = []
     peak = 0.0
@@ -214,10 +213,11 @@ def main() -> None:
         help="Optional directory for OGG/Vorbis copies (requires ffmpeg).",
     )
     args = parser.parse_args()
+    rng = random.Random(SEED)
 
     for stem, (seconds, synth) in SOUNDS.items():
         wav_path = args.wav_dir / f"{stem}.wav"
-        write_wav(wav_path, seconds, synth)
+        write_wav(wav_path, seconds, synth, rng)
         print(f"generated {wav_path}")
         if args.ogg_dir is not None:
             ogg_path = args.ogg_dir / f"{stem}.ogg"
