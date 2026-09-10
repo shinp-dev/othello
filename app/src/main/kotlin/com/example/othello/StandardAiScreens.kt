@@ -223,13 +223,15 @@ private fun StandardAiMatchScreen(
     val engine = remember(level) { StandardAiEngine(ProductionStandardCandidateProvider()) }
     val presentationEngine = rememberStandardPresentationEngine(level)
     val presentationState by presentationEngine.state.collectAsState()
-    val coordinator = remember(controller, engine, level, evaluationData, presentationEngine) {
+    val rewardTracker = remember(level) { StandardMatchRewardTracker() }
+    val coordinator = remember(controller, engine, level, evaluationData, presentationEngine, rewardTracker) {
         StandardLocalAiCoordinator(
             match = controller,
             engine = engine,
             config = standardCampaignAiConfig(level),
             evaluationData = evaluationData,
-            onDecisionReady = { tension ->
+            onDecisionReady = { tension, opponentBestScore ->
+                rewardTracker.recordDecision(tension, opponentBestScore)
                 presentationEngine.accept(StandardPresentationEvent.DecisionReady(tension))
             },
         )
@@ -303,18 +305,27 @@ private fun StandardAiMatchScreen(
             null
         }
         val conquered = firstClear && level == StandardAiLevel.LV8 && updated.conquered
+        val winReward = rewardTracker.classify(
+            humanWon = outcome == StandardAiHumanOutcome.WIN,
+            undoUsed = viewState.undoUsed,
+        )
+        val wildStageAwakened = firstClear && unlockedLevel == StandardAiLevel.LV5
         onProgressChanged(updated)
         resultPresentation = StandardAiResultPresentation(
             outcome = outcome,
             firstClear = firstClear,
             unlockedLevel = unlockedLevel,
             conquered = conquered,
+            winReward = winReward,
+            wildStageAwakened = wildStageAwakened,
         )
         presentationEngine.accept(
             StandardPresentationEvent.MatchFinished(
                 outcome = outcome,
                 firstClear = firstClear,
                 conquered = conquered,
+                winReward = winReward,
+                wildStageAwakened = wildStageAwakened,
             ),
         )
     }
@@ -334,6 +345,7 @@ private fun StandardAiMatchScreen(
     fun resetMatch() {
         coordinator.cancel()
         presentationEngine.accept(StandardPresentationEvent.Reset)
+        rewardTracker.reset()
         controller.reset()
         handledRecordId = null
         resultPresentation = null
