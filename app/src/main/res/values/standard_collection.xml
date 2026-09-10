@@ -20,7 +20,7 @@
     <string name="standard_collection_short_history">HIST</string>
     <string name="standard_collection_short_person">PEOPLE</string>
     <string name="standard_collection_short_collab">COLLAB</string>
-    <string name="standard_collection_unknown_title">???</string>
+    <string name="standard_collection_unknown_title">\?\?\?</string>
     <string name="standard_collection_locked_supporting">Obtain this card to reveal its contents.</string>
     <string name="standard_collection_obtained">COLLECTED</string>
     <string name="standard_collection_unobtained">NOT YET</string>
