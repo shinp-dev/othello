@@ -243,15 +243,21 @@ private fun StandardAiMatchScreen(
     val introStore = remember { StandardAiIntroStore(context) }
     val controller = remember(level) { LocalMatchController(LocalMatchMode.AI, Disc.BLACK) }
     val engine = remember(level) { StandardAiEngine(ProductionStandardCandidateProvider()) }
-    val coordinator = remember(controller, engine, level, evaluationData) {
+    val presentationEngine = remember(level) { StandardPresentationEngine() }
+    val presentationState by presentationEngine.state.collectAsState()
+    val coordinator = remember(controller, engine, level, evaluationData, presentationEngine) {
         StandardLocalAiCoordinator(
             match = controller,
             engine = engine,
             config = standardCampaignAiConfig(level),
             evaluationData = evaluationData,
+            onDecisionReady = { tension ->
+                presentationEngine.accept(StandardPresentationEvent.DecisionReady(tension))
+            },
         )
     }
     var viewState by remember { mutableStateOf(controller.viewState) }
+    var observedMoveCount by remember(controller) { mutableStateOf(viewState.moves.size) }
     var matchGeneration by remember { mutableStateOf(0) }
     var confirmResign by remember { mutableStateOf(false) }
     var handledRecordId by remember { mutableStateOf<String?>(null) }
@@ -266,8 +272,23 @@ private fun StandardAiMatchScreen(
         }
         onDispose { closeable.close() }
     }
-    DisposableEffect(coordinator) {
-        onDispose { coordinator.cancel() }
+    DisposableEffect(coordinator, presentationEngine) {
+        onDispose {
+            coordinator.cancel()
+            presentationEngine.accept(StandardPresentationEvent.Reset)
+        }
+    }
+    LaunchedEffect(showIntro) {
+        if (showIntro) presentationEngine.accept(StandardPresentationEvent.OpponentAppeared)
+    }
+    LaunchedEffect(viewState.moves.size) {
+        val currentMoveCount = viewState.moves.size
+        if (currentMoveCount > observedMoveCount) {
+            repeat(currentMoveCount - observedMoveCount) {
+                presentationEngine.accept(StandardPresentationEvent.MovePlaced)
+            }
+        }
+        observedMoveCount = currentMoveCount
     }
     LaunchedEffect(controller, matchGeneration, viewState.game, viewState.completedRecord) {
         if (viewState.aiDisc == viewState.game.currentPlayer && !viewState.aiThinking &&
@@ -303,12 +324,20 @@ private fun StandardAiMatchScreen(
         } else {
             null
         }
+        val conquered = firstClear && level == StandardAiLevel.LV8 && updated.conquered
         onProgressChanged(updated)
         resultPresentation = StandardAiResultPresentation(
             outcome = outcome,
             firstClear = firstClear,
             unlockedLevel = unlockedLevel,
-            conquered = firstClear && level == StandardAiLevel.LV8 && updated.conquered,
+            conquered = conquered,
+        )
+        presentationEngine.accept(
+            StandardPresentationEvent.MatchFinished(
+                outcome = outcome,
+                firstClear = firstClear,
+                conquered = conquered,
+            ),
         )
     }
 
@@ -326,6 +355,7 @@ private fun StandardAiMatchScreen(
     }
     fun resetMatch() {
         coordinator.cancel()
+        presentationEngine.accept(StandardPresentationEvent.Reset)
         controller.reset()
         handledRecordId = null
         resultPresentation = null
@@ -340,7 +370,9 @@ private fun StandardAiMatchScreen(
             backLabel = appString(R.string.back),
         )
         ScoreHeader(viewState.game)
-        LocalOthelloBoard(viewState, controller)
+        StandardBoardEffectHost(presentationState) {
+            LocalOthelloBoard(viewState, controller)
+        }
         Text(
             localMatchStatusText(viewState.message),
             style = MaterialTheme.typography.titleMedium,
