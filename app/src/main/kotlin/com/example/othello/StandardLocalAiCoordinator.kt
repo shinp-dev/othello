@@ -6,6 +6,7 @@ import com.example.othello.analysis.api.StandardEvaluationAsset
 import com.example.othello.match.LocalMatchController
 import com.example.othello.match.LocalMatchMode
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 
 /** Local-match adapter around the UI-independent Standard AI engine. */
 class StandardLocalAiCoordinator(
@@ -13,6 +14,8 @@ class StandardLocalAiCoordinator(
     private val engine: StandardAiEngine,
     private val config: StandardAiConfig,
     private val evaluationData: StandardEvaluationAsset,
+    private val monotonicMillis: () -> Long = { System.nanoTime() / 1_000_000L },
+    private val waitMillis: suspend (Long) -> Unit = { delay(it) },
 ) {
     suspend fun play(): Boolean {
         if (match.viewState.mode != LocalMatchMode.AI ||
@@ -21,6 +24,7 @@ class StandardLocalAiCoordinator(
         ) return false
         if (match.viewState.game.legalMoves.isEmpty()) return match.passAiTurn()
         val request = match.beginAiTurn() ?: return false
+        val startedAt = monotonicMillis()
         return try {
             val result = engine.chooseMove(request.position, config, evaluationData)
             if (!result.available) {
@@ -32,6 +36,9 @@ class StandardLocalAiCoordinator(
                     match.showAiError(request, "Standard AI returned no legal move")
                     false
                 } else {
+                    val elapsedMs = (monotonicMillis() - startedAt).coerceAtLeast(0L)
+                    val remainingThinkMs = (result.targetThinkTimeMs - elapsedMs).coerceAtLeast(0L)
+                    if (remainingThinkMs > 0L) waitMillis(remainingThinkMs)
                     match.playAiMove(request, move)
                 }
             }
