@@ -73,6 +73,49 @@ class StandardPresentationEngineTest {
     }
 
     @Test
+    fun wildStageAwakeningBeatsOrdinaryLevelClearSound() {
+        val sound = RecordingSoundOutput()
+        val engine = StandardPresentationEngine(sound, RecordingHapticOutput())
+
+        engine.accept(
+            StandardPresentationEvent.MatchFinished(
+                outcome = StandardAiHumanOutcome.WIN,
+                firstClear = true,
+                conquered = false,
+                winReward = StandardWinReward.COMEBACK,
+                wildStageAwakened = true,
+            ),
+        )
+
+        assertEquals(listOf(StandardSoundCue.WILD_STAGE_AWAKENED), sound.cues)
+    }
+
+    @Test
+    fun comebackAndClutchGetDistinctResultCuesWhenNotFirstClear() {
+        val comebackSound = RecordingSoundOutput()
+        StandardPresentationEngine(comebackSound, RecordingHapticOutput()).accept(
+            StandardPresentationEvent.MatchFinished(
+                outcome = StandardAiHumanOutcome.WIN,
+                firstClear = false,
+                conquered = false,
+                winReward = StandardWinReward.COMEBACK,
+            ),
+        )
+        assertEquals(listOf(StandardSoundCue.COMEBACK_WIN), comebackSound.cues)
+
+        val clutchSound = RecordingSoundOutput()
+        StandardPresentationEngine(clutchSound, RecordingHapticOutput()).accept(
+            StandardPresentationEvent.MatchFinished(
+                outcome = StandardAiHumanOutcome.WIN,
+                firstClear = false,
+                conquered = false,
+                winReward = StandardWinReward.CLUTCH,
+            ),
+        )
+        assertEquals(listOf(StandardSoundCue.CLUTCH_WIN), clutchSound.cues)
+    }
+
+    @Test
     fun boardEffectStrengthTracksTensionWithoutLeakingRenderingIntoEngine() {
         val engine = StandardPresentationEngine()
         val calm = engine.state.value.boardEffect

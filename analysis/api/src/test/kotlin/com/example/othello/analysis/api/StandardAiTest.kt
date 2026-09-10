@@ -105,6 +105,7 @@ class StandardAiTest {
             val result = engine.chooseMove(GameState(), config, asset())
             assertEquals(true, result.move in GameState().legalMoves)
             assertEquals(StandardAiPersonalityId.NATURAL, result.personalityId)
+            assertEquals(10, result.opponentBestScore)
             assertTrue(result.targetThinkTimeMs > 0L)
         }
 
@@ -142,6 +143,7 @@ class StandardAiTest {
         assertEquals(state.legalMoves.single(), result.move)
         assertEquals(140L, result.targetThinkTimeMs)
         assertEquals(StandardTensionLevel.CALM, result.tensionLevel)
+        assertNull(result.opponentBestScore)
         assertEquals(emptyList(), provider.edaxLevels)
     }
 

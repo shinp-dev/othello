@@ -32,6 +32,7 @@ class StandardLocalAiCoordinatorTest {
         val provider = RecordingProvider()
         val waits = mutableListOf<Long>()
         val tensions = mutableListOf<StandardTensionLevel>()
+        val bestScores = mutableListOf<Int?>()
         val times = ArrayDeque(listOf(1_000L, 1_200L))
         val coordinator = StandardLocalAiCoordinator(
             match = match,
@@ -40,7 +41,10 @@ class StandardLocalAiCoordinatorTest {
             evaluationData = evaluation,
             monotonicMillis = { times.removeFirst() },
             waitMillis = { waits += it },
-            onDecisionReady = { tensions += it },
+            onDecisionReady = { tension, opponentBestScore ->
+                tensions += tension
+                bestScores += opponentBestScore
+            },
         )
 
         assertTrue(coordinator.play())
@@ -49,6 +53,7 @@ class StandardLocalAiCoordinatorTest {
         assertEquals(evaluation, provider.evaluation)
         assertEquals(provider.selectedMove, match.viewState.moves.last())
         assertEquals(listOf(StandardTensionLevel.CALM), tensions)
+        assertEquals(listOf<Int?>(100), bestScores)
         assertEquals(listOf(320L), waits)
         assertFalse(match.viewState.aiThinking)
     }

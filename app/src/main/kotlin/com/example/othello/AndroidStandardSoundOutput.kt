@@ -196,9 +196,16 @@ internal class AndroidStandardSoundOutput(
         StandardSoundCue.STONE_PLACED -> OneShotSpec(AudioAsset.STONE_PLACE, volume = 0.55f)
         StandardSoundCue.OPPONENT_APPEARED -> OneShotSpec(AudioAsset.OPPONENT_APPEAR, volume = 0.62f)
         StandardSoundCue.HUMAN_WIN -> OneShotSpec(AudioAsset.HUMAN_WIN, volume = 0.72f)
+        StandardSoundCue.CLUTCH_WIN -> OneShotSpec(AudioAsset.HUMAN_WIN, volume = 0.82f, rate = 1.08f)
+        StandardSoundCue.COMEBACK_WIN -> OneShotSpec(AudioAsset.LEVEL_CLEAR, volume = 0.86f, rate = 0.92f)
         StandardSoundCue.HUMAN_LOSS -> OneShotSpec(AudioAsset.HUMAN_LOSS, volume = 0.64f)
         StandardSoundCue.DRAW -> OneShotSpec(AudioAsset.DRAW, volume = 0.60f)
         StandardSoundCue.LEVEL_CLEAR -> OneShotSpec(AudioAsset.LEVEL_CLEAR, volume = 0.82f)
+        StandardSoundCue.WILD_STAGE_AWAKENED -> OneShotSpec(
+            AudioAsset.CAMPAIGN_CONQUERED,
+            volume = 0.86f,
+            rate = 0.78f,
+        )
         StandardSoundCue.CAMPAIGN_CONQUERED -> OneShotSpec(AudioAsset.CAMPAIGN_CONQUERED, volume = 0.88f)
         StandardSoundCue.HEARTBEAT_TENSE_START,
         StandardSoundCue.HEARTBEAT_CRITICAL_START,
@@ -208,9 +215,12 @@ internal class AndroidStandardSoundOutput(
 
     private fun StandardSoundCue.isTerminalResultCue(): Boolean = when (this) {
         StandardSoundCue.HUMAN_WIN,
+        StandardSoundCue.CLUTCH_WIN,
+        StandardSoundCue.COMEBACK_WIN,
         StandardSoundCue.HUMAN_LOSS,
         StandardSoundCue.DRAW,
         StandardSoundCue.LEVEL_CLEAR,
+        StandardSoundCue.WILD_STAGE_AWAKENED,
         StandardSoundCue.CAMPAIGN_CONQUERED,
         -> true
         else -> false

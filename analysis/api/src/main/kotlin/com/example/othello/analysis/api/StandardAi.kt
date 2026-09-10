@@ -85,6 +85,11 @@ data class StandardAiMoveResult(
     val targetThinkTimeMs: Long = 0L,
     val personalityId: StandardAiPersonalityId? = null,
     val tensionLevel: StandardTensionLevel = StandardTensionLevel.CALM,
+    /**
+     * Best evaluation from the AI side-to-move perspective for this decision.
+     * Null for forced moves, which intentionally skip candidate evaluation.
+     */
+    val opponentBestScore: Int? = null,
     val available: Boolean = true,
     val message: String? = null,
 )
@@ -139,6 +144,7 @@ class StandardAiEngine(
             targetThinkTimeMs = config.personality.thinkTimePolicy.targetThinkTimeMs(context, move),
             personalityId = config.personality.id,
             tensionLevel = config.personality.tensionPolicy.evaluate(context),
+            opponentBestScore = context.bestScore,
         )
     }
 

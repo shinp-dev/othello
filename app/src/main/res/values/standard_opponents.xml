@@ -22,4 +22,19 @@
     <string name="standard_ai_start_opponent">Play Lv%1$d · %2$s</string>
     <string name="standard_ai_pack_preview_description">Opponents in the Animal Challenge pack</string>
     <string name="standard_ai_opponent_named_description">%1$s, AI opponent at level %2$d</string>
+    <string name="standard_ai_collection_progress">Defeated %1$d / %2$d</string>
+    <string name="standard_ai_next_reward_opponent">Win this match to reveal the next opponent</string>
+    <string name="standard_ai_next_reward_wild">One more win unlocks the Wild stage</string>
+    <string name="standard_ai_next_reward_conquer">One more win conquers the Animal Challenge</string>
+    <string name="standard_ai_opponent_unknown">\?\?\?</string>
+    <string name="standard_ai_opponent_status_teaser">NEXT</string>
+    <string name="standard_ai_locked_opponent_description">Locked AI opponent at level %1$d</string>
+    <string name="standard_ai_clutch_title">Clutch victory!</string>
+    <string name="standard_ai_clutch_message">You survived a CRITICAL position and won!</string>
+    <string name="standard_ai_comeback_title">Comeback!</string>
+    <string name="standard_ai_comeback_message">You came back from a position where the AI was clearly ahead!</string>
+    <string name="standard_ai_next_opponent_revealed">NEW! %1$s unlocked</string>
+    <string name="standard_ai_wild_stage_title">...it is not over yet</string>
+    <string name="standard_ai_wild_stage_unlocked">WILD STAGE UNLOCKED</string>
+    <string name="standard_ai_wild_stage_appeared">%1$s appeared!</string>
 </resources>
