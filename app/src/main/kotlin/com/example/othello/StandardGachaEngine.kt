@@ -1,6 +1,5 @@
 package com.example.othello
 
-import kotlin.math.nextDown
 import kotlin.random.Random
 
 internal data class StandardGachaDraw(
@@ -45,7 +44,7 @@ internal class StandardGachaEngine(
     }
 
     private fun unitValue(): Double =
-        randomUnit().coerceIn(0.0, 1.0.nextDown())
+        randomUnit().coerceIn(0.0, 0.9999999999999999)
 
     private companion object {
         val rarityWeights = listOf(
