@@ -3,6 +3,8 @@
     <string name="standard_ai_pack_label">対戦パック</string>
     <string name="standard_ai_animal_pack_name">どうぶつチャレンジ</string>
     <string name="standard_ai_animal_pack_supporting">やさしい姿から野生の姿まで、8体のどうぶつAIに挑戦</string>
+    <string name="standard_ai_group_basic">基礎</string>
+    <string name="standard_ai_group_serious">本気</string>
     <string name="standard_ai_opponent_chick">ひよこ</string>
     <string name="standard_ai_opponent_rabbit">うさぎ</string>
     <string name="standard_ai_opponent_koala">コアラ</string>
