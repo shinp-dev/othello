@@ -3,7 +3,6 @@ package com.example.othello
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
-import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -515,7 +514,7 @@ private fun StandardCollectionDetailDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text(appString(R.string.close))
+                Text(appString(R.string.standard_collection_close))
             }
         },
     )
@@ -551,7 +550,7 @@ private fun android.content.Context.openStandardCollectionUrl(url: String) {
 }
 
 private val StandardCollectionFilter.labelRes: Int
-    @StringRes get() = when (this) {
+    get() = when (this) {
         StandardCollectionFilter.ALL -> R.string.standard_collection_filter_all
         StandardCollectionFilter.TRIVIA -> R.string.standard_collection_category_trivia
         StandardCollectionFilter.BOOK -> R.string.standard_collection_category_book
@@ -562,7 +561,7 @@ private val StandardCollectionFilter.labelRes: Int
     }
 
 private val StandardContentCardType.labelRes: Int
-    @StringRes get() = when (this) {
+    get() = when (this) {
         StandardContentCardType.TRIVIA -> R.string.standard_collection_category_trivia
         StandardContentCardType.BOOK -> R.string.standard_collection_category_book
         StandardContentCardType.PERSON -> R.string.standard_collection_category_person
@@ -571,7 +570,7 @@ private val StandardContentCardType.labelRes: Int
     }
 
 private val StandardContentCardType.shortLabelRes: Int
-    @StringRes get() = when (this) {
+    get() = when (this) {
         StandardContentCardType.TRIVIA -> R.string.standard_collection_short_trivia
         StandardContentCardType.BOOK -> R.string.standard_collection_short_book
         StandardContentCardType.PERSON -> R.string.standard_collection_short_person
@@ -580,7 +579,7 @@ private val StandardContentCardType.shortLabelRes: Int
     }
 
 private val StandardContentRarity.labelRes: Int
-    @StringRes get() = when (this) {
+    get() = when (this) {
         StandardContentRarity.COMMON -> R.string.standard_collection_rarity_common
         StandardContentRarity.RARE -> R.string.standard_collection_rarity_rare
         StandardContentRarity.SPECIAL -> R.string.standard_collection_rarity_special
