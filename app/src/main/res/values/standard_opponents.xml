@@ -3,6 +3,8 @@
     <string name="standard_ai_pack_label">Opponent pack</string>
     <string name="standard_ai_animal_pack_name">Animal Challenge</string>
     <string name="standard_ai_animal_pack_supporting">Take on 8 animal opponents, from friendly to wild</string>
+    <string name="standard_ai_group_basic">Friendly</string>
+    <string name="standard_ai_group_serious">Wild</string>
     <string name="standard_ai_opponent_chick">Chick</string>
     <string name="standard_ai_opponent_rabbit">Rabbit</string>
     <string name="standard_ai_opponent_koala">Koala</string>
