@@ -85,6 +85,77 @@ internal class StandardContentPackManager internal constructor(
         }
     }
 
+
+    /**
+     * Installs an app-bundled baseline only when it is newer than the currently active pack.
+     *
+     * Bundled content uses the same manifest/cards/asset validation as downloaded packs, but
+     * does not participate in collection state. A newer downloaded pack therefore remains
+     * authoritative across app launches and app updates.
+     */
+    fun installBundledBaseline(pack: StandardBundledContentPack): Boolean {
+        val manifest = parseStandardContentPackManifest(pack.manifestJson)
+        validatePackId(manifest.id)
+        val currentVersion = activeVersion(manifest.id)
+        if (currentVersion != null && currentVersion >= manifest.version) return false
+
+        val staging = File(
+            stagingDirectory(),
+            "bundled-${manifest.id}-${manifest.version}.staging",
+        )
+        if (staging.exists() && !staging.deleteRecursively()) {
+            throw IOException("Could not clear bundled Standard content staging directory")
+        }
+
+        ensureLayout()
+        try {
+            if (!staging.mkdirs() && !staging.isDirectory) {
+                throw IOException("Could not create bundled Standard content staging directory")
+            }
+            writeUtf8File(File(staging, MANIFEST_FILE_NAME), pack.manifestJson)
+            writeUtf8File(File(staging, CARDS_FILE_NAME), pack.cardsJson)
+            pack.assets.forEach { (relativePath, bytes) ->
+                validateAssetPath(relativePath)
+                if (bytes.size.toLong() > STANDARD_CONTENT_MAX_ENTRY_BYTES) {
+                    throw StandardContentFormatException("Bundled content asset is too large")
+                }
+                val destination = safeChild(staging, relativePath)
+                destination.parentFile?.mkdirs()
+                FileOutputStream(destination).use { output ->
+                    output.write(bytes)
+                    output.fd.sync()
+                }
+            }
+
+            val installed = loadInstalledPack(staging)
+            if (
+                installed.manifest != manifest ||
+                installed.manifest.schemaVersion != STANDARD_CONTENT_SCHEMA_VERSION
+            ) {
+                throw StandardContentFormatException("Bundled pack manifest is invalid")
+            }
+            val referencedAssets = installed.cards.mapNotNull { it.imagePath }.toSet()
+            referencedAssets.forEach { relativePath ->
+                if (!safeChild(staging, relativePath).isFile) {
+                    throw StandardContentFormatException(
+                        "Bundled card references a missing content asset: $relativePath",
+                    )
+                }
+            }
+
+            val target = packDirectory(manifest.id, manifest.version)
+            if (target.exists() && !target.deleteRecursively()) {
+                throw IOException("Could not replace bundled Standard content pack directory")
+            }
+            target.parentFile?.mkdirs()
+            moveAtomicallyWhenPossible(staging, target, replaceExisting = false)
+            writeActiveVersion(manifest.id, manifest.version)
+            return true
+        } finally {
+            if (staging.exists()) staging.deleteRecursively()
+        }
+    }
+
     private suspend fun install(descriptor: StandardContentPackDescriptor) {
         validatePackId(descriptor.id)
         ensureLayout()
@@ -314,6 +385,14 @@ private fun safeChild(parent: File, relativePath: String): File {
         throw IOException("Standard content path escapes its pack directory")
     }
     return child
+}
+
+private fun writeUtf8File(file: File, content: String) {
+    file.parentFile?.mkdirs()
+    FileOutputStream(file).use { output ->
+        output.write(content.toByteArray(Charsets.UTF_8))
+        output.fd.sync()
+    }
 }
 
 private fun sha256(file: File): String {

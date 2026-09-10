@@ -26,6 +26,38 @@ obtainedCardIds = {
 
 これによりpack更新時のコレクションmigrationを不要にする。
 
+## 初期同梱pack
+
+初回利用時にネットワークがなくても図鑑/ガチャの入口を空にしないため、
+最初のbaselineだけはAPK/AABへ同梱する。
+
+同梱するのはremote ZIPと同じ論理構造を持つ展開済みpackで、
+`app/src/main/assets/standard-content/bootstrap/` に置く。
+
+```text
+bootstrap/
+  trivia/
+    manifest.json
+    cards.json
+  books/
+    manifest.json
+    cards.json
+```
+
+現在のbaselineは以下。
+
+- `trivia v1`: ルール・大会・歴史を中心に10枚
+- `books v1`: 出版社情報を出典にした書籍2枚
+- 書籍表紙画像は権利確認前なので同梱しない
+
+`StandardContentProcessOwner` は遅延初期化で、将来Standardの図鑑/ガチャが
+snapshotを要求した時にだけbaselineをprivate storageへ導入する。
+アプリ起動時やAdvanced表示だけではI/Oを発生させない。
+
+active packが同梱版より新しい場合、同梱版では上書きしない。
+したがってWeb配信で `trivia v2` を取得した端末が、次回起動時に
+同梱 `trivia v1` へ戻ることはない。
+
 ## 配信構造
 
 ```text

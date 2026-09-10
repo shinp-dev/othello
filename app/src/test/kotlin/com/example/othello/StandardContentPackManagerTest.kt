@@ -117,6 +117,83 @@ class StandardContentPackManagerTest {
     }
 
     @Test
+    fun bundledBaselineInstallsWithoutNetworkAndNeverDowngradesNewerActivePack() = runBlocking {
+        val root = Files.createTempDirectory("standard-content").toFile()
+        try {
+            val remoteV2 = File(root, "trivia-v2.zip")
+            writePackZip(
+                remoteV2,
+                id = "trivia",
+                version = 2,
+                cardId = "trivia.001",
+                title = "Remote V2",
+            )
+            val manager = manager(root, remoteV2)
+
+            val bundledV1 = StandardBundledContentPack(
+                manifestJson = """{"schemaVersion":1,"id":"trivia","version":1}""",
+                cardsJson = """
+                    {
+                      "schemaVersion": 1,
+                      "cards": [{
+                        "id": "trivia.001",
+                        "type": "trivia",
+                        "title": "Bundled V1",
+                        "summary": "starter"
+                      }]
+                    }
+                """.trimIndent(),
+            )
+
+            assertTrue(manager.installBundledBaseline(bundledV1))
+            assertEquals(1, assertNotNull(manager.loadActivePack("trivia")).manifest.version)
+            assertEquals("Bundled V1", manager.loadActivePack("trivia")!!.cards.single().title)
+
+            manager.refresh(indexOf(descriptorFor(remoteV2, "trivia", 2)))
+            assertEquals(2, assertNotNull(manager.loadActivePack("trivia")).manifest.version)
+            assertEquals("Remote V2", manager.loadActivePack("trivia")!!.cards.single().title)
+
+            assertFalse(manager.installBundledBaseline(bundledV1))
+            assertEquals(2, manager.loadActivePack("trivia")!!.manifest.version)
+            assertEquals("Remote V2", manager.loadActivePack("trivia")!!.cards.single().title)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun bundledBaselineUsesTheSameCardValidationAsRemotePacks() {
+        val root = Files.createTempDirectory("standard-content").toFile()
+        try {
+            val placeholder = File(root, "unused.zip").apply { writeText("unused") }
+            val manager = manager(root, placeholder)
+            val invalid = StandardBundledContentPack(
+                manifestJson = """{"schemaVersion":1,"id":"books","version":1}""",
+                cardsJson = """
+                    {
+                      "schemaVersion": 1,
+                      "cards": [{
+                        "id": "book.001",
+                        "type": "book",
+                        "title": "Broken",
+                        "summary": "missing image",
+                        "imagePath": "assets/missing.webp"
+                      }]
+                    }
+                """.trimIndent(),
+            )
+
+            assertFailsWith<StandardContentFormatException> {
+                manager.installBundledBaseline(invalid)
+            }
+            assertTrue(manager.activePackIds().isEmpty())
+            Unit
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun repositoryRejectsDuplicateCardIdsAcrossActivePacks() = runBlocking {
         val root = Files.createTempDirectory("standard-content").toFile()
         try {

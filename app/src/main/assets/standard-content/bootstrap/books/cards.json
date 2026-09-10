@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "cards": [
+    {
+      "id": "book.hasegawa.winning.2015",
+      "type": "book",
+      "rarity": "special",
+      "title": "オセロの勝ち方",
+      "summary": "長谷川五郎による、基本から定石・終盤の考え方まで扱うオセロ解説書。",
+      "body": "河出書房新社の2015年改訂新版。基本的な考え方から余裕手、偶数理論、四大定石などを扱う。",
+      "seriesId": "books.classic",
+      "tags": ["book", "strategy", "classic"],
+      "attributes": {
+        "author": "長谷川五郎",
+        "publisher": "河出書房新社",
+        "isbn": "9784309276731",
+        "published": "2015-12-17"
+      },
+      "sourceLabel": "河出書房新社",
+      "sourceUrl": "https://www.kawade.co.jp/np/isbn/9784309276731/",
+      "externalUrl": "https://www.kawade.co.jp/np/isbn/9784309276731/",
+      "sortOrder": 10
+    },
+    {
+      "id": "book.hasegawa.history.2011",
+      "type": "book",
+      "rarity": "rare",
+      "title": "オセロゲームの歴史",
+      "summary": "長谷川五郎がオセロの歩みを記した歴史書。",
+      "body": "河出書房新社から2011年に刊行。オセロが生まれ広がっていく過程を、名選手たちの勝負も交えてたどる。",
+      "seriesId": "books.history",
+      "tags": ["book", "history", "classic"],
+      "attributes": {
+        "author": "長谷川五郎",
+        "publisher": "河出書房新社",
+        "isbn": "9784309909134",
+        "published": "2011-07-15"
+      },
+      "sourceLabel": "河出書房新社",
+      "sourceUrl": "https://www.kawade.co.jp/np/isbn/9784309909134/",
+      "externalUrl": "https://www.kawade.co.jp/np/isbn/9784309909134/",
+      "sortOrder": 20
+    }
+  ]
+}

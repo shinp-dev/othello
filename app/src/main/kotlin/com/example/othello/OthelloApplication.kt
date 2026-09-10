@@ -27,4 +27,8 @@ class OthelloApplication : Application() {
     val theoryAnalysisCache by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         JsonFileTheoryAnalysisCache(this)
     }
+
+    internal val standardContent by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        StandardContentProcessOwner(this)
+    }
 }
