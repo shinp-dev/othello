@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="standard_ai_pack_label">対戦パック</string>
+    <string name="standard_ai_animal_pack_name">どうぶつチャレンジ</string>
+    <string name="standard_ai_animal_pack_supporting">やさしい姿から野生の姿まで、8体のどうぶつAIに挑戦</string>
+    <string name="standard_ai_opponent_chick">ひよこ</string>
+    <string name="standard_ai_opponent_rabbit">うさぎ</string>
+    <string name="standard_ai_opponent_koala">コアラ</string>
+    <string name="standard_ai_opponent_elephant">ぞう</string>
+    <string name="standard_ai_opponent_wild_chick">ワイルドひよこ</string>
+    <string name="standard_ai_opponent_wild_rabbit">ワイルドうさぎ</string>
+    <string name="standard_ai_opponent_wild_koala">ワイルドコアラ</string>
+    <string name="standard_ai_opponent_wild_elephant">ワイルドぞう</string>
+    <string name="standard_ai_opponent_level_name">Lv%1$d・%2$s</string>
+    <string name="standard_ai_opponent_status_next">次の挑戦</string>
+    <string name="standard_ai_opponent_status_cleared">CLEAR</string>
+    <string name="standard_ai_opponent_status_locked">LOCK</string>
+    <string name="standard_ai_opponent_status_selected">選択中</string>
+    <string name="standard_ai_opponent_status_available">挑戦可能</string>
+    <string name="standard_ai_start_opponent">Lv%1$d・%2$sと対局する</string>
+    <string name="standard_ai_pack_preview_description">どうぶつチャレンジの対戦相手</string>
+    <string name="standard_ai_opponent_named_description">%1$s、レベル%2$dのAI対戦相手</string>
+</resources>
