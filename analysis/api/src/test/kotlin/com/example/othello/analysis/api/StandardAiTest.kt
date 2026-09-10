@@ -10,6 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class StandardAiTest {
     @Test
@@ -21,26 +22,30 @@ class StandardAiTest {
     }
 
     @Test
-    fun campaignPresetKeepsDisplayLevelStrengthAndPolicySeparate() {
+    fun campaignPresetKeepsDisplayLevelStrengthAndPersonalitySeparate() {
         StandardAiLevel.entries.take(4).forEach { level ->
             val config = standardCampaignAiConfig(level)
             assertEquals(level.edaxLevel, config.edaxLevel)
-            assertIs<StandardNaturalPlayPolicy>(config.moveSelectionPolicy)
+            assertEquals(StandardAiPersonalityId.NATURAL, config.personality.id)
+            assertIs<StandardNaturalPlayPolicy>(config.personality.moveSelectionPolicy)
+            assertIs<StandardAdaptiveThinkTimePolicy>(config.personality.thinkTimePolicy)
         }
         StandardAiLevel.entries.drop(4).forEach { level ->
             val config = standardCampaignAiConfig(level)
             assertEquals(level.edaxLevel, config.edaxLevel)
-            assertIs<StandardBestMovePolicy>(config.moveSelectionPolicy)
+            assertEquals(StandardAiPersonalityId.SERIOUS, config.personality.id)
+            assertIs<StandardBestMovePolicy>(config.personality.moveSelectionPolicy)
+            assertIs<StandardAdaptiveThinkTimePolicy>(config.personality.thinkTimePolicy)
         }
     }
 
     @Test
     fun naturalPolicyCanVaryAmongCloseTopMovesEarly() {
         val candidates = initialCandidates()
-        val state = GameState(ply = 0)
+        val context = StandardDecisionContext(GameState(ply = 0), candidates)
 
-        val second = StandardNaturalPlayPolicy(StandardAiLevel.LV1) { 0.50 }.select(state, candidates)
-        val third = StandardNaturalPlayPolicy(StandardAiLevel.LV1) { 0.90 }.select(state, candidates)
+        val second = StandardNaturalPlayPolicy(StandardAiLevel.LV1) { 0.50 }.select(context)
+        val third = StandardNaturalPlayPolicy(StandardAiLevel.LV1) { 0.90 }.select(context)
 
         assertEquals(candidates[1].move, second)
         assertEquals(candidates[2].move, third)
@@ -51,8 +56,8 @@ class StandardAiTest {
         val candidates = initialCandidates()
         val policy = StandardNaturalPlayPolicy(StandardAiLevel.LV1) { 0.50 }
 
-        assertEquals(candidates[1].move, policy.select(GameState(ply = 0), candidates))
-        assertEquals(candidates[0].move, policy.select(GameState(ply = 50), candidates))
+        assertEquals(candidates[1].move, policy.select(StandardDecisionContext(GameState(ply = 0), candidates)))
+        assertEquals(candidates[0].move, policy.select(StandardDecisionContext(GameState(ply = 50), candidates)))
     }
 
     @Test
@@ -66,7 +71,8 @@ class StandardAiTest {
             StandardMoveCandidate(legalMoves[3], -30),
         )
 
-        val selected = StandardNaturalPlayPolicy(StandardAiLevel.LV1) { 0.99 }.select(state, candidates)
+        val selected = StandardNaturalPlayPolicy(StandardAiLevel.LV1) { 0.99 }
+            .select(StandardDecisionContext(state, candidates))
 
         assertEquals(candidates[0].move, selected)
     }
@@ -74,11 +80,16 @@ class StandardAiTest {
     @Test
     fun higherNaturalLevelIsMoreAccurateAndReachesBestOnlyEndgameBehavior() {
         val candidates = initialCandidates()
-        val early = StandardNaturalPlayPolicy(StandardAiLevel.LV4) { 0.80 }
-        val late = StandardNaturalPlayPolicy(StandardAiLevel.LV4) { 0.80 }
+        val policy = StandardNaturalPlayPolicy(StandardAiLevel.LV4) { 0.80 }
 
-        assertEquals(candidates[1].move, early.select(GameState(ply = 0), candidates))
-        assertEquals(candidates[0].move, late.select(GameState(ply = 50), candidates))
+        assertEquals(
+            candidates[1].move,
+            policy.select(StandardDecisionContext(GameState(ply = 0), candidates)),
+        )
+        assertEquals(
+            candidates[0].move,
+            policy.select(StandardDecisionContext(GameState(ply = 50), candidates)),
+        )
     }
 
     @Test
@@ -87,12 +98,12 @@ class StandardAiTest {
         val engine = StandardAiEngine(provider)
 
         StandardAiLevel.entries.take(4).forEach { level ->
-            val config = StandardAiConfig(
-                edaxLevel = level.edaxLevel,
-                moveSelectionPolicy = StandardNaturalPlayPolicy(level) { 0.50 },
-            )
+            val personality = StandardAiPersonalities.natural(level) { 0.50 }
+            val config = StandardAiConfig(edaxLevel = level.edaxLevel, personality = personality)
             val result = engine.chooseMove(GameState(), config, asset())
             assertEquals(true, result.move in GameState().legalMoves)
+            assertEquals(StandardAiPersonalityId.NATURAL, result.personalityId)
+            assertTrue(result.targetThinkTimeMs > 0L)
         }
 
         assertEquals(listOf(1, 2, 3, 4), provider.edaxLevels)
@@ -108,11 +119,12 @@ class StandardAiTest {
 
         assertEquals(initialCandidates()[0].move, levelFive.move)
         assertEquals(initialCandidates()[0].move, levelEight.move)
+        assertEquals(StandardAiPersonalityId.SERIOUS, levelFive.personalityId)
         assertEquals(listOf(1, 4), provider.edaxLevels)
     }
 
     @Test
-    fun oneLegalMoveIsSelectedWithoutCandidateEvaluation() = runBlocking {
+    fun oneLegalMoveIsSelectedWithoutCandidateEvaluationAndUsesForcedMoveTiming() = runBlocking {
         val state = GameState(
             board = Board.fromRows(listOf("WB......") + List(7) { "........" }),
             currentPlayer = Disc.WHITE,
@@ -126,25 +138,98 @@ class StandardAiTest {
         )
 
         assertEquals(state.legalMoves.single(), result.move)
+        assertEquals(140L, result.targetThinkTimeMs)
         assertEquals(emptyList(), provider.edaxLevels)
     }
 
     @Test
     fun configKeepsEdaxStrengthAndPersonalityIndependent() = runBlocking {
-        val customPolicy = StandardMoveSelectionPolicy { _, candidates -> candidates.last().move }
+        val personality = StandardAiPersonality(
+            id = StandardAiPersonalityId.NATURAL,
+            moveSelectionPolicy = StandardMoveSelectionPolicy { context -> context.rankedCandidates.last().move },
+            thinkTimePolicy = StandardThinkTimePolicy { _, _ -> 777L },
+        )
         val provider = RecordingProvider()
-        val config = StandardAiConfig(edaxLevel = 3, moveSelectionPolicy = customPolicy)
+        val config = StandardAiConfig(edaxLevel = 3, personality = personality)
 
         val result = StandardAiEngine(provider).chooseMove(GameState(), config, asset())
 
         assertEquals(GameState().legalMoves.last(), result.move)
+        assertEquals(777L, result.targetThinkTimeMs)
         assertEquals(listOf(3), provider.edaxLevels)
     }
 
     @Test
+    fun adaptiveThinkingTakesLongerForAmbiguousRiskyAndNonBestDecisions() {
+        val policy = StandardAdaptiveThinkTimePolicy(
+            StandardAdaptiveThinkTimeProfile(
+                baseMs = 400L,
+                forcedMoveMs = 100L,
+                ambiguousGapThreshold = 2,
+                ambiguousBonusMs = 100L,
+                riskyBestScoreThreshold = 3,
+                riskyChoiceBonusMs = 200L,
+                allNegativeBonusMs = 300L,
+                manyMovesThreshold = 8,
+                manyMovesBonusMs = 50L,
+                nonBestChoiceBonusMs = 80L,
+                endgameStartPly = 44,
+                endgameBonusMs = 60L,
+                maxMs = 2_000L,
+            ),
+        )
+        val state = GameState()
+        val moves = state.legalMoves.toList()
+        val risky = listOf(
+            StandardMoveCandidate(moves[0], 2),
+            StandardMoveCandidate(moves[1], 1),
+            StandardMoveCandidate(moves[2], -1),
+            StandardMoveCandidate(moves[3], -5),
+        )
+        val context = StandardDecisionContext(state, risky)
+
+        assertEquals(700L, policy.targetThinkTimeMs(context, moves[0]))
+        assertEquals(780L, policy.targetThinkTimeMs(context, moves[1]))
+    }
+
+    @Test
+    fun negativeAlternativesDoNotCauseHesitationWhenBestMoveIsClearlyGood() {
+        val policy = StandardAiPersonalities.serious().thinkTimePolicy
+        val state = GameState()
+        val moves = state.legalMoves.toList()
+        val clear = listOf(
+            StandardMoveCandidate(moves[0], 12),
+            StandardMoveCandidate(moves[1], 8),
+            StandardMoveCandidate(moves[2], -2),
+            StandardMoveCandidate(moves[3], -15),
+        )
+
+        val target = policy.targetThinkTimeMs(StandardDecisionContext(state, clear), moves[0])
+
+        assertEquals(500L, target)
+    }
+
+    @Test
+    fun allNegativePositionAddsMoreHesitation() {
+        val policy = StandardAiPersonalities.natural(StandardAiLevel.LV1) { 0.0 }.thinkTimePolicy
+        val state = GameState()
+        val moves = state.legalMoves.toList()
+        val candidates = listOf(
+            StandardMoveCandidate(moves[0], -1),
+            StandardMoveCandidate(moves[1], -2),
+            StandardMoveCandidate(moves[2], -4),
+            StandardMoveCandidate(moves[3], -8),
+        )
+
+        val target = policy.targetThinkTimeMs(StandardDecisionContext(state, candidates), moves[0])
+
+        assertEquals(1_060L, target)
+    }
+
+    @Test
     fun invalidStandardEdaxStrengthIsRejected() {
-        assertFalse(runCatching { StandardAiConfig(5, StandardBestMovePolicy) }.isSuccess)
-        assertFalse(runCatching { StandardAiConfig(8, StandardBestMovePolicy) }.isSuccess)
+        assertFalse(runCatching { StandardAiConfig(5, StandardAiPersonalities.serious()) }.isSuccess)
+        assertFalse(runCatching { StandardAiConfig(8, StandardAiPersonalities.serious()) }.isSuccess)
     }
 
     @Test
