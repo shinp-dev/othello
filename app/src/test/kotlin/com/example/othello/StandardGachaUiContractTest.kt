@@ -27,7 +27,7 @@ class StandardGachaUiContractTest {
         assertTrue("R.string.standard_gacha_duplicate" in source)
         assertTrue("R.string.standard_gacha_draw_again" in source)
         assertTrue("R.string.standard_gacha_open_collection" in source)
-        assertTrue("onCollection = onCollection" !in source)
+        assertTrue("onClick = onCollection" in source)
     }
 
     @Test
