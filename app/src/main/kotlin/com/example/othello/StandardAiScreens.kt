@@ -243,7 +243,7 @@ private fun StandardAiMatchScreen(
     val introStore = remember { StandardAiIntroStore(context) }
     val controller = remember(level) { LocalMatchController(LocalMatchMode.AI, Disc.BLACK) }
     val engine = remember(level) { StandardAiEngine(ProductionStandardCandidateProvider()) }
-    val presentationEngine = remember(level) { StandardPresentationEngine() }
+    val presentationEngine = rememberStandardPresentationEngine(level)
     val presentationState by presentationEngine.state.collectAsState()
     val coordinator = remember(controller, engine, level, evaluationData, presentationEngine) {
         StandardLocalAiCoordinator(
