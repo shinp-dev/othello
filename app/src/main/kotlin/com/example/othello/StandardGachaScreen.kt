@@ -63,6 +63,7 @@ private sealed interface StandardGachaLoadState {
     data class Ready(
         val snapshot: StandardContentSnapshot,
         val obtainedCardIds: Set<String>,
+        val dailyState: StandardGachaDailyState,
     ) : StandardGachaLoadState
 }
 
@@ -75,6 +76,7 @@ internal fun StandardGachaRoute(
     val context = androidx.compose.ui.platform.LocalContext.current
     val application = context.applicationContext as OthelloApplication
     val collectionStore = remember(context) { StandardCollectionStore(context) }
+    val dailyStore = remember(context) { StandardGachaDailyStore(context) }
     var retryGeneration by rememberSaveable(userId) { mutableIntStateOf(0) }
     var loadState by remember(userId) {
         mutableStateOf<StandardGachaLoadState>(StandardGachaLoadState.Loading)
@@ -87,6 +89,7 @@ internal fun StandardGachaRoute(
                 StandardGachaLoadState.Ready(
                     snapshot = application.standardContent.snapshot(),
                     obtainedCardIds = collectionStore.obtainedCardIds(userId),
+                    dailyState = dailyStore.state(userId),
                 )
             }.getOrElse {
                 StandardGachaLoadState.Failed
@@ -109,6 +112,8 @@ internal fun StandardGachaRoute(
             snapshot = state.snapshot,
             initialObtainedCardIds = state.obtainedCardIds,
             collectionStore = collectionStore,
+            dailyStore = dailyStore,
+            initialDailyState = state.dailyState,
             onBack = onBack,
             onCollection = onCollection,
         )
@@ -121,6 +126,8 @@ private fun StandardGachaScreen(
     snapshot: StandardContentSnapshot,
     initialObtainedCardIds: Set<String>,
     collectionStore: StandardCollectionStore,
+    dailyStore: StandardGachaDailyStore,
+    initialDailyState: StandardGachaDailyState,
     onBack: () -> Unit,
     onCollection: () -> Unit,
 ) {
@@ -131,6 +138,7 @@ private fun StandardGachaScreen(
     var pendingCardId by rememberSaveable(userId) { mutableStateOf<String?>(null) }
     var pendingWasNew by rememberSaveable(userId) { mutableStateOf(false) }
     var resultCardId by rememberSaveable(userId) { mutableStateOf<String?>(null) }
+    var dailyState by remember(userId) { mutableStateOf(initialDailyState) }
 
     val pendingEntry = pendingCardId?.let(snapshot::card)
     val resultEntry = resultCardId?.let(snapshot::card)
@@ -153,6 +161,8 @@ private fun StandardGachaScreen(
     fun draw() {
         if (pendingCardId != null || snapshot.entries.isEmpty()) return
         val draw = engine.draw(snapshot.entries, obtainedCardIds) ?: return
+        val updatedDailyState = dailyStore.tryConsumeFreeDraw(userId) ?: return
+        dailyState = updatedDailyState
         pendingWasNew = draw.isNew
         resultCardId = null
         pendingCardId = draw.entry.card.id
@@ -176,6 +186,16 @@ private fun StandardGachaScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
+        Text(
+            text = appString(
+                R.string.standard_gacha_daily_remaining,
+                dailyState.remainingFreeDraws,
+                STANDARD_GACHA_DAILY_FREE_DRAW_LIMIT,
+            ),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+
         when {
             snapshot.entries.isEmpty() -> StandardGachaEmpty()
             pendingEntry != null -> StandardGachaMachine(revealing = true)
@@ -189,12 +209,13 @@ private fun StandardGachaScreen(
         if (snapshot.entries.isNotEmpty()) {
             Button(
                 onClick = ::draw,
-                enabled = pendingEntry == null,
+                enabled = pendingEntry == null && dailyState.canDrawForFree,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
                     when {
                         pendingEntry != null -> appString(R.string.standard_gacha_drawing)
+                        !dailyState.canDrawForFree -> appString(R.string.standard_gacha_daily_limit_reached_button)
                         resultEntry != null -> appString(R.string.standard_gacha_draw_again)
                         else -> appString(R.string.standard_gacha_draw_free)
                     },
@@ -211,12 +232,12 @@ private fun StandardGachaScreen(
         }
 
         Text(
-            text = if (snapshot.entries.isNotEmpty() &&
-                snapshot.entries.all { it.card.id in obtainedCardIds }
-            ) {
-                appString(R.string.standard_gacha_complete_supporting)
-            } else {
-                appString(R.string.standard_gacha_new_priority_supporting)
+            text = when {
+                !dailyState.canDrawForFree -> appString(R.string.standard_gacha_daily_limit_reached)
+                snapshot.entries.isNotEmpty() &&
+                    snapshot.entries.all { it.card.id in obtainedCardIds } ->
+                    appString(R.string.standard_gacha_complete_supporting)
+                else -> appString(R.string.standard_gacha_duplicate_supporting)
             },
             modifier = Modifier.fillMaxWidth(),
             style = MaterialTheme.typography.bodySmall,
