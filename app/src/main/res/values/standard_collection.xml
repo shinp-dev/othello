@@ -35,4 +35,5 @@
     <string name="standard_collection_source">Source</string>
     <string name="standard_collection_open_source">Open source</string>
     <string name="standard_collection_open_external">Open official page</string>
+    <string name="standard_collection_close">Close</string>
 </resources>
