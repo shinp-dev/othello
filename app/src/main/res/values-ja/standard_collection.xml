@@ -35,4 +35,5 @@
     <string name="standard_collection_source">出典</string>
     <string name="standard_collection_open_source">出典を開く</string>
     <string name="standard_collection_open_external">公式ページを開く</string>
+    <string name="standard_collection_close">閉じる</string>
 </resources>
