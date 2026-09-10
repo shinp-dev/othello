@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="standard_ai_pack_label">Opponent pack</string>
+    <string name="standard_ai_animal_pack_name">Animal Challenge</string>
+    <string name="standard_ai_animal_pack_supporting">Take on 8 animal opponents, from friendly to wild</string>
+    <string name="standard_ai_group_basic">Friendly</string>
+    <string name="standard_ai_group_serious">Wild</string>
+    <string name="standard_ai_opponent_chick">Chick</string>
+    <string name="standard_ai_opponent_rabbit">Rabbit</string>
+    <string name="standard_ai_opponent_koala">Koala</string>
+    <string name="standard_ai_opponent_elephant">Elephant</string>
+    <string name="standard_ai_opponent_wild_chick">Wild Chick</string>
+    <string name="standard_ai_opponent_wild_rabbit">Wild Rabbit</string>
+    <string name="standard_ai_opponent_wild_koala">Wild Koala</string>
+    <string name="standard_ai_opponent_wild_elephant">Wild Elephant</string>
+    <string name="standard_ai_opponent_level_name">Lv%1$d · %2$s</string>
+    <string name="standard_ai_opponent_status_next">Next challenge</string>
+    <string name="standard_ai_opponent_status_cleared">CLEAR</string>
+    <string name="standard_ai_opponent_status_locked">LOCKED</string>
+    <string name="standard_ai_opponent_status_selected">Selected</string>
+    <string name="standard_ai_opponent_status_available">Available</string>
+    <string name="standard_ai_start_opponent">Play Lv%1$d · %2$s</string>
+    <string name="standard_ai_pack_preview_description">Opponents in the Animal Challenge pack</string>
+    <string name="standard_ai_opponent_named_description">%1$s, AI opponent at level %2$d</string>
+</resources>

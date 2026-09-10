@@ -17,11 +17,16 @@ class StandardModeUiContractTest {
     }
 
     @Test
-    fun standardHomeUsesThreeEqualCardsAndASecondaryModeSwitch() {
+    fun standardHomeShowsAnimalPackDirectlyBelowAiEntryAndKeepsSecondaryModeSwitch() {
         val home = source.substringAfter("private fun StandardHomeScreen(")
-            .substringBefore("@Composable\nprivate fun StandardComingSoonScreen")
-        assertTrue("StandardFeature.entries.forEach" in home)
-        assertTrue("ModeCard(" in home)
+            .substringBefore("@Composable\nprivate fun StandardOpponentPackPreviewCard")
+        val aiIndex = home.indexOf("title = appString(StandardFeature.AI.titleRes)")
+        val packIndex = home.indexOf("StandardOpponentPackPreviewCard(")
+        val onlineIndex = home.indexOf("listOf(StandardFeature.ONLINE, StandardFeature.REAL_EVENT)")
+        assertTrue(aiIndex >= 0)
+        assertTrue(packIndex > aiIndex)
+        assertTrue(onlineIndex > packIndex)
+        assertTrue("pack = StandardOpponentPacks.animal" in home)
         assertTrue("TextButton(" in home)
         assertTrue("R.string.switch_to_advanced_mode" in home)
     }

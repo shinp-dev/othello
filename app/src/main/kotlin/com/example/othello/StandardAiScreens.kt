@@ -175,40 +175,11 @@ internal fun StandardAiLevelSelectionContent(
             onBack = onBack,
             backLabel = appString(R.string.back),
         )
-        Text(appString(R.string.standard_ai_next_challenge), style = MaterialTheme.typography.labelLarge)
-        Text(
-            text = appString(R.string.standard_ai_level, progress.nextChallenge().value),
-            style = MaterialTheme.typography.headlineSmall,
+        StandardOpponentSelectionPanel(
+            progress = progress,
+            selectedLevel = selectedLevel,
+            onLevelSelected = onLevelSelected,
         )
-        StandardAiLevel.entries.chunked(LEVELS_PER_ROW).forEach { levels ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(ChanrivaSpacing.control),
-            ) {
-                levels.forEach { level ->
-                    val unlocked = progress.isUnlocked(level)
-                    OutlinedButton(
-                        onClick = { onLevelSelected(level) },
-                        enabled = unlocked,
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("standard-ai-level-${level.value}"),
-                    ) {
-                        Text(
-                            appString(
-                                when {
-                                    progress.isCleared(level) -> R.string.standard_ai_level_cleared
-                                    !unlocked -> R.string.standard_ai_level_locked
-                                    selectedLevel == level -> R.string.standard_ai_level_selected
-                                    else -> R.string.standard_ai_level
-                                },
-                                level.value,
-                            ),
-                        )
-                    }
-                }
-            }
-        }
         Text(
             text = appString(R.string.standard_ai_unlock_guidance),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -220,11 +191,18 @@ internal fun StandardAiLevelSelectionContent(
                 color = MaterialTheme.colorScheme.primary,
             )
         }
+        val selectedOpponent = selectedLevel.standardOpponent()
         Button(
             onClick = onStart,
             modifier = Modifier.fillMaxWidth().testTag("standard-ai-start"),
         ) {
-            Text(appString(R.string.standard_ai_start_level, selectedLevel.value))
+            Text(
+                appString(
+                    R.string.standard_ai_start_opponent,
+                    selectedLevel.value,
+                    appString(selectedOpponent.nameRes),
+                ),
+            )
         }
     }
 }
@@ -451,7 +429,6 @@ private fun StandardAiMatchScreen(
     }
 }
 
-private const val LEVELS_PER_ROW = 4
 
 private fun LocalGameRecord.humanOutcome(): StandardAiHumanOutcome {
     val completedResult = requireNotNull(result) { "completed Standard AI record requires a result" }

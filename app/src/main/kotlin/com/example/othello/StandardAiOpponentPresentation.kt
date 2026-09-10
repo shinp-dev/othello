@@ -164,25 +164,3 @@ private fun AnimatedOpponentImage(
             .testTag(tag),
     )
 }
-
-private fun StandardAiLevel.opponentWinDrawable(): Int = when (this) {
-    StandardAiLevel.LV1 -> R.drawable.standard_ai_lv01_chick_win
-    StandardAiLevel.LV2 -> R.drawable.standard_ai_lv02_rabbit_win
-    StandardAiLevel.LV3 -> R.drawable.standard_ai_lv03_koala_win
-    StandardAiLevel.LV4 -> R.drawable.standard_ai_lv04_elephant_win
-    StandardAiLevel.LV5 -> R.drawable.standard_ai_lv05_wild_chick_win
-    StandardAiLevel.LV6 -> R.drawable.standard_ai_lv06_wild_rabbit_win
-    StandardAiLevel.LV7 -> R.drawable.standard_ai_lv07_wild_koala_win
-    StandardAiLevel.LV8 -> R.drawable.standard_ai_lv08_wild_elephant_win
-}
-
-private fun StandardAiLevel.opponentLoseDrawable(): Int = when (this) {
-    StandardAiLevel.LV1 -> R.drawable.standard_ai_lv01_chick_lose
-    StandardAiLevel.LV2 -> R.drawable.standard_ai_lv02_rabbit_lose
-    StandardAiLevel.LV3 -> R.drawable.standard_ai_lv03_koala_lose
-    StandardAiLevel.LV4 -> R.drawable.standard_ai_lv04_elephant_lose
-    StandardAiLevel.LV5 -> R.drawable.standard_ai_lv05_wild_chick_lose
-    StandardAiLevel.LV6 -> R.drawable.standard_ai_lv06_wild_rabbit_lose
-    StandardAiLevel.LV7 -> R.drawable.standard_ai_lv07_wild_koala_lose
-    StandardAiLevel.LV8 -> R.drawable.standard_ai_lv08_wild_elephant_lose
-}

@@ -2,13 +2,17 @@ package com.example.othello
 
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -23,10 +27,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.statusBarsPadding
 import com.example.othello.designsystem.ChanrivaColors
 import com.example.othello.designsystem.ChanrivaScreenHeader
 import com.example.othello.designsystem.ChanrivaSpacing
@@ -142,7 +147,16 @@ private fun StandardHomeScreen(
 ) {
     StandardSurface {
         ChanrivaScreenHeader(title = appString(R.string.standard_mode))
-        StandardFeature.entries.forEach { feature ->
+        ModeCard(
+            title = appString(StandardFeature.AI.titleRes),
+            supportingText = appString(StandardFeature.AI.supportingTextRes),
+            onClick = { onFeature(StandardFeature.AI) },
+        )
+        StandardOpponentPackPreviewCard(
+            pack = StandardOpponentPacks.animal,
+            onClick = { onFeature(StandardFeature.AI) },
+        )
+        listOf(StandardFeature.ONLINE, StandardFeature.REAL_EVENT).forEach { feature ->
             ModeCard(
                 title = appString(feature.titleRes),
                 supportingText = appString(feature.supportingTextRes),
@@ -154,6 +168,55 @@ private fun StandardHomeScreen(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(appString(R.string.switch_to_advanced_mode))
+        }
+    }
+}
+
+@Composable
+private fun StandardOpponentPackPreviewCard(
+    pack: StandardOpponentPackUi,
+    onClick: () -> Unit,
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 164.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Column(
+            modifier = Modifier.padding(ChanrivaSpacing.section),
+            verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.control),
+        ) {
+            Text(
+                text = appString(R.string.standard_ai_pack_label),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Text(
+                text = appString(pack.titleRes),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Text(
+                text = appString(pack.supportingTextRes),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                pack.previewLevels.forEach { level ->
+                    val opponent = pack.opponent(level)
+                    Image(
+                        painter = painterResource(opponent.winDrawableRes),
+                        contentDescription = appString(R.string.standard_ai_pack_preview_description),
+                        modifier = Modifier.size(64.dp),
+                    )
+                }
+            }
         }
     }
 }
