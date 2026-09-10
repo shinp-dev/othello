@@ -240,6 +240,7 @@ private fun StandardAiMatchScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val introStore = remember { StandardAiIntroStore(context) }
     val controller = remember(level) { LocalMatchController(LocalMatchMode.AI, Disc.BLACK) }
     val engine = remember(level) { StandardAiEngine(ProductionStandardCandidateProvider()) }
     val coordinator = remember(controller, engine, level, evaluationData) {
@@ -254,6 +255,8 @@ private fun StandardAiMatchScreen(
     var matchGeneration by remember { mutableStateOf(0) }
     var confirmResign by remember { mutableStateOf(false) }
     var handledRecordId by remember { mutableStateOf<String?>(null) }
+    var showIntro by remember(userId, level) { mutableStateOf(!introStore.hasSeen(userId, level)) }
+    var resultPresentation by remember(level) { mutableStateOf<StandardAiResultPresentation?>(null) }
     val saveStates by persistence.saveStates.collectAsState()
 
     DisposableEffect(controller, persistence) {
@@ -281,16 +284,38 @@ private fun StandardAiMatchScreen(
         val record = viewState.completedRecord ?: return@LaunchedEffect
         if (handledRecordId == record.localId) return@LaunchedEffect
         handledRecordId = record.localId
-        onProgressChanged(
-            progressStore.recordResult(
-                userId = userId,
-                level = level,
-                humanWon = record.humanWon(),
-                undoUsed = viewState.undoUsed,
-            ),
+
+        val outcome = record.humanOutcome()
+        val before = progressStore.progress(userId)
+        val wasCleared = before.isCleared(level)
+        val updated = progressStore.recordResult(
+            userId = userId,
+            level = level,
+            humanWon = outcome == StandardAiHumanOutcome.WIN,
+            undoUsed = viewState.undoUsed,
+        )
+        val firstClear = outcome == StandardAiHumanOutcome.WIN &&
+            !viewState.undoUsed &&
+            !wasCleared &&
+            updated.isCleared(level)
+        val unlockedLevel = if (firstClear) {
+            level.next()?.takeIf { !before.isUnlocked(it) && updated.isUnlocked(it) }
+        } else {
+            null
+        }
+        onProgressChanged(updated)
+        resultPresentation = StandardAiResultPresentation(
+            outcome = outcome,
+            firstClear = firstClear,
+            unlockedLevel = unlockedLevel,
+            conquered = firstClear && level == StandardAiLevel.LV8 && updated.conquered,
         )
     }
 
+    fun dismissIntro() {
+        introStore.markSeen(userId, level)
+        showIntro = false
+    }
     fun undoMove() {
         if (!viewState.canUndo || viewState.completedRecord != null) return
         coordinator.cancelForUndo()
@@ -303,6 +328,7 @@ private fun StandardAiMatchScreen(
         coordinator.cancel()
         controller.reset()
         handledRecordId = null
+        resultPresentation = null
         matchGeneration++
         confirmResign = false
     }
@@ -364,6 +390,16 @@ private fun StandardAiMatchScreen(
             }
         }
     }
+    if (showIntro) {
+        StandardAiIntroDialog(level = level, onStart = ::dismissIntro)
+    }
+    resultPresentation?.let { presentation ->
+        StandardAiResultDialog(
+            level = level,
+            presentation = presentation,
+            onDismiss = { resultPresentation = null },
+        )
+    }
     if (confirmResign) {
         AlertDialog(
             onDismissRequest = { confirmResign = false },
@@ -385,11 +421,17 @@ private fun StandardAiMatchScreen(
 
 private const val LEVELS_PER_ROW = 4
 
-private fun LocalGameRecord.humanWon(): Boolean = when (playerDisc) {
-    Disc.BLACK -> result == MatchResult.BLACK_WIN
-    Disc.WHITE -> result == MatchResult.WHITE_WIN
-    else -> false
+private fun LocalGameRecord.humanOutcome(): StandardAiHumanOutcome {
+    val completedResult = requireNotNull(result) { "completed Standard AI record requires a result" }
+    val humanDisc = requireNotNull(playerDisc) { "completed Standard AI record requires playerDisc" }
+    return when (completedResult) {
+        MatchResult.DRAW -> StandardAiHumanOutcome.DRAW
+        MatchResult.BLACK_WIN -> if (humanDisc == Disc.BLACK) StandardAiHumanOutcome.WIN else StandardAiHumanOutcome.LOSS
+        MatchResult.WHITE_WIN -> if (humanDisc == Disc.WHITE) StandardAiHumanOutcome.WIN else StandardAiHumanOutcome.LOSS
+    }
 }
+
+private fun LocalGameRecord.humanWon(): Boolean = humanOutcome() == StandardAiHumanOutcome.WIN
 
 @Composable
 private fun StandardAiSurface(content: @Composable ColumnScope.() -> Unit) {

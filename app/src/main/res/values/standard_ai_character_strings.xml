@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="standard_ai_intro_title">Lv%1$d challenge</string>
+    <string name="standard_ai_new_opponent">A new opponent appears!</string>
+    <string name="standard_ai_intro_start">Start match</string>
+    <string name="standard_ai_opponent_image_description">Standard AI Lv%1$d opponent</string>
+    <string name="standard_ai_opponent_wins">The opponent wins!</string>
+    <string name="standard_ai_result_draw">Draw!</string>
+    <string name="standard_ai_first_clear">Lv%1$d cleared!</string>
+    <string name="standard_ai_next_level_unlocked">Lv%1$d unlocked!</string>
+    <string name="standard_ai_result_continue">Continue</string>
+</resources>

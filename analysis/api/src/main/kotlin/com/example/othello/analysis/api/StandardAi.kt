@@ -2,6 +2,8 @@ package com.example.othello.analysis.api
 
 import com.example.othello.game.GameState
 import com.example.othello.game.Position
+import kotlin.math.roundToInt
+import kotlin.random.Random
 
 enum class StandardAiLevel(
     val value: Int,
@@ -64,18 +66,106 @@ fun interface StandardMoveSelectionPolicy {
     fun select(position: GameState, rankedCandidates: List<StandardMoveCandidate>): Position?
 }
 
-/** Campaign's restrained personality: second-best through move 40, then best. */
-object StandardHonorStudentPolicy : StandardMoveSelectionPolicy {
+/**
+ * Lv1-Lv4 campaign personality.
+ *
+ * Instead of mechanically choosing the second-ranked move through a fixed ply,
+ * this policy gradually becomes more accurate as the game progresses. It only
+ * randomizes among the top three moves whose evaluation loss is small enough,
+ * so a clearly losing alternative is never selected merely because it is rank 2.
+ */
+class StandardNaturalPlayPolicy(
+    level: StandardAiLevel,
+    private val randomUnit: () -> Double = { Random.Default.nextDouble() },
+) : StandardMoveSelectionPolicy {
+    private val profile = profileFor(level)
+
+    init {
+        require(level.value in 1..4) { "Natural-play policy is only for Standard Lv1-Lv4" }
+    }
+
     override fun select(
         position: GameState,
         rankedCandidates: List<StandardMoveCandidate>,
-    ): Position? = when {
-        rankedCandidates.isEmpty() -> null
-        position.ply < SECOND_BEST_END_PLY && rankedCandidates.size > 1 -> rankedCandidates[1].move
-        else -> rankedCandidates.first().move
+    ): Position? {
+        if (rankedCandidates.isEmpty()) return null
+        if (rankedCandidates.size == 1) return rankedCandidates.first().move
+
+        val progress = (position.ply.toDouble() / FULL_STRENGTH_PLY).coerceIn(0.0, 1.0)
+        val weights = DoubleArray(MAX_RANDOMIZED_CANDIDATES) { index ->
+            lerp(profile.openingWeights[index], profile.endgameWeights[index], progress)
+        }
+        val maxScoreLoss = lerp(
+            profile.openingMaxScoreLoss.toDouble(),
+            profile.endgameMaxScoreLoss.toDouble(),
+            progress,
+        ).roundToInt()
+        val bestScore = rankedCandidates.first().score
+
+        val eligible = rankedCandidates
+            .take(MAX_RANDOMIZED_CANDIDATES)
+            .withIndex()
+            .filter { indexed ->
+                indexed.index == 0 || bestScore - indexed.value.score <= maxScoreLoss
+            }
+
+        if (eligible.size == 1) return eligible.first().value.move
+
+        val totalWeight = eligible.sumOf { weights[it.index] }
+        if (totalWeight <= 0.0) return rankedCandidates.first().move
+
+        val draw = randomUnit().coerceIn(0.0, RANDOM_UPPER_BOUND) * totalWeight
+        var cumulative = 0.0
+        eligible.forEach { indexed ->
+            cumulative += weights[indexed.index]
+            if (draw < cumulative) return indexed.value.move
+        }
+        return eligible.last().value.move
     }
 
-    private const val SECOND_BEST_END_PLY = 40
+    private data class Profile(
+        val openingWeights: DoubleArray,
+        val endgameWeights: DoubleArray,
+        val openingMaxScoreLoss: Int,
+        val endgameMaxScoreLoss: Int,
+    )
+
+    private companion object {
+        const val MAX_RANDOMIZED_CANDIDATES = 3
+        const val FULL_STRENGTH_PLY = 50.0
+        const val RANDOM_UPPER_BOUND = 0.999999999999
+
+        fun profileFor(level: StandardAiLevel): Profile = when (level) {
+            StandardAiLevel.LV1 -> Profile(
+                openingWeights = doubleArrayOf(0.30, 0.45, 0.25),
+                endgameWeights = doubleArrayOf(0.70, 0.25, 0.05),
+                openingMaxScoreLoss = 10,
+                endgameMaxScoreLoss = 5,
+            )
+            StandardAiLevel.LV2 -> Profile(
+                openingWeights = doubleArrayOf(0.40, 0.45, 0.15),
+                endgameWeights = doubleArrayOf(0.85, 0.15, 0.0),
+                openingMaxScoreLoss = 8,
+                endgameMaxScoreLoss = 4,
+            )
+            StandardAiLevel.LV3 -> Profile(
+                openingWeights = doubleArrayOf(0.55, 0.35, 0.10),
+                endgameWeights = doubleArrayOf(0.95, 0.05, 0.0),
+                openingMaxScoreLoss = 6,
+                endgameMaxScoreLoss = 3,
+            )
+            StandardAiLevel.LV4 -> Profile(
+                openingWeights = doubleArrayOf(0.70, 0.30, 0.0),
+                endgameWeights = doubleArrayOf(1.0, 0.0, 0.0),
+                openingMaxScoreLoss = 4,
+                endgameMaxScoreLoss = 2,
+            )
+            else -> error("Natural-play policy is only for Standard Lv1-Lv4")
+        }
+
+        fun lerp(start: Double, end: Double, progress: Double): Double =
+            start + (end - start) * progress
+    }
 }
 
 /** Selects the best of all candidates ranked by the Standard provider. */
@@ -98,7 +188,7 @@ data class StandardAiConfig(
 fun standardCampaignAiConfig(level: StandardAiLevel): StandardAiConfig = StandardAiConfig(
     edaxLevel = level.edaxLevel,
     moveSelectionPolicy = if (level.value <= StandardAiLevel.LV4.value) {
-        StandardHonorStudentPolicy
+        StandardNaturalPlayPolicy(level)
     } else {
         StandardBestMovePolicy
     },

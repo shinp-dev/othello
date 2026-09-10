@@ -83,10 +83,13 @@ class StandardLocalAiCoordinatorTest {
         ): StandardCandidateResult {
             this.edaxLevel = edaxLevel
             evaluation = evaluationData
+            // Keep this coordinator contract deterministic. Natural-play randomness is
+            // covered in analysis:api tests; here the alternatives are intentionally
+            // far enough behind that the policy must choose the best candidate.
             val ranked = position.legalMoves.mapIndexed { index, move ->
-                StandardMoveCandidate(move, score = 100 - index)
+                StandardMoveCandidate(move, score = 100 - index * 100)
             }
-            selectedMove = ranked[1].move
+            selectedMove = ranked.first().move
             return StandardCandidateResult(ranked)
         }
     }

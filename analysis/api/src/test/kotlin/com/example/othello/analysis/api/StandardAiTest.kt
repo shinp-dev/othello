@@ -25,7 +25,7 @@ class StandardAiTest {
         StandardAiLevel.entries.take(4).forEach { level ->
             val config = standardCampaignAiConfig(level)
             assertEquals(level.edaxLevel, config.edaxLevel)
-            assertIs<StandardHonorStudentPolicy>(config.moveSelectionPolicy)
+            assertIs<StandardNaturalPlayPolicy>(config.moveSelectionPolicy)
         }
         StandardAiLevel.entries.drop(4).forEach { level ->
             val config = standardCampaignAiConfig(level)
@@ -35,25 +35,67 @@ class StandardAiTest {
     }
 
     @Test
-    fun restrainedPolicyUsesSecondBestThroughMoveFortyAndBestFromMoveFortyOne() {
+    fun naturalPolicyCanVaryAmongCloseTopMovesEarly() {
         val candidates = initialCandidates()
+        val state = GameState(ply = 0)
 
-        assertEquals(candidates[1].move, StandardHonorStudentPolicy.select(GameState(ply = 0), candidates))
-        assertEquals(candidates[1].move, StandardHonorStudentPolicy.select(GameState(ply = 39), candidates))
-        assertEquals(candidates[0].move, StandardHonorStudentPolicy.select(GameState(ply = 40), candidates))
+        val second = StandardNaturalPlayPolicy(StandardAiLevel.LV1) { 0.50 }.select(state, candidates)
+        val third = StandardNaturalPlayPolicy(StandardAiLevel.LV1) { 0.90 }.select(state, candidates)
+
+        assertEquals(candidates[1].move, second)
+        assertEquals(candidates[2].move, third)
     }
 
     @Test
-    fun levelsOneThroughFourAlwaysEvaluateCandidatesAndChangeSelectionAtMoveFortyOne() = runBlocking {
+    fun naturalPolicyGraduallyFavorsBestMoveLateInGame() {
+        val candidates = initialCandidates()
+        val policy = StandardNaturalPlayPolicy(StandardAiLevel.LV1) { 0.50 }
+
+        assertEquals(candidates[1].move, policy.select(GameState(ply = 0), candidates))
+        assertEquals(candidates[0].move, policy.select(GameState(ply = 50), candidates))
+    }
+
+    @Test
+    fun naturalPolicyNeverChoosesClearlyWorseMoveJustBecauseItIsRankedSecond() {
+        val state = GameState()
+        val legalMoves = state.legalMoves.toList()
+        val candidates = listOf(
+            StandardMoveCandidate(legalMoves[0], 10),
+            StandardMoveCandidate(legalMoves[1], -10),
+            StandardMoveCandidate(legalMoves[2], -20),
+            StandardMoveCandidate(legalMoves[3], -30),
+        )
+
+        val selected = StandardNaturalPlayPolicy(StandardAiLevel.LV1) { 0.99 }.select(state, candidates)
+
+        assertEquals(candidates[0].move, selected)
+    }
+
+    @Test
+    fun higherNaturalLevelIsMoreAccurateAndReachesBestOnlyEndgameBehavior() {
+        val candidates = initialCandidates()
+        val early = StandardNaturalPlayPolicy(StandardAiLevel.LV4) { 0.80 }
+        val late = StandardNaturalPlayPolicy(StandardAiLevel.LV4) { 0.80 }
+
+        assertEquals(candidates[1].move, early.select(GameState(ply = 0), candidates))
+        assertEquals(candidates[0].move, late.select(GameState(ply = 50), candidates))
+    }
+
+    @Test
+    fun levelsOneThroughFourStillEvaluateAllCandidatesWithMappedStrength() = runBlocking {
         val provider = RecordingProvider()
         val engine = StandardAiEngine(provider)
 
-        val moveForty = engine.chooseMove(GameState(ply = 39), standardCampaignAiConfig(StandardAiLevel.LV4), asset())
-        val moveFortyOne = engine.chooseMove(GameState(ply = 40), standardCampaignAiConfig(StandardAiLevel.LV4), asset())
+        StandardAiLevel.entries.take(4).forEach { level ->
+            val config = StandardAiConfig(
+                edaxLevel = level.edaxLevel,
+                moveSelectionPolicy = StandardNaturalPlayPolicy(level) { 0.50 },
+            )
+            val result = engine.chooseMove(GameState(), config, asset())
+            assertEquals(true, result.move in GameState().legalMoves)
+        }
 
-        assertEquals(initialCandidates()[1].move, moveForty.move)
-        assertEquals(initialCandidates()[0].move, moveFortyOne.move)
-        assertEquals(listOf(4, 4), provider.edaxLevels)
+        assertEquals(listOf(1, 2, 3, 4), provider.edaxLevels)
     }
 
     @Test
@@ -103,6 +145,11 @@ class StandardAiTest {
     fun invalidStandardEdaxStrengthIsRejected() {
         assertFalse(runCatching { StandardAiConfig(5, StandardBestMovePolicy) }.isSuccess)
         assertFalse(runCatching { StandardAiConfig(8, StandardBestMovePolicy) }.isSuccess)
+    }
+
+    @Test
+    fun naturalPolicyIsLimitedToCampaignLevelsOneThroughFour() {
+        assertFalse(runCatching { StandardNaturalPlayPolicy(StandardAiLevel.LV5) }.isSuccess)
     }
 
     private fun initialCandidates(): List<StandardMoveCandidate> = rankedCandidates(GameState())
