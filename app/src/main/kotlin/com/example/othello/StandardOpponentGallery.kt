@@ -9,11 +9,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -31,6 +33,9 @@ internal fun StandardOpponentSelectionPanel(
     val pack = StandardOpponentPacks.animal
     val nextLevel = progress.nextChallenge()
     val nextOpponent = pack.opponent(nextLevel)
+    val teaserLevel = progress.highestUnlockedLevel.next()
+    val clearedCount = progress.clearedLevels.size
+    val totalCount = StandardAiLevel.entries.size
 
     Column(
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.control),
@@ -50,17 +55,39 @@ internal fun StandardOpponentSelectionPanel(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            text = appString(R.string.standard_ai_next_challenge),
+            text = appString(R.string.standard_ai_collection_progress, clearedCount, totalCount),
             style = MaterialTheme.typography.labelLarge,
         )
-        Text(
-            text = appString(
-                R.string.standard_ai_opponent_level_name,
-                nextLevel.value,
-                appString(nextOpponent.nameRes),
-            ),
-            style = MaterialTheme.typography.titleLarge,
+        LinearProgressIndicator(
+            progress = clearedCount.toFloat() / totalCount.toFloat(),
+            modifier = Modifier.fillMaxWidth(),
         )
+
+        if (!progress.conquered) {
+            Text(
+                text = appString(R.string.standard_ai_next_challenge),
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Text(
+                text = appString(
+                    R.string.standard_ai_opponent_level_name,
+                    nextLevel.value,
+                    appString(nextOpponent.nameRes),
+                ),
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Text(
+                text = appString(
+                    when (nextLevel) {
+                        StandardAiLevel.LV4 -> R.string.standard_ai_next_reward_wild
+                        StandardAiLevel.LV8 -> R.string.standard_ai_next_reward_conquer
+                        else -> R.string.standard_ai_next_reward_opponent
+                    },
+                ),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
 
         StandardOpponentGroup(
             title = appString(R.string.standard_ai_group_basic),
@@ -68,6 +95,7 @@ internal fun StandardOpponentSelectionPanel(
             progress = progress,
             selectedLevel = selectedLevel,
             nextLevel = nextLevel,
+            teaserLevel = teaserLevel,
             onLevelSelected = onLevelSelected,
         )
         StandardOpponentGroup(
@@ -76,6 +104,7 @@ internal fun StandardOpponentSelectionPanel(
             progress = progress,
             selectedLevel = selectedLevel,
             nextLevel = nextLevel,
+            teaserLevel = teaserLevel,
             onLevelSelected = onLevelSelected,
         )
     }
@@ -88,6 +117,7 @@ private fun StandardOpponentGroup(
     progress: StandardAiProgress,
     selectedLevel: StandardAiLevel,
     nextLevel: StandardAiLevel,
+    teaserLevel: StandardAiLevel?,
     onLevelSelected: (StandardAiLevel) -> Unit,
 ) {
     Column(
@@ -108,6 +138,7 @@ private fun StandardOpponentGroup(
                         progress = progress,
                         selected = opponent.level == selectedLevel,
                         next = opponent.level == nextLevel,
+                        teaser = opponent.level == teaserLevel,
                         onClick = { onLevelSelected(opponent.level) },
                         modifier = Modifier.weight(1f),
                     )
@@ -126,12 +157,15 @@ private fun StandardOpponentCard(
     progress: StandardAiProgress,
     selected: Boolean,
     next: Boolean,
+    teaser: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val unlocked = progress.isUnlocked(opponent.level)
     val cleared = progress.isCleared(opponent.level)
+    val visibleName = if (unlocked) appString(opponent.nameRes) else appString(R.string.standard_ai_opponent_unknown)
     val statusRes = when {
+        !unlocked && teaser -> R.string.standard_ai_opponent_status_teaser
         !unlocked -> R.string.standard_ai_opponent_status_locked
         cleared -> R.string.standard_ai_opponent_status_cleared
         next -> R.string.standard_ai_opponent_status_next
@@ -162,22 +196,31 @@ private fun StandardOpponentCard(
         ) {
             Image(
                 painter = painterResource(opponent.winDrawableRes),
-                contentDescription = appString(
-                    R.string.standard_ai_opponent_named_description,
-                    appString(opponent.nameRes),
-                    opponent.level.value,
-                ),
+                contentDescription = if (unlocked) {
+                    appString(
+                        R.string.standard_ai_opponent_named_description,
+                        appString(opponent.nameRes),
+                        opponent.level.value,
+                    )
+                } else {
+                    appString(R.string.standard_ai_locked_opponent_description, opponent.level.value)
+                },
+                colorFilter = if (unlocked) null else ColorFilter.tint(MaterialTheme.colorScheme.onSurfaceVariant),
                 modifier = Modifier
                     .size(124.dp)
                     .graphicsLayer {
-                        alpha = if (unlocked) 1f else 0.35f
+                        alpha = when {
+                            unlocked -> 1f
+                            teaser -> 0.62f
+                            else -> 0.28f
+                        }
                     },
             )
             Text(
                 text = appString(
                     R.string.standard_ai_opponent_level_name,
                     opponent.level.value,
-                    appString(opponent.nameRes),
+                    visibleName,
                 ),
                 style = MaterialTheme.typography.titleSmall,
             )
