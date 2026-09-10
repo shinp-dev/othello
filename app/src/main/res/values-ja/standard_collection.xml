@@ -20,7 +20,7 @@
     <string name="standard_collection_short_history">史</string>
     <string name="standard_collection_short_person">人</string>
     <string name="standard_collection_short_collab">特</string>
-    <string name="standard_collection_unknown_title">???</string>
+    <string name="standard_collection_unknown_title">\?\?\?</string>
     <string name="standard_collection_locked_supporting">手に入れると内容がわかります。</string>
     <string name="standard_collection_obtained">取得済み</string>
     <string name="standard_collection_unobtained">未取得</string>
