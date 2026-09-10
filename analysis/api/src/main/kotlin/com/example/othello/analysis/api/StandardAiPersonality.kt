@@ -10,11 +10,17 @@ enum class StandardAiPersonalityId {
     SERIOUS,
 }
 
+enum class StandardTensionLevel {
+    CALM,
+    TENSE,
+    CRITICAL,
+}
+
 /**
  * Shared, evaluation-backed view of the current decision.
  *
- * New personalities should consume this context rather than reaching into Edax or UI state.
- * This keeps move choice and presentation timing reusable for local play and future online bots.
+ * New personalities and presentation rules should consume this context rather than reaching
+ * into Edax or UI state. This keeps move choice, thinking time, and tension reusable.
  */
 data class StandardDecisionContext(
     val position: GameState,
@@ -51,14 +57,20 @@ fun interface StandardThinkTimePolicy {
     fun targetThinkTimeMs(context: StandardDecisionContext, selectedMove: Position?): Long
 }
 
+fun interface StandardTensionPolicy {
+    /** Pure domain signal. Sound, board animation, and haptics are handled outside analysis. */
+    fun evaluate(context: StandardDecisionContext): StandardTensionLevel
+}
+
 /**
- * A personality is a composition of independent move-selection and thinking-time behavior.
- * Adding a personality should not require changes to StandardAiEngine or the local-match adapter.
+ * A personality is a composition of independent decision policies.
+ * Adding a personality should not require changes to StandardAiEngine or presentation code.
  */
 data class StandardAiPersonality(
     val id: StandardAiPersonalityId,
     val moveSelectionPolicy: StandardMoveSelectionPolicy,
     val thinkTimePolicy: StandardThinkTimePolicy,
+    val tensionPolicy: StandardTensionPolicy,
 )
 
 /** Generic weighted selector that can back many personalities without duplicating selection code. */
@@ -244,7 +256,52 @@ class StandardAdaptiveThinkTimePolicy(
     }
 }
 
-/** Built-in personalities used by the Standard campaign. Future personalities compose the same two policies. */
+/** Tuneable, UI-independent mapping from evaluated positions to presentation tension. */
+data class StandardAdaptiveTensionProfile(
+    val ambiguousGapThreshold: Int = 2,
+    val riskyBestScoreThreshold: Int = 3,
+    val lowMobilityThreshold: Int = 3,
+    val endgameStartPly: Int = 44,
+    val tenseScore: Int = 2,
+    val criticalScore: Int = 4,
+) {
+    init {
+        require(ambiguousGapThreshold >= 0)
+        require(lowMobilityThreshold >= 2)
+        require(endgameStartPly >= 0)
+        require(tenseScore >= 1)
+        require(criticalScore > tenseScore)
+    }
+}
+
+class StandardAdaptiveTensionPolicy(
+    private val profile: StandardAdaptiveTensionProfile = StandardAdaptiveTensionProfile(),
+) : StandardTensionPolicy {
+    override fun evaluate(context: StandardDecisionContext): StandardTensionLevel {
+        if (context.legalMoveCount <= 1) return StandardTensionLevel.CALM
+
+        var tensionScore = 0
+        if (context.topScoreGap?.let { it <= profile.ambiguousGapThreshold } == true) tensionScore += 2
+        if (context.allCandidatesNegative) {
+            tensionScore += 2
+        } else if (
+            context.hasNegativeCandidate &&
+            context.bestScore?.let { it <= profile.riskyBestScoreThreshold } == true
+        ) {
+            tensionScore += 1
+        }
+        if (context.legalMoveCount <= profile.lowMobilityThreshold) tensionScore += 1
+        if (context.position.ply >= profile.endgameStartPly) tensionScore += 1
+
+        return when {
+            tensionScore >= profile.criticalScore -> StandardTensionLevel.CRITICAL
+            tensionScore >= profile.tenseScore -> StandardTensionLevel.TENSE
+            else -> StandardTensionLevel.CALM
+        }
+    }
+}
+
+/** Built-in personalities used by the Standard campaign. Future personalities compose the same policies. */
 object StandardAiPersonalities {
     fun natural(
         level: StandardAiLevel,
@@ -269,6 +326,7 @@ object StandardAiPersonalities {
                 maxMs = 1_300L,
             ),
         ),
+        tensionPolicy = StandardAdaptiveTensionPolicy(),
     )
 
     fun serious(): StandardAiPersonality = StandardAiPersonality(
@@ -291,5 +349,6 @@ object StandardAiPersonalities {
                 maxMs = 1_300L,
             ),
         ),
+        tensionPolicy = StandardAdaptiveTensionPolicy(),
     )
 }
