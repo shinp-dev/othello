@@ -6,6 +6,7 @@ import com.example.othello.analysis.api.StandardCandidateProvider
 import com.example.othello.analysis.api.StandardCandidateResult
 import com.example.othello.analysis.api.StandardEvaluationAsset
 import com.example.othello.analysis.api.StandardMoveCandidate
+import com.example.othello.analysis.api.StandardTensionLevel
 import com.example.othello.analysis.api.standardCampaignAiConfig
 import com.example.othello.game.Disc
 import com.example.othello.game.GameState
@@ -25,11 +26,12 @@ class StandardLocalAiCoordinatorTest {
     private val evaluation = StandardEvaluationAsset("/standard/eval.dat", "sha256")
 
     @Test
-    fun passesDedicatedLevelAndEvaluationAndWaitsOnlyForRemainingTargetTime() = runBlocking {
+    fun passesDedicatedLevelEvaluationAndTensionAndWaitsOnlyForRemainingTargetTime() = runBlocking {
         val match = LocalMatchController(LocalMatchMode.AI, Disc.BLACK)
         assertTrue(match.play(Position(2, 3)))
         val provider = RecordingProvider()
         val waits = mutableListOf<Long>()
+        val tensions = mutableListOf<StandardTensionLevel>()
         val times = ArrayDeque(listOf(1_000L, 1_200L))
         val coordinator = StandardLocalAiCoordinator(
             match = match,
@@ -38,6 +40,7 @@ class StandardLocalAiCoordinatorTest {
             evaluationData = evaluation,
             monotonicMillis = { times.removeFirst() },
             waitMillis = { waits += it },
+            onDecisionReady = { tensions += it },
         )
 
         assertTrue(coordinator.play())
@@ -45,6 +48,7 @@ class StandardLocalAiCoordinatorTest {
         assertEquals(3, provider.edaxLevel)
         assertEquals(evaluation, provider.evaluation)
         assertEquals(provider.selectedMove, match.viewState.moves.last())
+        assertEquals(listOf(StandardTensionLevel.CALM), tensions)
         assertEquals(listOf(320L), waits)
         assertFalse(match.viewState.aiThinking)
     }
