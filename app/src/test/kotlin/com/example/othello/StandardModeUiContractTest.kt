@@ -17,16 +17,19 @@ class StandardModeUiContractTest {
     }
 
     @Test
-    fun standardHomeShowsAnimalPackDirectlyBelowAiEntryAndKeepsSecondaryModeSwitch() {
+    fun standardHomeShowsAnimalPackThenCollectionBeforeUnfinishedFeatures() {
         val home = source.substringAfter("private fun StandardHomeScreen(")
             .substringBefore("@Composable\nprivate fun StandardOpponentPackPreviewCard")
         val aiIndex = home.indexOf("title = appString(StandardFeature.AI.titleRes)")
         val packIndex = home.indexOf("StandardOpponentPackPreviewCard(")
+        val collectionIndex = home.indexOf("R.string.standard_collection_title")
         val onlineIndex = home.indexOf("listOf(StandardFeature.ONLINE, StandardFeature.REAL_EVENT)")
         assertTrue(aiIndex >= 0)
         assertTrue(packIndex > aiIndex)
-        assertTrue(onlineIndex > packIndex)
+        assertTrue(collectionIndex > packIndex)
+        assertTrue(onlineIndex > collectionIndex)
         assertTrue("pack = StandardOpponentPacks.animal" in home)
+        assertTrue("onClick = onCollection" in home)
         assertTrue("TextButton(" in home)
         assertTrue("R.string.switch_to_advanced_mode" in home)
     }
@@ -37,5 +40,6 @@ class StandardModeUiContractTest {
         assertTrue("R.string.feature_coming_soon" in source)
         assertTrue("R.string.back_to_standard_home" in source)
         assertTrue("AuthenticatedModeDestination.STANDARD_AI -> StandardAiRoute(" in source)
+        assertTrue("AuthenticatedModeDestination.STANDARD_COLLECTION -> StandardCollectionRoute(" in source)
     }
 }
