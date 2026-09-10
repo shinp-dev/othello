@@ -16,6 +16,8 @@ class StandardOpponentGalleryUiContractTest {
         assertTrue("Card(" in source)
         assertTrue("enabled = unlocked" in source)
         assertTrue("standard-ai-opponent-" in source)
+        assertTrue("LinearProgressIndicator(" in source)
+        assertTrue("R.string.standard_ai_collection_progress" in source)
     }
 
     @Test
@@ -24,6 +26,16 @@ class StandardOpponentGalleryUiContractTest {
         assertTrue("R.string.standard_ai_group_serious" in source)
         assertTrue("pack.opponents.take(4)" in source)
         assertTrue("pack.opponents.drop(4)" in source)
+    }
+
+    @Test
+    fun lockedOpponentsStayVisibleAsMysterySilhouettesAndTeaseTheNextUnlock() {
+        assertTrue("ColorFilter.tint" in source)
+        assertTrue("R.string.standard_ai_opponent_unknown" in source)
+        assertTrue("R.string.standard_ai_opponent_status_teaser" in source)
+        assertTrue("teaserLevel = progress.highestUnlockedLevel.next()" in source)
+        assertTrue("R.string.standard_ai_next_reward_wild" in source)
+        assertTrue("R.string.standard_ai_next_reward_conquer" in source)
     }
 
     @Test
