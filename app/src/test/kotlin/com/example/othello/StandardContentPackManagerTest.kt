@@ -147,6 +147,7 @@ class StandardContentPackManagerTest {
             assertFailsWith<StandardContentFormatException> {
                 StandardContentRepository(manager).snapshot()
             }
+            Unit
         } finally {
             root.deleteRecursively()
         }
