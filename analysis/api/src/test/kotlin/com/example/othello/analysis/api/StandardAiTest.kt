@@ -29,6 +29,7 @@ class StandardAiTest {
             assertEquals(StandardAiPersonalityId.NATURAL, config.personality.id)
             assertIs<StandardNaturalPlayPolicy>(config.personality.moveSelectionPolicy)
             assertIs<StandardAdaptiveThinkTimePolicy>(config.personality.thinkTimePolicy)
+            assertIs<StandardAdaptiveTensionPolicy>(config.personality.tensionPolicy)
         }
         StandardAiLevel.entries.drop(4).forEach { level ->
             val config = standardCampaignAiConfig(level)
@@ -36,6 +37,7 @@ class StandardAiTest {
             assertEquals(StandardAiPersonalityId.SERIOUS, config.personality.id)
             assertIs<StandardBestMovePolicy>(config.personality.moveSelectionPolicy)
             assertIs<StandardAdaptiveThinkTimePolicy>(config.personality.thinkTimePolicy)
+            assertIs<StandardAdaptiveTensionPolicy>(config.personality.tensionPolicy)
         }
     }
 
@@ -139,6 +141,7 @@ class StandardAiTest {
 
         assertEquals(state.legalMoves.single(), result.move)
         assertEquals(140L, result.targetThinkTimeMs)
+        assertEquals(StandardTensionLevel.CALM, result.tensionLevel)
         assertEquals(emptyList(), provider.edaxLevels)
     }
 
@@ -148,6 +151,7 @@ class StandardAiTest {
             id = StandardAiPersonalityId.NATURAL,
             moveSelectionPolicy = StandardMoveSelectionPolicy { context -> context.rankedCandidates.last().move },
             thinkTimePolicy = StandardThinkTimePolicy { _, _ -> 777L },
+            tensionPolicy = StandardTensionPolicy { StandardTensionLevel.CRITICAL },
         )
         val provider = RecordingProvider()
         val config = StandardAiConfig(edaxLevel = 3, personality = personality)
@@ -156,6 +160,7 @@ class StandardAiTest {
 
         assertEquals(GameState().legalMoves.last(), result.move)
         assertEquals(777L, result.targetThinkTimeMs)
+        assertEquals(StandardTensionLevel.CRITICAL, result.tensionLevel)
         assertEquals(listOf(3), provider.edaxLevels)
     }
 
@@ -224,6 +229,38 @@ class StandardAiTest {
         val target = policy.targetThinkTimeMs(StandardDecisionContext(state, candidates), moves[0])
 
         assertEquals(1_060L, target)
+    }
+
+    @Test
+    fun adaptiveTensionLeavesClearlyGoodPositionCalm() {
+        val state = GameState()
+        val moves = state.legalMoves.toList()
+        val candidates = listOf(
+            StandardMoveCandidate(moves[0], 12),
+            StandardMoveCandidate(moves[1], 8),
+            StandardMoveCandidate(moves[2], -2),
+            StandardMoveCandidate(moves[3], -15),
+        )
+
+        val tension = StandardAdaptiveTensionPolicy().evaluate(StandardDecisionContext(state, candidates))
+
+        assertEquals(StandardTensionLevel.CALM, tension)
+    }
+
+    @Test
+    fun adaptiveTensionMarksAmbiguousAllNegativeEndgameCritical() {
+        val state = GameState(ply = 44)
+        val moves = state.legalMoves.toList()
+        val candidates = listOf(
+            StandardMoveCandidate(moves[0], -1),
+            StandardMoveCandidate(moves[1], -2),
+            StandardMoveCandidate(moves[2], -4),
+            StandardMoveCandidate(moves[3], -8),
+        )
+
+        val tension = StandardAdaptiveTensionPolicy().evaluate(StandardDecisionContext(state, candidates))
+
+        assertEquals(StandardTensionLevel.CRITICAL, tension)
     }
 
     @Test
