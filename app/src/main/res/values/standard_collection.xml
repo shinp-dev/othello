@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="standard_collection_title">Othello Collection</string>
+    <string name="standard_collection_home_supporting">Browse the Othello facts and books you have collected</string>
+    <string name="standard_collection_supporting">Collected cards reveal their full contents. Uncollected cards stay hidden until you obtain them.</string>
+    <string name="standard_collection_loading">Opening your collection…</string>
+    <string name="standard_collection_load_error">The collection could not be opened. Your saved collection state was not changed.</string>
+    <string name="standard_collection_progress">%1$d / %2$d collected</string>
+    <string name="standard_collection_progress_empty">Your collection is waiting for its first card.</string>
+    <string name="standard_collection_progress_active">Keep collecting to fill the book.</string>
+    <string name="standard_collection_filter_all">All</string>
+    <string name="standard_collection_filter_unobtained">Uncollected</string>
+    <string name="standard_collection_category_trivia">Trivia</string>
+    <string name="standard_collection_category_book">Books</string>
+    <string name="standard_collection_category_history">History</string>
+    <string name="standard_collection_category_person">People</string>
+    <string name="standard_collection_category_collab">Collabs</string>
+    <string name="standard_collection_short_trivia">Q</string>
+    <string name="standard_collection_short_book">BOOK</string>
+    <string name="standard_collection_short_history">HIST</string>
+    <string name="standard_collection_short_person">PEOPLE</string>
+    <string name="standard_collection_short_collab">COLLAB</string>
+    <string name="standard_collection_unknown_title">???</string>
+    <string name="standard_collection_locked_supporting">Obtain this card to reveal its contents.</string>
+    <string name="standard_collection_obtained">COLLECTED</string>
+    <string name="standard_collection_unobtained">NOT YET</string>
+    <string name="standard_collection_empty">No cards match this filter.</string>
+    <string name="standard_collection_rarity_common">COMMON</string>
+    <string name="standard_collection_rarity_rare">RARE</string>
+    <string name="standard_collection_rarity_special">SPECIAL</string>
+    <string name="standard_collection_author">Author</string>
+    <string name="standard_collection_publisher">Publisher</string>
+    <string name="standard_collection_isbn">ISBN</string>
+    <string name="standard_collection_published">Published</string>
+    <string name="standard_collection_source">Source</string>
+    <string name="standard_collection_open_source">Open source</string>
+    <string name="standard_collection_open_external">Open official page</string>
+</resources>
