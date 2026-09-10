@@ -1,9 +1,7 @@
 package com.example.othello
 
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -21,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -42,7 +41,7 @@ internal fun StandardAiIntroDialog(
 ) {
     AlertDialog(
         modifier = Modifier.testTag("standard-ai-intro-dialog"),
-        onDismissRequest = onStart,
+        onDismissRequest = {},
         title = {
             Text(appString(R.string.standard_ai_intro_title, level.value))
         },
@@ -142,19 +141,28 @@ private fun AnimatedOpponentImage(
 ) {
     var visible by remember(drawableRes) { mutableStateOf(false) }
     LaunchedEffect(drawableRes) { visible = true }
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(animationSpec = tween(220)) +
-            scaleIn(animationSpec = tween(360), initialScale = 0.72f),
-    ) {
-        Image(
-            painter = painterResource(drawableRes),
-            contentDescription = appString(R.string.standard_ai_opponent_image_description, level.value),
-            modifier = Modifier
-                .size(220.dp)
-                .testTag(tag),
-        )
-    }
+    val scale by animateFloatAsState(
+        targetValue = if (visible) 1f else 0.72f,
+        animationSpec = tween(durationMillis = 360),
+        label = "standard-ai-opponent-scale",
+    )
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(durationMillis = 220),
+        label = "standard-ai-opponent-alpha",
+    )
+    Image(
+        painter = painterResource(drawableRes),
+        contentDescription = appString(R.string.standard_ai_opponent_image_description, level.value),
+        modifier = Modifier
+            .size(220.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                this.alpha = alpha
+            }
+            .testTag(tag),
+    )
 }
 
 private fun StandardAiLevel.opponentWinDrawable(): Int = when (this) {
