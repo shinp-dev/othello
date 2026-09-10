@@ -26,7 +26,7 @@
     <string name="standard_ai_next_reward_opponent">この相手に勝つと、次の相手が姿を現す</string>
     <string name="standard_ai_next_reward_wild">あと1勝で「本気」編が解放</string>
     <string name="standard_ai_next_reward_conquer">あと1勝でどうぶつチャレンジ制覇</string>
-    <string name="standard_ai_opponent_unknown">???</string>
+    <string name="standard_ai_opponent_unknown">\?\?\?</string>
     <string name="standard_ai_opponent_status_teaser">次に解放</string>
     <string name="standard_ai_locked_opponent_description">未解放のレベル%1$d対戦相手</string>
     <string name="standard_ai_clutch_title">激戦勝利！</string>
