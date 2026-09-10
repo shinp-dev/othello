@@ -135,13 +135,15 @@ private fun AuthenticatedRoot(
     sessionOwner: OnlineSessionViewModel = viewModel(),
 ) {
     AuthGate(sessionOwner) { session ->
-        AuthenticatedApp(
-            debugAutoPlay = debugAutoPlay,
-            debugTimeControlMillis = debugTimeControlMillis,
-            showDiagnostics = showDiagnostics,
-            sessionOwner = sessionOwner,
-            session = session,
-        )
+        AuthenticatedModeRoute(session.userId) {
+            AuthenticatedApp(
+                debugAutoPlay = debugAutoPlay,
+                debugTimeControlMillis = debugTimeControlMillis,
+                showDiagnostics = showDiagnostics,
+                sessionOwner = sessionOwner,
+                session = session,
+            )
+        }
     }
 }
 
