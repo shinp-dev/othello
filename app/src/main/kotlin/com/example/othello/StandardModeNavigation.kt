@@ -51,6 +51,7 @@ internal enum class AuthenticatedModeDestination {
     MODE_SELECTION,
     STANDARD_HOME,
     STANDARD_AI,
+    STANDARD_COLLECTION,
     STANDARD_ONLINE_COMING_SOON,
     STANDARD_REAL_EVENT_COMING_SOON,
     ADVANCED,
@@ -75,6 +76,7 @@ internal fun authenticatedModeBackDestination(
 ): AuthenticatedModeDestination? = when (current) {
     AuthenticatedModeDestination.STANDARD_HOME -> AuthenticatedModeDestination.MODE_SELECTION
     AuthenticatedModeDestination.STANDARD_AI,
+    AuthenticatedModeDestination.STANDARD_COLLECTION,
     AuthenticatedModeDestination.STANDARD_ONLINE_COMING_SOON,
     AuthenticatedModeDestination.STANDARD_REAL_EVENT_COMING_SOON -> AuthenticatedModeDestination.STANDARD_HOME
     AuthenticatedModeDestination.MODE_SELECTION,
@@ -100,9 +102,14 @@ internal fun AuthenticatedModeRoute(
         )
         AuthenticatedModeDestination.STANDARD_HOME -> StandardHomeScreen(
             onFeature = { destination = destinationFor(it) },
+            onCollection = { destination = AuthenticatedModeDestination.STANDARD_COLLECTION },
             onSwitchMode = { destination = AuthenticatedModeDestination.MODE_SELECTION },
         )
         AuthenticatedModeDestination.STANDARD_AI -> StandardAiRoute(
+            userId = userId,
+            onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
+        )
+        AuthenticatedModeDestination.STANDARD_COLLECTION -> StandardCollectionRoute(
             userId = userId,
             onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
         )
@@ -143,6 +150,7 @@ private fun ModeSelectionScreen(onSelect: (AppMode) -> Unit) {
 @Composable
 private fun StandardHomeScreen(
     onFeature: (StandardFeature) -> Unit,
+    onCollection: () -> Unit,
     onSwitchMode: () -> Unit,
 ) {
     StandardSurface {
@@ -155,6 +163,11 @@ private fun StandardHomeScreen(
         StandardOpponentPackPreviewCard(
             pack = StandardOpponentPacks.animal,
             onClick = { onFeature(StandardFeature.AI) },
+        )
+        ModeCard(
+            title = appString(R.string.standard_collection_title),
+            supportingText = appString(R.string.standard_collection_home_supporting),
+            onClick = onCollection,
         )
         listOf(StandardFeature.ONLINE, StandardFeature.REAL_EVENT).forEach { feature ->
             ModeCard(

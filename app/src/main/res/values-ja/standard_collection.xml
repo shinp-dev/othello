@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="standard_collection_title">オセロ図鑑</string>
+    <string name="standard_collection_home_supporting">集めたオセロ雑学や本を見返す</string>
+    <string name="standard_collection_supporting">手に入れたカードは内容が読めます。まだ持っていないカードは、手に入れるまで秘密です。</string>
+    <string name="standard_collection_loading">図鑑を開いています…</string>
+    <string name="standard_collection_load_error">図鑑を開けませんでした。取得済み情報は変更されていません。</string>
+    <string name="standard_collection_progress">%1$d / %2$d 枚 コレクション</string>
+    <string name="standard_collection_progress_empty">最初の1枚が入るのを待っています。</string>
+    <string name="standard_collection_progress_active">集めて図鑑を埋めていこう。</string>
+    <string name="standard_collection_filter_all">すべて</string>
+    <string name="standard_collection_filter_unobtained">未取得</string>
+    <string name="standard_collection_category_trivia">雑学</string>
+    <string name="standard_collection_category_book">本</string>
+    <string name="standard_collection_category_history">歴史</string>
+    <string name="standard_collection_category_person">人物</string>
+    <string name="standard_collection_category_collab">コラボ</string>
+    <string name="standard_collection_short_trivia">豆</string>
+    <string name="standard_collection_short_book">本</string>
+    <string name="standard_collection_short_history">史</string>
+    <string name="standard_collection_short_person">人</string>
+    <string name="standard_collection_short_collab">特</string>
+    <string name="standard_collection_unknown_title">\?\?\?</string>
+    <string name="standard_collection_locked_supporting">手に入れると内容がわかります。</string>
+    <string name="standard_collection_obtained">取得済み</string>
+    <string name="standard_collection_unobtained">未取得</string>
+    <string name="standard_collection_empty">この条件のカードはありません。</string>
+    <string name="standard_collection_rarity_common">COMMON</string>
+    <string name="standard_collection_rarity_rare">RARE</string>
+    <string name="standard_collection_rarity_special">SPECIAL</string>
+    <string name="standard_collection_author">著者</string>
+    <string name="standard_collection_publisher">出版社</string>
+    <string name="standard_collection_isbn">ISBN</string>
+    <string name="standard_collection_published">刊行</string>
+    <string name="standard_collection_source">出典</string>
+    <string name="standard_collection_open_source">出典を開く</string>
+    <string name="standard_collection_open_external">公式ページを開く</string>
+    <string name="standard_collection_close">閉じる</string>
+</resources>
