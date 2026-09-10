@@ -1,6 +1,6 @@
 package com.example.othello
 
-import kotlin.test.Test
+import org.junit.Test
 import kotlin.test.assertEquals
 
 class StandardAiHumanOutcomeContractTest {
