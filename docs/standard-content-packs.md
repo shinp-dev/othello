@@ -180,6 +180,19 @@ format errorとしてfail closedする。
 ガチャ抽選はサーバーRPCではなく、取得済みのcontent snapshotを使って端末内で行う。
 抽選ロジックと演出はこの基盤とは分離する。
 
+Standardの初期ガチャは無料・回数制限なしで、課金通貨や広告視聴を要求しない。
+未取得cardが残っている間は未取得poolだけから抽選するため、必ず新しい1枚が出る。
+図鑑コンプリート後のみ取得済みを含む全cardから再抽選する。
+
+rarity bucketの抽選比率は、存在するbucket間で次の重みを使う。
+
+- `COMMON`: 70
+- `RARE`: 25
+- `SPECIAL`: 5
+
+選ばれたrarity内ではcardを均等抽選する。
+取得済み判定とNEW表示はstable `cardId` だけを使い、pack versionとは結び付けない。
+
 ## 取得状態
 
 v1では`StandardCollectionStore`が認証ユーザー単位の`Set<cardId>`を
