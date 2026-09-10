@@ -45,6 +45,7 @@ class StandardModeNavigationTest {
     fun standardFeatureScreensReturnToStandardHome() {
         listOf(
             AuthenticatedModeDestination.STANDARD_AI,
+            AuthenticatedModeDestination.STANDARD_COLLECTION,
             AuthenticatedModeDestination.STANDARD_ONLINE_COMING_SOON,
             AuthenticatedModeDestination.STANDARD_REAL_EVENT_COMING_SOON,
         ).forEach { destination ->
