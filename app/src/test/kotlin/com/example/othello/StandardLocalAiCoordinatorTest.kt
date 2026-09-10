@@ -53,7 +53,7 @@ class StandardLocalAiCoordinatorTest {
         assertEquals(evaluation, provider.evaluation)
         assertEquals(provider.selectedMove, match.viewState.moves.last())
         assertEquals(listOf(StandardTensionLevel.CALM), tensions)
-        assertEquals(listOf(100), bestScores)
+        assertEquals(listOf<Int?>(100), bestScores)
         assertEquals(listOf(320L), waits)
         assertFalse(match.viewState.aiThinking)
     }
