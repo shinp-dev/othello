@@ -204,6 +204,7 @@ private fun StandardGachaScreen(
 
         OutlinedButton(
             onClick = onCollection,
+            enabled = pendingEntry == null,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(appString(R.string.standard_gacha_open_collection))
