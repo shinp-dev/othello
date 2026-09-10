@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="standard_ai_intro_title">Lv%1$d に挑戦</string>
+    <string name="standard_ai_new_opponent">あたらしい相手があらわれた！</string>
+    <string name="standard_ai_intro_start">対局開始</string>
+    <string name="standard_ai_opponent_image_description">スタンダードAI Lv%1$d の相手</string>
+    <string name="standard_ai_opponent_wins">相手の勝ち！</string>
+    <string name="standard_ai_result_draw">引き分け！</string>
+    <string name="standard_ai_first_clear">Lv%1$d クリア！</string>
+    <string name="standard_ai_next_level_unlocked">Lv%1$d が解放された！</string>
+    <string name="standard_ai_result_continue">続ける</string>
+</resources>
