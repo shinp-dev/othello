@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.othello.analysis.api.StandardAiLevel
 
@@ -32,6 +33,8 @@ internal data class StandardAiResultPresentation(
     val firstClear: Boolean = false,
     val unlockedLevel: StandardAiLevel? = null,
     val conquered: Boolean = false,
+    val winReward: StandardWinReward = StandardWinReward.NONE,
+    val wildStageAwakened: Boolean = false,
 )
 
 @Composable
@@ -76,23 +79,24 @@ internal fun StandardAiResultDialog(
     presentation: StandardAiResultPresentation,
     onDismiss: () -> Unit,
 ) {
+    val title = when {
+        presentation.wildStageAwakened -> appString(R.string.standard_ai_wild_stage_title)
+        presentation.winReward == StandardWinReward.COMEBACK -> appString(R.string.standard_ai_comeback_title)
+        presentation.winReward == StandardWinReward.CLUTCH -> appString(R.string.standard_ai_clutch_title)
+        presentation.outcome == StandardAiHumanOutcome.WIN -> appString(R.string.standard_ai_result_win)
+        presentation.outcome == StandardAiHumanOutcome.LOSS -> appString(R.string.standard_ai_opponent_wins)
+        else -> appString(R.string.standard_ai_result_draw)
+    }
+
     AlertDialog(
         modifier = Modifier.testTag("standard-ai-result-dialog"),
         onDismissRequest = onDismiss,
-        title = {
-            Text(
-                when (presentation.outcome) {
-                    StandardAiHumanOutcome.WIN -> appString(R.string.standard_ai_result_win)
-                    StandardAiHumanOutcome.LOSS -> appString(R.string.standard_ai_opponent_wins)
-                    StandardAiHumanOutcome.DRAW -> appString(R.string.standard_ai_result_draw)
-                },
-            )
-        },
+        title = { Text(title) },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 AnimatedOpponentImage(
                     drawableRes = if (presentation.outcome == StandardAiHumanOutcome.WIN) {
@@ -102,7 +106,23 @@ internal fun StandardAiResultDialog(
                     },
                     level = level,
                     tag = "standard-ai-result-image",
+                    imageSize = if (presentation.unlockedLevel != null) 164.dp else 220.dp,
                 )
+
+                when (presentation.winReward) {
+                    StandardWinReward.COMEBACK -> Text(
+                        text = appString(R.string.standard_ai_comeback_message),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    StandardWinReward.CLUTCH -> Text(
+                        text = appString(R.string.standard_ai_clutch_message),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    StandardWinReward.NONE -> Unit
+                }
+
                 if (presentation.firstClear) {
                     Text(
                         text = appString(R.string.standard_ai_first_clear, level.value),
@@ -110,12 +130,45 @@ internal fun StandardAiResultDialog(
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
+
                 presentation.unlockedLevel?.let { unlocked ->
-                    Text(
-                        text = appString(R.string.standard_ai_next_level_unlocked, unlocked.value),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+                    val unlockedOpponent = unlocked.standardOpponent()
+                    if (presentation.wildStageAwakened) {
+                        Text(
+                            text = appString(R.string.standard_ai_wild_stage_unlocked),
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        AnimatedOpponentImage(
+                            drawableRes = unlockedOpponent.winDrawableRes,
+                            level = unlocked,
+                            tag = "standard-ai-unlocked-opponent-image",
+                            imageSize = 174.dp,
+                        )
+                        Text(
+                            text = appString(
+                                R.string.standard_ai_wild_stage_appeared,
+                                appString(unlockedOpponent.nameRes),
+                            ),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    } else {
+                        Text(
+                            text = appString(
+                                R.string.standard_ai_next_opponent_revealed,
+                                appString(unlockedOpponent.nameRes),
+                            ),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        AnimatedOpponentImage(
+                            drawableRes = unlockedOpponent.winDrawableRes,
+                            level = unlocked,
+                            tag = "standard-ai-unlocked-opponent-image",
+                            imageSize = 116.dp,
+                        )
+                    }
                 }
+
                 if (presentation.conquered) {
                     Text(
                         text = appString(R.string.standard_ai_conquered),
@@ -138,6 +191,7 @@ private fun AnimatedOpponentImage(
     drawableRes: Int,
     level: StandardAiLevel,
     tag: String,
+    imageSize: Dp = 220.dp,
 ) {
     var visible by remember(drawableRes) { mutableStateOf(false) }
     LaunchedEffect(drawableRes) { visible = true }
@@ -155,7 +209,7 @@ private fun AnimatedOpponentImage(
         painter = painterResource(drawableRes),
         contentDescription = appString(R.string.standard_ai_opponent_image_description, level.value),
         modifier = Modifier
-            .size(220.dp)
+            .size(imageSize)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
