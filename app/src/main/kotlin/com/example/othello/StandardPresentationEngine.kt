@@ -92,12 +92,15 @@ internal class StandardPresentationEngine(
 ) {
     private val mutableState = MutableStateFlow(StandardPresentationState())
     val state: StateFlow<StandardPresentationState> = mutableState.asStateFlow()
+    private var matchFinished = false
 
     fun accept(event: StandardPresentationEvent) {
         when (event) {
-            is StandardPresentationEvent.DecisionReady -> applyTension(event.tension)
-            StandardPresentationEvent.MovePlaced -> onMovePlaced()
-            StandardPresentationEvent.OpponentAppeared -> soundOutput.emit(StandardSoundCue.OPPONENT_APPEARED)
+            is StandardPresentationEvent.DecisionReady -> if (!matchFinished) applyTension(event.tension)
+            StandardPresentationEvent.MovePlaced -> if (!matchFinished) onMovePlaced()
+            StandardPresentationEvent.OpponentAppeared -> if (!matchFinished) {
+                soundOutput.emit(StandardSoundCue.OPPONENT_APPEARED)
+            }
             is StandardPresentationEvent.MatchFinished -> onMatchFinished(event)
             StandardPresentationEvent.Reset -> reset()
         }
@@ -127,6 +130,8 @@ internal class StandardPresentationEngine(
     }
 
     private fun onMatchFinished(event: StandardPresentationEvent.MatchFinished) {
+        if (matchFinished) return
+        matchFinished = true
         stopHeartbeatIfNeeded(mutableState.value.tension)
         mutableState.value = StandardPresentationState()
 
@@ -146,6 +151,7 @@ internal class StandardPresentationEngine(
     private fun reset() {
         stopHeartbeatIfNeeded(mutableState.value.tension)
         mutableState.value = StandardPresentationState()
+        matchFinished = false
     }
 
     private fun stopHeartbeatIfNeeded(level: StandardTensionLevel) {
