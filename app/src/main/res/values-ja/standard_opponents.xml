@@ -22,4 +22,19 @@
     <string name="standard_ai_start_opponent">Lv%1$d・%2$sと対局する</string>
     <string name="standard_ai_pack_preview_description">どうぶつチャレンジの対戦相手</string>
     <string name="standard_ai_opponent_named_description">%1$s、レベル%2$dのAI対戦相手</string>
+    <string name="standard_ai_collection_progress">撃破 %1$d / %2$d</string>
+    <string name="standard_ai_next_reward_opponent">この相手に勝つと、次の相手が姿を現す</string>
+    <string name="standard_ai_next_reward_wild">あと1勝で「本気」編が解放</string>
+    <string name="standard_ai_next_reward_conquer">あと1勝でどうぶつチャレンジ制覇</string>
+    <string name="standard_ai_opponent_unknown">???</string>
+    <string name="standard_ai_opponent_status_teaser">次に解放</string>
+    <string name="standard_ai_locked_opponent_description">未解放のレベル%1$d対戦相手</string>
+    <string name="standard_ai_clutch_title">激戦勝利！</string>
+    <string name="standard_ai_clutch_message">CRITICALな局面を乗り越えた！</string>
+    <string name="standard_ai_comeback_title">大逆転！</string>
+    <string name="standard_ai_comeback_message">AI優勢の局面から勝ち切った！</string>
+    <string name="standard_ai_next_opponent_revealed">NEW! %1$s 解放</string>
+    <string name="standard_ai_wild_stage_title">……まだ終わりじゃない</string>
+    <string name="standard_ai_wild_stage_unlocked">「本気」編 解放</string>
+    <string name="standard_ai_wild_stage_appeared">%1$sが姿を現した！</string>
 </resources>
