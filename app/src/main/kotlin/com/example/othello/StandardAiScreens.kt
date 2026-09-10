@@ -421,10 +421,14 @@ private fun StandardAiMatchScreen(
 
 private const val LEVELS_PER_ROW = 4
 
-private fun LocalGameRecord.humanOutcome(): StandardAiHumanOutcome = when (result) {
-    MatchResult.DRAW -> StandardAiHumanOutcome.DRAW
-    MatchResult.BLACK_WIN -> if (playerDisc == Disc.BLACK) StandardAiHumanOutcome.WIN else StandardAiHumanOutcome.LOSS
-    MatchResult.WHITE_WIN -> if (playerDisc == Disc.WHITE) StandardAiHumanOutcome.WIN else StandardAiHumanOutcome.LOSS
+private fun LocalGameRecord.humanOutcome(): StandardAiHumanOutcome {
+    val completedResult = requireNotNull(result) { "completed Standard AI record requires a result" }
+    val humanDisc = requireNotNull(playerDisc) { "completed Standard AI record requires playerDisc" }
+    return when (completedResult) {
+        MatchResult.DRAW -> StandardAiHumanOutcome.DRAW
+        MatchResult.BLACK_WIN -> if (humanDisc == Disc.BLACK) StandardAiHumanOutcome.WIN else StandardAiHumanOutcome.LOSS
+        MatchResult.WHITE_WIN -> if (humanDisc == Disc.WHITE) StandardAiHumanOutcome.WIN else StandardAiHumanOutcome.LOSS
+    }
 }
 
 private fun LocalGameRecord.humanWon(): Boolean = humanOutcome() == StandardAiHumanOutcome.WIN
