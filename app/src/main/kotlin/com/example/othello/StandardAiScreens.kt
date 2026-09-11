@@ -30,7 +30,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.testTag
 import com.example.othello.analysis.api.StandardAiEngine
 import com.example.othello.analysis.api.StandardAiLevel
 import com.example.othello.analysis.api.StandardEvaluationAsset
@@ -179,31 +178,8 @@ internal fun StandardAiLevelSelectionContent(
             progress = progress,
             selectedLevel = selectedLevel,
             onLevelSelected = onLevelSelected,
+            onStart = onStart,
         )
-        Text(
-            text = appString(R.string.standard_ai_unlock_guidance),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        if (progress.conquered) {
-            Text(
-                text = appString(R.string.standard_ai_conquered),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-        val selectedOpponent = selectedLevel.standardOpponent()
-        Button(
-            onClick = onStart,
-            modifier = Modifier.fillMaxWidth().testTag("standard-ai-start"),
-        ) {
-            Text(
-                appString(
-                    R.string.standard_ai_start_opponent,
-                    selectedLevel.value,
-                    appString(selectedOpponent.nameRes),
-                ),
-            )
-        }
     }
 }
 
