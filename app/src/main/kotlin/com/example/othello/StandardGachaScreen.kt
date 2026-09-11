@@ -190,12 +190,7 @@ private fun StandardGachaScreen(
             backLabel = appString(R.string.back),
         )
 
-        StandardGachaProgress(
-            obtainedCount = snapshot.entries.count { it.card.id in obtainedCardIds },
-            totalCount = snapshot.entries.size,
-        )
-
-        if (resultEntry == null && pendingEntry == null) {
+        if (resultEntry == null) {
             Text(
                 text = appString(R.string.standard_gacha_supporting),
                 style = MaterialTheme.typography.bodyMedium,
@@ -222,6 +217,11 @@ private fun StandardGachaScreen(
                 onDraw = ::draw,
             )
         }
+
+        StandardGachaProgress(
+            obtainedCount = snapshot.entries.count { it.card.id in obtainedCardIds },
+            totalCount = snapshot.entries.size,
+        )
 
         if (snapshot.entries.isNotEmpty()) {
             Button(
@@ -256,7 +256,7 @@ private fun StandardGachaScreen(
             Text(appString(R.string.standard_gacha_open_collection))
         }
 
-        if (resultEntry == null && pendingEntry == null) {
+        if (resultEntry == null) {
             Text(
                 text = when {
                     !dailyState.canDrawForFree -> appString(R.string.standard_gacha_daily_limit_reached)
@@ -483,7 +483,7 @@ private fun StandardGachaResultCard(
             StandardContentArtwork(
                 entry = entry,
                 obtained = true,
-                modifier = Modifier.size(168.dp),
+                modifier = Modifier.size(184.dp),
             )
 
             Text(
@@ -500,7 +500,7 @@ private fun StandardGachaResultCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }
@@ -518,13 +518,16 @@ private fun StandardGachaProgress(
     ) {
         Text(
             text = appString(R.string.standard_gacha_progress, obtainedCount, totalCount),
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
         )
         LinearProgressIndicator(
-            progress = progress,
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
-            trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+            progress = { progress },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.48f),
+            trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f),
         )
     }
 }

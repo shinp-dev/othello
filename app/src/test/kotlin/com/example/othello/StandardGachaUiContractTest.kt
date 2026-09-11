@@ -49,18 +49,53 @@ class StandardGachaUiContractTest {
         assertTrue("R.string.standard_gacha_new" in source)
         assertTrue("R.string.standard_gacha_duplicate" in source)
         assertTrue("StandardContentArtwork(" in source)
-        assertFalse("standardGachaTypeLabel(" in source)
-        assertFalse("standardGachaRarityLabel(" in source)
-        assertTrue("maxLines = 1" in source)
+        assertTrue("maxLines = 2" in source)
         assertTrue("TextOverflow.Ellipsis" in source)
-        assertFalse("R.string.standard_gacha_daily_remaining" in source)
         assertTrue("R.string.standard_gacha_daily_limit_reached" in source)
         assertTrue("dailyState.canDrawForFree" in source)
         assertTrue("R.string.standard_gacha_draw_again_remaining" in source)
         assertTrue("R.string.standard_gacha_draw_free_remaining" in source)
-        assertTrue("color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)" in source)
         assertTrue("R.string.standard_gacha_open_collection" in source)
         assertTrue("onClick = onCollection" in source)
+    }
+
+    @Test
+    fun resultCardKeepsOnlyStatusArtworkTitleAndSummary() {
+        val resultCard = source.substringAfter("private fun StandardGachaResultCard(")
+            .substringBefore("@Composable\nprivate fun StandardGachaProgress")
+
+        assertTrue("R.string.standard_gacha_new" in resultCard)
+        assertTrue("R.string.standard_gacha_duplicate" in resultCard)
+        assertTrue("StandardContentArtwork(" in resultCard)
+        assertTrue("text = entry.card.title" in resultCard)
+        assertTrue("text = entry.card.summary" in resultCard)
+        assertFalse("standardGachaTypeLabel" in resultCard)
+        assertFalse("standardGachaRarityLabel" in resultCard)
+        assertFalse("entry.card.author" in resultCard)
+    }
+
+    @Test
+    fun remainingDrawsAppearOnlyInsideThePrimaryButton() {
+        val screen = source.substringAfter("private fun StandardGachaScreen(")
+            .substringBefore("@Composable\nprivate fun StandardGachaMachine")
+
+        assertTrue("R.string.standard_gacha_draw_again_remaining" in screen)
+        assertTrue("R.string.standard_gacha_draw_free_remaining" in screen)
+        assertFalse("R.string.standard_gacha_daily_remaining" in screen)
+        assertTrue(screen.indexOf("StandardGachaResultCard(") < screen.indexOf("StandardGachaProgress("))
+    }
+
+    @Test
+    fun collectionProgressIsAThinNeutralSecondaryElement() {
+        val progress = source.substringAfter("private fun StandardGachaProgress(")
+            .substringBefore("@Composable\nprivate fun StandardGachaEmpty")
+
+        assertTrue("MaterialTheme.typography.labelMedium" in progress)
+        assertTrue(".height(3.dp)" in progress)
+        assertTrue("color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.48f)" in progress)
+        assertTrue("trackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f)" in progress)
+        assertFalse("MaterialTheme.colorScheme.primary" in progress)
+        assertFalse("ChanrivaColors.accent" in progress)
     }
 
     @Test

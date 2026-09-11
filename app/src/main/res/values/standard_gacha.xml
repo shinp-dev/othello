@@ -5,8 +5,8 @@
     <string name="standard_gacha_supporting">Collect Othello facts, history, books and more.</string>
     <string name="standard_gacha_loading">Preparing the gacha…</string>
     <string name="standard_gacha_load_error">The gacha could not be opened. Your collection was not changed.</string>
-    <string name="standard_gacha_draw_free_remaining">Draw (%1$d / %2$d left)</string>
-    <string name="standard_gacha_draw_again_remaining">Draw again (%1$d / %2$d left)</string>
+    <string name="standard_gacha_draw_free_remaining">Draw once · %1$d / %2$d left</string>
+    <string name="standard_gacha_draw_again_remaining">Draw again · %1$d / %2$d left</string>
     <string name="standard_gacha_drawing">Drawing…</string>
     <string name="standard_gacha_machine_idle">What will come out?</string>
     <string name="standard_gacha_machine_revealing">Opening…</string>
