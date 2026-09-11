@@ -300,6 +300,8 @@ private fun StandardGachaMachine(
             )?.asImageBitmap()
         }.getOrNull()
     }
+    val effectiveRightShellBitmap = rightShellBitmap ?: leftShellBitmap
+    val mirrorRightShellFallback = rightShellBitmap == null && leftShellBitmap != null
 
     val capsuleScale by animateFloatAsState(
         targetValue = when (revealPhase) {
@@ -384,7 +386,7 @@ private fun StandardGachaMachine(
                                 },
                         )
                     }
-                    rightShellBitmap?.let { bitmap ->
+                    effectiveRightShellBitmap?.let { bitmap ->
                         Image(
                             bitmap = bitmap,
                             contentDescription = null,
@@ -393,6 +395,7 @@ private fun StandardGachaMachine(
                                 .offset(x = 54.dp, y = (-2).dp)
                                 .graphicsLayer {
                                     rotationZ = 12f
+                                    scaleX = if (mirrorRightShellFallback) -1f else 1f
                                     alpha = shellAlpha
                                 },
                         )
