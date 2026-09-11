@@ -5,7 +5,7 @@ import org.junit.Test
 
 class StandardCollectionModelTest {
     @Test
-    fun availableFiltersFollowPackContentsInsteadOfShowingEmptyFutureCategories() {
+    fun availableFiltersShowOnlyCategoriesThatExist() {
         val entries = listOf(
             entry("trivia.001", StandardContentCardType.TRIVIA),
             entry("history.001", StandardContentCardType.HISTORY),
@@ -14,53 +14,91 @@ class StandardCollectionModelTest {
 
         assertEquals(
             listOf(
-                StandardCollectionFilter.ALL,
                 StandardCollectionFilter.TRIVIA,
                 StandardCollectionFilter.BOOK,
                 StandardCollectionFilter.HISTORY,
-                StandardCollectionFilter.UNOBTAINED,
             ),
             availableStandardCollectionFilters(entries),
         )
     }
 
     @Test
-    fun filteringUsesStableCardIdsAndNeverPackVersions() {
+    fun categoryEntriesSortByRarityThenObtainedStateThenStableOrder() {
         val entries = listOf(
-            entry("trivia.001", StandardContentCardType.TRIVIA),
+            entry(
+                id = "history.special.obtained",
+                type = StandardContentCardType.HISTORY,
+                rarity = StandardContentRarity.SPECIAL,
+                sortOrder = 0,
+            ),
+            entry(
+                id = "history.common.unobtained",
+                type = StandardContentCardType.HISTORY,
+                rarity = StandardContentRarity.COMMON,
+                sortOrder = 1,
+            ),
+            entry(
+                id = "history.rare.unobtained",
+                type = StandardContentCardType.HISTORY,
+                rarity = StandardContentRarity.RARE,
+                sortOrder = 0,
+            ),
+            entry(
+                id = "history.common.obtained.second",
+                type = StandardContentCardType.HISTORY,
+                rarity = StandardContentRarity.COMMON,
+                sortOrder = 2,
+            ),
+            entry(
+                id = "history.common.obtained.first",
+                type = StandardContentCardType.HISTORY,
+                rarity = StandardContentRarity.COMMON,
+                sortOrder = 0,
+            ),
+            entry(
+                id = "history.rare.obtained",
+                type = StandardContentCardType.HISTORY,
+                rarity = StandardContentRarity.RARE,
+                sortOrder = 10,
+            ),
             entry("book.001", StandardContentCardType.BOOK),
-            entry("book.002", StandardContentCardType.BOOK),
         )
-        val obtained = setOf("trivia.001", "book.002")
+        val obtained = setOf(
+            "history.special.obtained",
+            "history.common.obtained.second",
+            "history.common.obtained.first",
+            "history.rare.obtained",
+        )
 
         assertEquals(
-            listOf("book.001"),
+            listOf(
+                "history.common.obtained.first",
+                "history.common.obtained.second",
+                "history.common.unobtained",
+                "history.rare.obtained",
+                "history.rare.unobtained",
+                "history.special.obtained",
+            ),
             filterStandardCollectionEntries(
-                entries,
-                obtained,
-                StandardCollectionFilter.UNOBTAINED,
+                entries = entries,
+                obtainedCardIds = obtained,
+                filter = StandardCollectionFilter.HISTORY,
             ).map { it.card.id },
         )
-        assertEquals(
-            listOf("book.001", "book.002"),
-            filterStandardCollectionEntries(
-                entries,
-                obtained,
-                StandardCollectionFilter.BOOK,
-            ).map { it.card.id },
-        )
-        assertEquals(2, standardCollectionObtainedCount(entries, obtained))
+        assertEquals(4, standardCollectionObtainedCount(entries, obtained))
     }
 
     private fun entry(
         id: String,
         type: StandardContentCardType,
+        rarity: StandardContentRarity = StandardContentRarity.COMMON,
+        sortOrder: Int? = null,
     ) = StandardContentEntry(
         packId = type.wireName,
         card = StandardContentCard(
             id = id,
             type = type,
-            rarity = StandardContentRarity.COMMON,
+            rarity = rarity,
             title = id,
             summary = "summary",
             body = null,
@@ -71,7 +109,7 @@ class StandardCollectionModelTest {
             sourceLabel = null,
             sourceUrl = null,
             externalUrl = null,
-            sortOrder = null,
+            sortOrder = sortOrder,
         ),
         imageFile = null,
     )

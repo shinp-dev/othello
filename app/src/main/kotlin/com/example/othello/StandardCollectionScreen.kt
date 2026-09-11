@@ -154,7 +154,7 @@ private fun StandardCollectionScreen(
     onBack: () -> Unit,
 ) {
     var selectedFilterName by rememberSaveable(userId) {
-        mutableStateOf(StandardCollectionFilter.ALL.name)
+        mutableStateOf(StandardCollectionFilter.TRIVIA.name)
     }
     var selectedCardId by rememberSaveable(userId) { mutableStateOf<String?>(null) }
 
@@ -162,7 +162,8 @@ private fun StandardCollectionScreen(
         availableStandardCollectionFilters(snapshot.entries)
     }
     val selectedFilter = filters.firstOrNull { it.name == selectedFilterName }
-        ?: StandardCollectionFilter.ALL
+        ?: filters.firstOrNull()
+        ?: StandardCollectionFilter.TRIVIA
     val filteredEntries = remember(snapshot.entries, obtainedCardIds, selectedFilter) {
         filterStandardCollectionEntries(
             entries = snapshot.entries,
@@ -523,13 +524,11 @@ private fun android.content.Context.openStandardCollectionUrl(url: String) {
 
 private val StandardCollectionFilter.labelRes: Int
     get() = when (this) {
-        StandardCollectionFilter.ALL -> R.string.standard_collection_filter_all
         StandardCollectionFilter.TRIVIA -> R.string.standard_collection_category_trivia
         StandardCollectionFilter.BOOK -> R.string.standard_collection_category_book
         StandardCollectionFilter.HISTORY -> R.string.standard_collection_category_history
         StandardCollectionFilter.PERSON -> R.string.standard_collection_category_person
         StandardCollectionFilter.COLLAB -> R.string.standard_collection_category_collab
-        StandardCollectionFilter.UNOBTAINED -> R.string.standard_collection_filter_unobtained
     }
 
 private val StandardContentCardType.labelRes: Int
