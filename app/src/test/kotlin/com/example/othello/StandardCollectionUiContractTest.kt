@@ -27,10 +27,12 @@ class StandardCollectionUiContractTest {
     }
 
     @Test
-    fun collectionUiHasProgressFiltersAndSourceLinksWithoutAdvancedDependencies() {
+    fun collectionUiHasProgressCategoryFiltersAndSourceLinksWithoutAdvancedDependencies() {
         assertTrue("LinearProgressIndicator(" in source)
         assertTrue("FilterChip(" in source)
-        assertTrue("StandardCollectionFilter.UNOBTAINED" in source)
+        assertTrue("StandardCollectionFilter.TRIVIA" in source)
+        assertFalse("StandardCollectionFilter.ALL" in source)
+        assertFalse("StandardCollectionFilter.UNOBTAINED" in source)
         assertTrue("R.string.standard_collection_open_source" in source)
         assertTrue("StandardContentArtwork(" in source)
         assertTrue("entry.card.rarity.visualColors" in source)
