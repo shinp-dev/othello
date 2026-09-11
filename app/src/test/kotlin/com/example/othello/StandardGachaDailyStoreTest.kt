@@ -10,17 +10,17 @@ import org.junit.Test
 
 class StandardGachaDailyStoreTest {
     @Test
-    fun allowsThreeFreeDrawsPerLocalDay() {
+    fun allowsConfiguredFreeDrawsPerLocalDay() {
         val preferences = MemoryPreferences()
         var today = LocalDate.of(2026, 9, 11)
         val store = StandardGachaDailyStore(preferences) { today }
 
-        repeat(3) {
+        repeat(STANDARD_GACHA_DAILY_FREE_DRAW_LIMIT) {
             assertNotNull(store.tryConsumeFreeDraw("user"))
         }
 
         val exhausted = store.state("user")
-        assertEquals(3, exhausted.freeDrawsUsed)
+        assertEquals(STANDARD_GACHA_DAILY_FREE_DRAW_LIMIT, exhausted.freeDrawsUsed)
         assertEquals(0, exhausted.remainingFreeDraws)
         assertFalse(exhausted.canDrawForFree)
         assertNull(store.tryConsumeFreeDraw("user"))
@@ -32,13 +32,13 @@ class StandardGachaDailyStoreTest {
         var today = LocalDate.of(2026, 9, 11)
         val store = StandardGachaDailyStore(preferences) { today }
 
-        repeat(3) { assertNotNull(store.tryConsumeFreeDraw("user")) }
+        repeat(STANDARD_GACHA_DAILY_FREE_DRAW_LIMIT) { assertNotNull(store.tryConsumeFreeDraw("user")) }
         today = LocalDate.of(2026, 9, 12)
 
         val reset = store.state("user")
         assertEquals(LocalDate.of(2026, 9, 12), reset.day)
         assertEquals(0, reset.freeDrawsUsed)
-        assertEquals(3, reset.remainingFreeDraws)
+        assertEquals(STANDARD_GACHA_DAILY_FREE_DRAW_LIMIT, reset.remainingFreeDraws)
         assertTrue(reset.canDrawForFree)
     }
 
@@ -48,12 +48,12 @@ class StandardGachaDailyStoreTest {
         var today = LocalDate.of(2026, 9, 11)
         val store = StandardGachaDailyStore(preferences) { today }
 
-        repeat(3) { assertNotNull(store.tryConsumeFreeDraw("user")) }
+        repeat(STANDARD_GACHA_DAILY_FREE_DRAW_LIMIT) { assertNotNull(store.tryConsumeFreeDraw("user")) }
         today = LocalDate.of(2026, 9, 10)
 
         val rolledBack = store.state("user")
         assertEquals(LocalDate.of(2026, 9, 11), rolledBack.day)
-        assertEquals(3, rolledBack.freeDrawsUsed)
+        assertEquals(STANDARD_GACHA_DAILY_FREE_DRAW_LIMIT, rolledBack.freeDrawsUsed)
         assertFalse(rolledBack.canDrawForFree)
     }
 
@@ -65,8 +65,8 @@ class StandardGachaDailyStoreTest {
 
         assertNotNull(store.tryConsumeFreeDraw("user-a"))
 
-        assertEquals(2, store.state("user-a").remainingFreeDraws)
-        assertEquals(3, store.state("user-b").remainingFreeDraws)
+        assertEquals(STANDARD_GACHA_DAILY_FREE_DRAW_LIMIT - 1, store.state("user-a").remainingFreeDraws)
+        assertEquals(STANDARD_GACHA_DAILY_FREE_DRAW_LIMIT, store.state("user-b").remainingFreeDraws)
     }
 
     private class MemoryPreferences : StandardGachaDailyPreferences {

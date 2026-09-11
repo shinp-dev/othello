@@ -40,7 +40,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -355,40 +354,28 @@ private fun StandardGachaMachine(
                 ) {}
 
                 if (revealPhase == STANDARD_GACHA_PHASE_BURST) {
-                    Box(
+                    Image(
+                        painter = painterResource(R.drawable.standard_gacha_capsule_left_shell_art),
+                        contentDescription = null,
                         modifier = Modifier
-                            .size(width = 96.dp, height = 192.dp)
-                            .offset(x = (-52).dp)
+                            .size(164.dp)
+                            .offset(x = (-54).dp, y = 4.dp)
                             .graphicsLayer {
-                                rotationZ = -10f
+                                rotationZ = -12f
                                 alpha = shellAlpha
-                            }
-                            .clipToBounds(),
-                        contentAlignment = Alignment.CenterStart,
-                    ) {
-                        Image(
-                            painter = painterResource(R.drawable.standard_gacha_capsule_base_art),
-                            contentDescription = null,
-                            modifier = Modifier.size(192.dp),
-                        )
-                    }
-                    Box(
+                            },
+                    )
+                    Image(
+                        painter = painterResource(R.drawable.standard_gacha_capsule_right_shell_art),
+                        contentDescription = null,
                         modifier = Modifier
-                            .size(width = 96.dp, height = 192.dp)
-                            .offset(x = 52.dp)
+                            .size(164.dp)
+                            .offset(x = 54.dp, y = (-2).dp)
                             .graphicsLayer {
-                                rotationZ = 10f
+                                rotationZ = 12f
                                 alpha = shellAlpha
-                            }
-                            .clipToBounds(),
-                        contentAlignment = Alignment.CenterEnd,
-                    ) {
-                        Image(
-                            painter = painterResource(R.drawable.standard_gacha_capsule_base_art),
-                            contentDescription = null,
-                            modifier = Modifier.size(192.dp),
-                        )
-                    }
+                            },
+                    )
                 } else {
                     Image(
                         painter = painterResource(R.drawable.standard_gacha_capsule_base_art),

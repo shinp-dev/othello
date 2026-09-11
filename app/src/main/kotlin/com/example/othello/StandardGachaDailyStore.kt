@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import java.time.LocalDate
 
-internal const val STANDARD_GACHA_DAILY_FREE_DRAW_LIMIT = 3
+internal const val STANDARD_GACHA_DAILY_FREE_DRAW_LIMIT = 100
 
 internal data class StandardGachaDailyState(
     val day: LocalDate,
