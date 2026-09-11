@@ -29,6 +29,8 @@
     <string name="standard_ai_opponent_unknown">\?\?\?</string>
     <string name="standard_ai_opponent_status_teaser">次に解放</string>
     <string name="standard_ai_locked_opponent_description">未解放のレベル%1$d対戦相手</string>
+    <string name="standard_ai_strength_weaker">← 弱い</string>
+    <string name="standard_ai_strength_stronger">強い →</string>
     <string name="standard_ai_clutch_title">激戦勝利！</string>
     <string name="standard_ai_clutch_message">CRITICALな局面を乗り越えた！</string>
     <string name="standard_ai_comeback_title">大逆転！</string>
