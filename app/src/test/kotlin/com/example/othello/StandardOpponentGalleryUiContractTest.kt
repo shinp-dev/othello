@@ -31,6 +31,18 @@ class StandardOpponentGalleryUiContractTest {
     }
 
     @Test
+    fun opponentCardsUseGameLikeCardStylingAndCompactSideLabels() {
+        assertTrue("Color(0xFF1C232C)" in source)
+        assertTrue("Color(0xFF141A21)" in source)
+        assertTrue("Color(0xFF161C23)" in source)
+        assertTrue("BorderStroke(1.dp" in source)
+        assertTrue("RoundedCornerShape" in source)
+        assertTrue("maxLines = 1" in source)
+        assertTrue("TextOverflow.Ellipsis" in source)
+        assertTrue("\"Lv\${opponent.level.value}\"" in source)
+    }
+
+    @Test
     fun opponentGalleryKeepsAllLevelsInOneSequenceWithoutGroupHeadings() {
         assertFalse("standard_ai_group_basic" in source)
         assertFalse("standard_ai_group_serious" in source)
