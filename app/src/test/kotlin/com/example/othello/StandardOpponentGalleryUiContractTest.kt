@@ -31,6 +31,18 @@ class StandardOpponentGalleryUiContractTest {
     }
 
     @Test
+    fun opponentCardsUseGameLikeCardStylingAndCompactSideLabels() {
+        assertTrue("Color(0xFF1C232C)" in source)
+        assertTrue("Color(0xFF141A21)" in source)
+        assertTrue("Color(0xFF161C23)" in source)
+        assertTrue("BorderStroke(1.dp" in source)
+        assertTrue("RoundedCornerShape" in source)
+        assertTrue("maxLines = 1" in source)
+        assertTrue("TextOverflow.Ellipsis" in source)
+        assertTrue("\"Lv\${opponent.level.value}\"" in source)
+    }
+
+    @Test
     fun opponentGalleryKeepsAllLevelsInOneSequenceWithoutGroupHeadings() {
         assertFalse("standard_ai_group_basic" in source)
         assertFalse("standard_ai_group_serious" in source)
@@ -43,7 +55,7 @@ class StandardOpponentGalleryUiContractTest {
         assertTrue("Icons.Filled.CheckCircle" in source)
         assertTrue("Icons.Filled.Lock" in source)
         assertTrue("standard-ai-state-" in source)
-        assertTrue("R.string.standard_ai_opponent_unknown" in source)
+        assertTrue("R.string.standard_ai_locked_opponent_description" in source)
         assertFalse("statusRes" in source)
         assertFalse("standard_ai_opponent_status_next" in source)
         assertFalse("standard_ai_opponent_status_selected" in source)
