@@ -2,7 +2,7 @@
 <resources>
     <string name="standard_collection_title">Othello Collection</string>
     <string name="standard_collection_home_supporting">Browse the Othello facts and books you have collected</string>
-    <string name="standard_collection_supporting">Collected cards reveal their full contents. Uncollected cards stay hidden until you obtain them.</string>
+    <string name="standard_collection_supporting">Browse collected cards. Uncollected cards stay hidden until you obtain them.</string>
     <string name="standard_collection_loading">Opening your collection…</string>
     <string name="standard_collection_load_error">The collection could not be opened. Your saved collection state was not changed.</string>
     <string name="standard_collection_progress">%1$d / %2$d collected</string>
