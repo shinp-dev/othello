@@ -40,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -304,20 +305,10 @@ private fun StandardGachaMachine(
         animationSpec = tween(durationMillis = 180),
         label = "standard-gacha-glow",
     )
-    val crackAlpha by animateFloatAsState(
-        targetValue = if (revealPhase >= STANDARD_GACHA_PHASE_CRACK) 1f else 0f,
-        animationSpec = tween(durationMillis = 120),
-        label = "standard-gacha-cracks",
-    )
     val shellAlpha by animateFloatAsState(
         targetValue = if (revealPhase == STANDARD_GACHA_PHASE_BURST) 1f else 0f,
         animationSpec = tween(durationMillis = 90),
         label = "standard-gacha-shells",
-    )
-    val intactAlpha by animateFloatAsState(
-        targetValue = if (revealPhase == STANDARD_GACHA_PHASE_BURST) 0f else 1f,
-        animationSpec = tween(durationMillis = 90),
-        label = "standard-gacha-intact",
     )
 
     Card(
@@ -333,7 +324,7 @@ private fun StandardGachaMachine(
         ) {
             Box(
                 modifier = Modifier
-                    .size(220.dp)
+                    .size(228.dp)
                     .clickable(
                         enabled = pendingEntry == null && canDraw,
                         onClick = onDraw,
@@ -342,74 +333,87 @@ private fun StandardGachaMachine(
             ) {
                 Surface(
                     modifier = Modifier
-                        .size(208.dp)
+                        .size(216.dp)
                         .graphicsLayer {
-                            alpha = glowAlpha * 0.42f
-                            scaleX = 1.10f
-                            scaleY = 1.10f
+                            alpha = glowAlpha * 0.36f
+                            scaleX = 1.12f
+                            scaleY = 1.12f
                         },
                     shape = CircleShape,
                     color = glowColor,
                 ) {}
                 Surface(
                     modifier = Modifier
-                        .size(176.dp)
+                        .size(180.dp)
                         .graphicsLayer {
-                            alpha = glowAlpha * 0.72f
-                            scaleX = 1.06f
-                            scaleY = 1.06f
+                            alpha = glowAlpha * 0.66f
+                            scaleX = 1.08f
+                            scaleY = 1.08f
                         },
                     shape = CircleShape,
                     color = glowColor,
                 ) {}
 
                 if (revealPhase == STANDARD_GACHA_PHASE_BURST) {
-                    Image(
-                        painter = painterResource(R.drawable.standard_gacha_capsule_left_shell),
-                        contentDescription = null,
+                    Box(
                         modifier = Modifier
-                            .size(176.dp)
-                            .offset(x = (-22).dp)
+                            .size(width = 96.dp, height = 192.dp)
+                            .offset(x = (-52).dp)
                             .graphicsLayer {
-                                rotationZ = -9f
+                                rotationZ = -10f
                                 alpha = shellAlpha
-                            },
-                    )
-                    Image(
-                        painter = painterResource(R.drawable.standard_gacha_capsule_right_shell),
-                        contentDescription = null,
+                            }
+                            .clipToBounds(),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.standard_gacha_capsule_base_art),
+                            contentDescription = null,
+                            modifier = Modifier.size(192.dp),
+                        )
+                    }
+                    Box(
                         modifier = Modifier
-                            .size(176.dp)
-                            .offset(x = 22.dp)
+                            .size(width = 96.dp, height = 192.dp)
+                            .offset(x = 52.dp)
                             .graphicsLayer {
-                                rotationZ = 9f
+                                rotationZ = 10f
                                 alpha = shellAlpha
-                            },
-                    )
+                            }
+                            .clipToBounds(),
+                        contentAlignment = Alignment.CenterEnd,
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.standard_gacha_capsule_base_art),
+                            contentDescription = null,
+                            modifier = Modifier.size(192.dp),
+                        )
+                    }
                 } else {
                     Image(
-                        painter = painterResource(R.drawable.standard_gacha_capsule_base),
+                        painter = painterResource(R.drawable.standard_gacha_capsule_base_art),
                         contentDescription = appString(R.string.standard_gacha_capsule_description),
                         modifier = Modifier
-                            .size(176.dp)
+                            .size(192.dp)
                             .graphicsLayer {
                                 scaleX = capsuleScale
                                 scaleY = capsuleScale
-                                alpha = intactAlpha
                             },
                     )
-                    Image(
-                        painter = painterResource(R.drawable.standard_gacha_capsule_cracks),
-                        contentDescription = null,
-                        colorFilter = ColorFilter.tint(glowColor),
-                        modifier = Modifier
-                            .size(176.dp)
-                            .graphicsLayer {
-                                scaleX = capsuleScale
-                                scaleY = capsuleScale
-                                alpha = crackAlpha
-                            },
-                    )
+                    if (revealPhase >= STANDARD_GACHA_PHASE_CRACK) {
+                        Image(
+                            painter = painterResource(R.drawable.standard_gacha_capsule_cracks_art),
+                            contentDescription = null,
+                            colorFilter = ColorFilter.tint(glowColor),
+                            modifier = Modifier
+                                .size(192.dp)
+                                .graphicsLayer {
+                                    scaleX = capsuleScale
+                                    scaleY = capsuleScale
+                                    alpha = 0.92f
+                                },
+                        )
+                    }
                 }
             }
 
