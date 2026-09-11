@@ -1,12 +1,10 @@
 package com.example.othello
 
 import android.graphics.BitmapFactory
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -42,8 +41,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -54,7 +56,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
-private const val STANDARD_GACHA_REVEAL_DELAY_MILLIS = 720L
+private const val STANDARD_GACHA_PRESS_MILLIS = 120L
+private const val STANDARD_GACHA_CRACK_MILLIS = 460L
+private const val STANDARD_GACHA_BURST_MILLIS = 260L
+private const val STANDARD_GACHA_PHASE_IDLE = 0
+private const val STANDARD_GACHA_PHASE_PRESS = 1
+private const val STANDARD_GACHA_PHASE_CRACK = 2
+private const val STANDARD_GACHA_PHASE_BURST = 3
 
 private sealed interface StandardGachaLoadState {
     data object Loading : StandardGachaLoadState
@@ -138,6 +146,7 @@ private fun StandardGachaScreen(
     var pendingCardId by rememberSaveable(userId) { mutableStateOf<String?>(null) }
     var pendingWasNew by rememberSaveable(userId) { mutableStateOf(false) }
     var resultCardId by rememberSaveable(userId) { mutableStateOf<String?>(null) }
+    var revealPhase by rememberSaveable(userId) { mutableIntStateOf(STANDARD_GACHA_PHASE_IDLE) }
     var dailyState by remember(userId) { mutableStateOf(initialDailyState) }
 
     val pendingEntry = pendingCardId?.let(snapshot::card)
@@ -149,13 +158,19 @@ private fun StandardGachaScreen(
             pendingCardId = null
             return@LaunchedEffect
         }
-        delay(STANDARD_GACHA_REVEAL_DELAY_MILLIS)
+        revealPhase = STANDARD_GACHA_PHASE_PRESS
+        delay(STANDARD_GACHA_PRESS_MILLIS)
+        revealPhase = STANDARD_GACHA_PHASE_CRACK
+        delay(STANDARD_GACHA_CRACK_MILLIS)
+        revealPhase = STANDARD_GACHA_PHASE_BURST
+        delay(STANDARD_GACHA_BURST_MILLIS)
         withContext(Dispatchers.IO) {
             collectionStore.markObtained(userId, entry.card.id)
         }
         obtainedCardIds = obtainedCardIds + entry.card.id
         resultCardId = entry.card.id
         pendingCardId = null
+        revealPhase = STANDARD_GACHA_PHASE_IDLE
     }
 
     fun draw() {
@@ -165,6 +180,7 @@ private fun StandardGachaScreen(
         dailyState = updatedDailyState
         pendingWasNew = draw.isNew
         resultCardId = null
+        revealPhase = STANDARD_GACHA_PHASE_PRESS
         pendingCardId = draw.entry.card.id
     }
 
@@ -198,12 +214,22 @@ private fun StandardGachaScreen(
 
         when {
             snapshot.entries.isEmpty() -> StandardGachaEmpty()
-            pendingEntry != null -> StandardGachaMachine(revealing = true)
+            pendingEntry != null -> StandardGachaMachine(
+                pendingEntry = pendingEntry,
+                revealPhase = revealPhase,
+                canDraw = false,
+                onDraw = {},
+            )
             resultEntry != null -> StandardGachaResultCard(
                 entry = resultEntry,
                 isNew = pendingWasNew,
             )
-            else -> StandardGachaMachine(revealing = false)
+            else -> StandardGachaMachine(
+                pendingEntry = null,
+                revealPhase = STANDARD_GACHA_PHASE_IDLE,
+                canDraw = dailyState.canDrawForFree,
+                onDraw = ::draw,
+            )
         }
 
         if (snapshot.entries.isNotEmpty()) {
@@ -248,56 +274,150 @@ private fun StandardGachaScreen(
 }
 
 @Composable
-private fun StandardGachaMachine(revealing: Boolean) {
-    val transition = rememberInfiniteTransition(label = "standard-gacha-machine")
-    val shake by transition.animateFloat(
-        initialValue = if (revealing) -8f else 0f,
-        targetValue = if (revealing) 8f else 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 110),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "standard-gacha-shake",
+private fun StandardGachaMachine(
+    pendingEntry: StandardContentEntry?,
+    revealPhase: Int,
+    canDraw: Boolean,
+    onDraw: () -> Unit,
+) {
+    val rarity = pendingEntry?.card?.rarity
+    val glowColor = standardGachaGlowColor(rarity)
+    val glowStrength = standardGachaGlowStrength(rarity)
+
+    val capsuleScale by animateFloatAsState(
+        targetValue = when (revealPhase) {
+            STANDARD_GACHA_PHASE_PRESS -> 0.94f
+            STANDARD_GACHA_PHASE_CRACK -> 1.02f
+            STANDARD_GACHA_PHASE_BURST -> 1.06f
+            else -> 1f
+        },
+        animationSpec = tween(durationMillis = 120),
+        label = "standard-gacha-capsule-scale",
+    )
+    val glowAlpha by animateFloatAsState(
+        targetValue = when (revealPhase) {
+            STANDARD_GACHA_PHASE_PRESS -> 0.10f * glowStrength
+            STANDARD_GACHA_PHASE_CRACK -> 0.62f * glowStrength
+            STANDARD_GACHA_PHASE_BURST -> 0.95f * glowStrength
+            else -> 0f
+        },
+        animationSpec = tween(durationMillis = 180),
+        label = "standard-gacha-glow",
+    )
+    val crackAlpha by animateFloatAsState(
+        targetValue = if (revealPhase >= STANDARD_GACHA_PHASE_CRACK) 1f else 0f,
+        animationSpec = tween(durationMillis = 120),
+        label = "standard-gacha-cracks",
+    )
+    val shellAlpha by animateFloatAsState(
+        targetValue = if (revealPhase == STANDARD_GACHA_PHASE_BURST) 1f else 0f,
+        animationSpec = tween(durationMillis = 90),
+        label = "standard-gacha-shells",
+    )
+    val intactAlpha by animateFloatAsState(
+        targetValue = if (revealPhase == STANDARD_GACHA_PHASE_BURST) 0f else 1f,
+        animationSpec = tween(durationMillis = 90),
+        label = "standard-gacha-intact",
     )
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .graphicsLayer { rotationZ = shake },
+        modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 36.dp, horizontal = ChanrivaSpacing.section),
+                .padding(vertical = 32.dp, horizontal = ChanrivaSpacing.section),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
+            verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.control),
         ) {
-            Surface(
-                modifier = Modifier.size(156.dp),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
+            Box(
+                modifier = Modifier
+                    .size(220.dp)
+                    .clickable(
+                        enabled = pendingEntry == null && canDraw,
+                        onClick = onDraw,
+                    ),
+                contentAlignment = Alignment.Center,
             ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (revealing) {
-                        CircularProgressIndicator()
-                    } else {
-                        Text(
-                            text = "?",
-                            style = MaterialTheme.typography.displayLarge,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                    }
+                Surface(
+                    modifier = Modifier
+                        .size(208.dp)
+                        .graphicsLayer {
+                            alpha = glowAlpha * 0.42f
+                            scaleX = 1.10f
+                            scaleY = 1.10f
+                        },
+                    shape = CircleShape,
+                    color = glowColor,
+                ) {}
+                Surface(
+                    modifier = Modifier
+                        .size(176.dp)
+                        .graphicsLayer {
+                            alpha = glowAlpha * 0.72f
+                            scaleX = 1.06f
+                            scaleY = 1.06f
+                        },
+                    shape = CircleShape,
+                    color = glowColor,
+                ) {}
+
+                if (revealPhase == STANDARD_GACHA_PHASE_BURST) {
+                    Image(
+                        painter = painterResource(R.drawable.standard_gacha_capsule_left_shell),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(176.dp)
+                            .offset(x = (-22).dp)
+                            .graphicsLayer {
+                                rotationZ = -9f
+                                alpha = shellAlpha
+                            },
+                    )
+                    Image(
+                        painter = painterResource(R.drawable.standard_gacha_capsule_right_shell),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(176.dp)
+                            .offset(x = 22.dp)
+                            .graphicsLayer {
+                                rotationZ = 9f
+                                alpha = shellAlpha
+                            },
+                    )
+                } else {
+                    Image(
+                        painter = painterResource(R.drawable.standard_gacha_capsule_base),
+                        contentDescription = appString(R.string.standard_gacha_capsule_description),
+                        modifier = Modifier
+                            .size(176.dp)
+                            .graphicsLayer {
+                                scaleX = capsuleScale
+                                scaleY = capsuleScale
+                                alpha = intactAlpha
+                            },
+                    )
+                    Image(
+                        painter = painterResource(R.drawable.standard_gacha_capsule_cracks),
+                        contentDescription = null,
+                        colorFilter = ColorFilter.tint(glowColor),
+                        modifier = Modifier
+                            .size(176.dp)
+                            .graphicsLayer {
+                                scaleX = capsuleScale
+                                scaleY = capsuleScale
+                                alpha = crackAlpha
+                            },
+                    )
                 }
             }
+
             Text(
-                text = if (revealing) {
-                    appString(R.string.standard_gacha_machine_revealing)
-                } else {
-                    appString(R.string.standard_gacha_machine_idle)
+                text = when {
+                    pendingEntry != null -> appString(R.string.standard_gacha_machine_revealing)
+                    canDraw -> appString(R.string.standard_gacha_capsule_tap)
+                    else -> appString(R.string.standard_gacha_daily_limit_reached_button)
                 },
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -305,6 +425,20 @@ private fun StandardGachaMachine(revealing: Boolean) {
             )
         }
     }
+}
+
+private fun standardGachaGlowColor(rarity: StandardContentRarity?): Color = when (rarity) {
+    StandardContentRarity.COMMON -> Color(0xFFDCEBFF)
+    StandardContentRarity.RARE -> Color(0xFFFFD76A)
+    StandardContentRarity.SPECIAL -> Color(0xFFFF5A66)
+    null -> Color.Transparent
+}
+
+private fun standardGachaGlowStrength(rarity: StandardContentRarity?): Float = when (rarity) {
+    StandardContentRarity.COMMON -> 0.55f
+    StandardContentRarity.RARE -> 0.82f
+    StandardContentRarity.SPECIAL -> 1f
+    null -> 0f
 }
 
 @Composable
