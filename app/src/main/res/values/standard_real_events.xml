@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="standard_real_event_loading">Loading event information…</string>
+    <string name="standard_real_event_empty">No upcoming events are listed right now.</string>
+    <string name="standard_real_event_load_failed">Couldn’t load event information.</string>
+    <string name="standard_real_event_retry">Try again</string>
+    <string name="standard_real_event_source">Open source</string>
+</resources>
