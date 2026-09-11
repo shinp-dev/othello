@@ -34,6 +34,7 @@ class StandardAiLevelSelectionUiTest {
         }
 
         composeRule.onNodeWithTag("standard-ai-opponent-carousel").assertExists()
+        composeRule.onNodeWithTag("standard-ai-strength-guide").assertExists()
         composeRule.onNodeWithTag("standard-ai-level-1").assertExists()
         composeRule.onNodeWithTag("standard-ai-state-2").assertExists()
     }
