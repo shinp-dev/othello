@@ -1,10 +1,7 @@
 package com.example.othello
 
 import android.content.Intent
-import android.graphics.BitmapFactory
 import android.net.Uri
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,9 +39,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.othello.designsystem.ChanrivaColors
 import com.example.othello.designsystem.ChanrivaScreenHeader
@@ -323,6 +320,7 @@ private fun StandardCollectionCard(
     obtained: Boolean,
     onOpen: (() -> Unit)?,
 ) {
+    val rarityColors = entry.card.rarity.visualColors
     val content: @Composable () -> Unit = {
         Row(
             modifier = Modifier
@@ -331,19 +329,41 @@ private fun StandardCollectionCard(
             horizontalArrangement = Arrangement.spacedBy(ChanrivaSpacing.card),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            StandardCollectionArtwork(
+            StandardContentArtwork(
                 entry = entry,
                 obtained = obtained,
+                modifier = Modifier.size(80.dp),
             )
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
-                Text(
-                    text = appString(entry.card.type.labelRes),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = ChanrivaColors.accent,
-                )
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = rarityColors.background,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = appString(entry.card.type.labelRes),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = rarityColors.foreground,
+                        )
+                        Text(
+                            text = "·",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = rarityColors.foreground.copy(alpha = 0.72f),
+                        )
+                        Text(
+                            text = appString(entry.card.rarity.labelRes),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = rarityColors.foreground,
+                        )
+                    }
+                }
                 Text(
                     text = if (obtained) entry.card.title else appString(R.string.standard_collection_unknown_title),
                     style = MaterialTheme.typography.titleMedium,
@@ -357,15 +377,8 @@ private fun StandardCollectionCard(
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = if (obtained) {
-                        appString(R.string.standard_collection_obtained)
-                    } else {
-                        appString(R.string.standard_collection_unobtained)
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (obtained) ChanrivaColors.accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -386,54 +399,6 @@ private fun StandardCollectionCard(
             ),
             content = { content() },
         )
-    }
-}
-
-@Composable
-private fun StandardCollectionArtwork(
-    entry: StandardContentEntry,
-    obtained: Boolean,
-) {
-    val bitmap = remember(entry.imageFile?.absolutePath, obtained) {
-        if (obtained) {
-            entry.imageFile
-                ?.takeIf { it.isFile }
-                ?.let { BitmapFactory.decodeFile(it.absolutePath) }
-                ?.asImageBitmap()
-        } else {
-            null
-        }
-    }
-
-    Surface(
-        modifier = Modifier.size(72.dp),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-    ) {
-        if (bitmap != null) {
-            Image(
-                bitmap = bitmap,
-                contentDescription = entry.card.title,
-                modifier = Modifier.fillMaxSize(),
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.secondaryContainer),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = if (obtained) {
-                        appString(entry.card.type.shortLabelRes)
-                    } else {
-                        "?"
-                    },
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-            }
-        }
     }
 }
 
@@ -460,6 +425,13 @@ private fun StandardCollectionDetailDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                StandardContentArtwork(
+                    entry = entry,
+                    obtained = true,
+                    modifier = Modifier
+                        .size(132.dp)
+                        .align(Alignment.CenterHorizontally),
+                )
                 Text(entry.card.summary)
                 entry.card.body?.let { Text(it) }
                 entry.card.attributes["author"]?.let {
