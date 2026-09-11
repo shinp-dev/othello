@@ -1,7 +1,10 @@
 package com.example.othello
 
 import java.io.File
+import javax.imageio.ImageIO
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.junit.Test
 
@@ -51,6 +54,15 @@ class StandardGachaUiContractTest {
         assertTrue("R.string.standard_gacha_draw_again" in source)
         assertTrue("R.string.standard_gacha_open_collection" in source)
         assertTrue("onClick = onCollection" in source)
+    }
+
+    @Test
+    fun rightCapsuleShellAssetIsDecodable() {
+        val asset = File("src/main/res/drawable-nodpi/standard_gacha_capsule_right_shell_art.png")
+        val image = assertNotNull(ImageIO.read(asset))
+
+        assertEquals(256, image.width)
+        assertEquals(256, image.height)
     }
 
     @Test
