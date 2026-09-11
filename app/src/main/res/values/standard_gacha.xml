@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="standard_gacha_title">Othello Gacha</string>
-    <string name="standard_gacha_home_supporting">Draw up to 3 free cards each day and grow your Othello collection</string>
-    <string name="standard_gacha_supporting">Facts, history and Othello books can appear. You get 3 free draws per day, and duplicates can appear.</string>
+    <string name="standard_gacha_home_supporting">Draw up to 100 free cards each day and grow your Othello collection</string>
+    <string name="standard_gacha_supporting">Facts, history and Othello books can appear. You get 100 free draws per day, and duplicates can appear.</string>
     <string name="standard_gacha_loading">Preparing the gacha…</string>
     <string name="standard_gacha_load_error">The gacha could not be opened. Your collection was not changed.</string>
     <string name="standard_gacha_draw_free">Draw once for free</string>
@@ -18,7 +18,7 @@
     <string name="standard_gacha_progress">Collection %1$d / %2$d</string>
     <string name="standard_gacha_daily_remaining">Free draws today: %1$d / %2$d remaining</string>
     <string name="standard_gacha_daily_limit_reached_button">No draws left today</string>
-    <string name="standard_gacha_daily_limit_reached">Today’s 3 free draws are used up. They reset at 00:00 in the device local time.</string>
+    <string name="standard_gacha_daily_limit_reached">Today’s 100 free draws are used up. They reset at 00:00 in the device local time.</string>
     <string name="standard_gacha_duplicate_supporting">Cards you already own can appear again.</string>
     <string name="standard_gacha_complete_supporting">Collection complete. You can still draw a random favorite each day.</string>
     <string name="standard_gacha_empty">There are no cards available to draw yet.</string>
