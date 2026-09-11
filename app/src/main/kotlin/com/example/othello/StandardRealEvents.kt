@@ -130,14 +130,16 @@ internal fun decodeStandardRealEvents(encoded: String): List<StandardRealEvent> 
         val venueName = event.requiredString("venueName", MAX_STANDARD_REAL_EVENT_TEXT_LENGTH)
         val sourceUrl = event.requiredString("sourceUrl", MAX_STANDARD_REAL_EVENT_URL_LENGTH)
 
-        if (prefectureCode.length != 2 || prefectureCode.toIntOrNull() !in 1..47) {
+        val prefectureNumber = prefectureCode.toIntOrNull()
+        if (prefectureCode.length != 2 || prefectureNumber == null || prefectureNumber !in 1..47) {
             throw StandardRealEventFormatException()
         }
-        runCatching { LocalDate.parse(date) }
-            .getOrElse { throw StandardRealEventFormatException() }
+        if (date.length != 10 || runCatching { LocalDate.parse(date) }.isFailure) {
+            throw StandardRealEventFormatException()
+        }
         val sourceUri = runCatching { URI(sourceUrl) }
             .getOrElse { throw StandardRealEventFormatException() }
-        if (sourceUri.scheme !in setOf("http", "https") || sourceUri.host.isNullOrBlank()) {
+        if (sourceUri.scheme?.lowercase() !in setOf("http", "https") || sourceUri.host.isNullOrBlank()) {
             throw StandardRealEventFormatException()
         }
 
@@ -206,7 +208,9 @@ internal fun StandardRealEventRoute(
     fetcher: StandardRealEventFetcher,
 ) {
     var refreshGeneration by remember { mutableIntStateOf(0) }
-    var state by remember(fetcher) { mutableStateOf<StandardRealEventUiState>(StandardRealEventUiState.Loading) }
+    var state by remember(fetcher) {
+        mutableStateOf<StandardRealEventUiState>(StandardRealEventUiState.Loading)
+    }
 
     LaunchedEffect(fetcher, refreshGeneration) {
         state = StandardRealEventUiState.Loading
