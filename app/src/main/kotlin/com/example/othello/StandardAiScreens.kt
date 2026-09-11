@@ -2,6 +2,7 @@ package com.example.othello
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -168,18 +169,31 @@ internal fun StandardAiLevelSelectionContent(
     onStart: () -> Unit,
     onBack: () -> Unit,
 ) {
-    StandardAiSurface {
-        ChanrivaScreenHeader(
-            title = appString(R.string.standard_ai_match),
-            onBack = onBack,
-            backLabel = appString(R.string.back),
-        )
-        StandardOpponentSelectionPanel(
-            progress = progress,
-            selectedLevel = selectedLevel,
-            onLevelSelected = onLevelSelected,
-            onStart = onStart,
-        )
+    Surface(Modifier.fillMaxSize().statusBarsPadding()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(ChanrivaSpacing.page),
+        ) {
+            ChanrivaScreenHeader(
+                title = appString(R.string.standard_ai_match),
+                onBack = onBack,
+                backLabel = appString(R.string.back),
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center,
+            ) {
+                StandardOpponentSelectionPanel(
+                    progress = progress,
+                    selectedLevel = selectedLevel,
+                    onLevelSelected = onLevelSelected,
+                    onStart = onStart,
+                )
+            }
+        }
     }
 }
 
