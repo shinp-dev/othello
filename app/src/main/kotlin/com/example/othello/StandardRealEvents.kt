@@ -59,6 +59,7 @@ internal data class StandardRealEvent(
     val eventName: String,
     val venueName: String,
     val sourceUrl: String,
+    val retrievedDate: String,
 )
 
 internal data class StandardRealEventHttpResponse(
@@ -129,12 +130,13 @@ internal fun decodeStandardRealEvents(encoded: String): List<StandardRealEvent> 
         val eventName = event.requiredString("eventName", MAX_STANDARD_REAL_EVENT_TEXT_LENGTH)
         val venueName = event.requiredString("venueName", MAX_STANDARD_REAL_EVENT_TEXT_LENGTH)
         val sourceUrl = event.requiredString("sourceUrl", MAX_STANDARD_REAL_EVENT_URL_LENGTH)
+        val retrievedDate = event.requiredString("retrievedDate", 10)
 
         val prefectureNumber = prefectureCode.toIntOrNull()
         if (prefectureCode.length != 2 || prefectureNumber == null || prefectureNumber !in 1..47) {
             throw StandardRealEventFormatException()
         }
-        if (date.length != 10 || runCatching { LocalDate.parse(date) }.isFailure) {
+        if (!date.isIsoDate() || !retrievedDate.isIsoDate()) {
             throw StandardRealEventFormatException()
         }
         val sourceUri = runCatching { URI(sourceUrl) }
@@ -151,6 +153,7 @@ internal fun decodeStandardRealEvents(encoded: String): List<StandardRealEvent> 
             eventName = eventName,
             venueName = venueName,
             sourceUrl = sourceUrl,
+            retrievedDate = retrievedDate,
         )
     }.sortedWith(
         compareBy<StandardRealEvent>(
@@ -160,6 +163,9 @@ internal fun decodeStandardRealEvents(encoded: String): List<StandardRealEvent> 
         ),
     )
 }
+
+private fun String.isIsoDate(): Boolean =
+    length == 10 && runCatching { LocalDate.parse(this) }.isSuccess
 
 private fun JsonObject.requiredString(name: String, maxLength: Int): String {
     val primitive = this[name] as? JsonPrimitive ?: throw StandardRealEventFormatException()
@@ -321,6 +327,14 @@ private fun StandardRealEventScreen(
                                         Text(
                                             text = event.venueName,
                                             style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        Text(
+                                            text = appString(
+                                                R.string.standard_real_event_retrieved_date,
+                                                event.retrievedDate.replace('-', '/'),
+                                            ),
+                                            style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                         Text(

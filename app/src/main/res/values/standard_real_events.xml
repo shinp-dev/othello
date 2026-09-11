@@ -5,4 +5,5 @@
     <string name="standard_real_event_load_failed">Couldn’t load event information.</string>
     <string name="standard_real_event_retry">Try again</string>
     <string name="standard_real_event_source">Open source</string>
+    <string name="standard_real_event_retrieved_date">Information retrieved: %1$s</string>
 </resources>
