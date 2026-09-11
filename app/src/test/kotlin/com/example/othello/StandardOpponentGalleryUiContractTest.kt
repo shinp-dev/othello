@@ -9,33 +9,42 @@ class StandardOpponentGalleryUiContractTest {
     private val source = File("src/main/kotlin/com/example/othello/StandardOpponentGallery.kt").readText()
 
     @Test
-    fun opponentGalleryUsesTwoColumnThumbnailCards() {
-        assertTrue("private const val OPPONENTS_PER_ROW = 2" in source)
-        assertTrue("Image(" in source)
-        assertTrue("painterResource(opponent.winDrawableRes)" in source)
-        assertTrue("Card(" in source)
-        assertTrue("enabled = unlocked" in source)
-        assertTrue("standard-ai-opponent-" in source)
-        assertTrue("LinearProgressIndicator(" in source)
-        assertTrue("R.string.standard_ai_collection_progress" in source)
+    fun opponentGalleryUsesOneHorizontalCarouselWithNeighborPeek() {
+        assertTrue("HorizontalPager(" in source)
+        assertTrue("PaddingValues(horizontal = 44.dp)" in source)
+        assertTrue("pageSpacing = 12.dp" in source)
+        assertTrue("beyondBoundsPageCount = 1" in source)
+        assertTrue("standard-ai-opponent-carousel" in source)
+        assertTrue("standard-ai-level-" in source)
+        assertFalse("LinearProgressIndicator(" in source)
+        assertFalse("standard_ai_collection_progress" in source)
     }
 
     @Test
-    fun opponentGallerySeparatesFriendlyAndWildGroups() {
-        assertTrue("R.string.standard_ai_group_basic" in source)
-        assertTrue("R.string.standard_ai_group_serious" in source)
-        assertTrue("pack.opponents.take(4)" in source)
-        assertTrue("pack.opponents.drop(4)" in source)
+    fun opponentGalleryKeepsAllLevelsInOneSequenceWithoutGroupHeadings() {
+        assertTrue("pack.opponents[page]" in source)
+        assertFalse("standard_ai_group_basic" in source)
+        assertFalse("standard_ai_group_serious" in source)
+        assertFalse("pack.opponents.take(4)" in source)
+        assertFalse("pack.opponents.drop(4)" in source)
     }
 
     @Test
-    fun lockedOpponentsStayVisibleAsMysterySilhouettesAndTeaseTheNextUnlock() {
-        assertTrue("ColorFilter.tint" in source)
+    fun clearedAndLockedStatesAreIconsInsteadOfStatusText() {
+        assertTrue("Icons.Filled.CheckCircle" in source)
+        assertTrue("Icons.Filled.Lock" in source)
+        assertTrue("standard-ai-state-" in source)
         assertTrue("R.string.standard_ai_opponent_unknown" in source)
-        assertTrue("R.string.standard_ai_opponent_status_teaser" in source)
-        assertTrue("teaserLevel = progress.highestUnlockedLevel.next()" in source)
-        assertTrue("R.string.standard_ai_next_reward_wild" in source)
-        assertTrue("R.string.standard_ai_next_reward_conquer" in source)
+        assertFalse("statusRes" in source)
+        assertFalse("standard_ai_opponent_status_next" in source)
+        assertFalse("standard_ai_opponent_status_selected" in source)
+        assertFalse("standard_ai_opponent_status_available" in source)
+    }
+
+    @Test
+    fun centeredUnlockedOpponentStartsWithoutSeparateButton() {
+        assertTrue("unlocked && selected -> onStart()" in source)
+        assertTrue("scope.launch { pagerState.animateScrollToPage(page) }" in source)
     }
 
     @Test
