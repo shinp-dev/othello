@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -196,23 +195,13 @@ private fun StandardGachaScreen(
             totalCount = snapshot.entries.size,
         )
 
-        if (resultEntry == null) {
+        if (resultEntry == null && pendingEntry == null) {
             Text(
                 text = appString(R.string.standard_gacha_supporting),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-
-        Text(
-            text = appString(
-                R.string.standard_gacha_daily_remaining,
-                dailyState.remainingFreeDraws,
-                STANDARD_GACHA_DAILY_FREE_DRAW_LIMIT,
-            ),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-        )
 
         when {
             snapshot.entries.isEmpty() -> StandardGachaEmpty()
@@ -244,8 +233,16 @@ private fun StandardGachaScreen(
                     when {
                         pendingEntry != null -> appString(R.string.standard_gacha_drawing)
                         !dailyState.canDrawForFree -> appString(R.string.standard_gacha_daily_limit_reached_button)
-                        resultEntry != null -> appString(R.string.standard_gacha_draw_again)
-                        else -> appString(R.string.standard_gacha_draw_free)
+                        resultEntry != null -> appString(
+                            R.string.standard_gacha_draw_again_remaining,
+                            dailyState.remainingFreeDraws,
+                            STANDARD_GACHA_DAILY_FREE_DRAW_LIMIT,
+                        )
+                        else -> appString(
+                            R.string.standard_gacha_draw_free_remaining,
+                            dailyState.remainingFreeDraws,
+                            STANDARD_GACHA_DAILY_FREE_DRAW_LIMIT,
+                        )
                     },
                 )
             }
@@ -259,7 +256,7 @@ private fun StandardGachaScreen(
             Text(appString(R.string.standard_gacha_open_collection))
         }
 
-        if (resultEntry == null) {
+        if (resultEntry == null && pendingEntry == null) {
             Text(
                 text = when {
                     !dailyState.canDrawForFree -> appString(R.string.standard_gacha_daily_limit_reached)
@@ -462,8 +459,6 @@ private fun StandardGachaResultCard(
     entry: StandardContentEntry,
     isNew: Boolean,
 ) {
-    val rarityColors = entry.card.rarity.visualColors
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = ChanrivaColors.surfaceElevated),
@@ -499,40 +494,13 @@ private fun StandardGachaResultCard(
                 textAlign = TextAlign.Center,
             )
 
-            Surface(
-                shape = MaterialTheme.shapes.small,
-                color = rarityColors.background,
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = standardGachaTypeLabel(entry.card.type),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = rarityColors.foreground,
-                    )
-                    Text(
-                        text = "·",
-                        color = rarityColors.foreground.copy(alpha = 0.72f),
-                    )
-                    Text(
-                        text = standardGachaRarityLabel(entry.card.rarity),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = rarityColors.foreground,
-                    )
-                }
-            }
-
             Text(
                 text = entry.card.summary,
                 modifier = Modifier.fillMaxWidth(),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
@@ -555,6 +523,8 @@ private fun StandardGachaProgress(
         LinearProgressIndicator(
             progress = progress,
             modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+            trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
         )
     }
 }
@@ -626,37 +596,6 @@ private fun StandardGachaMessageScreen(
         )
     }
 }
-
-@Composable
-private fun standardGachaTypeLabel(type: StandardContentCardType): String = appString(
-    when (type) {
-        StandardContentCardType.TRIVIA -> R.string.standard_collection_category_trivia
-        StandardContentCardType.BOOK -> R.string.standard_collection_category_book
-        StandardContentCardType.PERSON -> R.string.standard_collection_category_person
-        StandardContentCardType.HISTORY -> R.string.standard_collection_category_history
-        StandardContentCardType.COLLAB -> R.string.standard_collection_category_collab
-    },
-)
-
-@Composable
-private fun standardGachaTypeShortLabel(type: StandardContentCardType): String = appString(
-    when (type) {
-        StandardContentCardType.TRIVIA -> R.string.standard_collection_short_trivia
-        StandardContentCardType.BOOK -> R.string.standard_collection_short_book
-        StandardContentCardType.PERSON -> R.string.standard_collection_short_person
-        StandardContentCardType.HISTORY -> R.string.standard_collection_short_history
-        StandardContentCardType.COLLAB -> R.string.standard_collection_short_collab
-    },
-)
-
-@Composable
-private fun standardGachaRarityLabel(rarity: StandardContentRarity): String = appString(
-    when (rarity) {
-        StandardContentRarity.COMMON -> R.string.standard_collection_rarity_common
-        StandardContentRarity.RARE -> R.string.standard_collection_rarity_rare
-        StandardContentRarity.SPECIAL -> R.string.standard_collection_rarity_special
-    },
-)
 
 @Composable
 private fun StandardGachaSurface(
