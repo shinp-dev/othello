@@ -283,6 +283,23 @@ private fun StandardGachaMachine(
     val rarity = pendingEntry?.card?.rarity
     val glowColor = standardGachaGlowColor(rarity)
     val glowStrength = standardGachaGlowStrength(rarity)
+    val resources = androidx.compose.ui.platform.LocalContext.current.resources
+    val leftShellBitmap = remember(resources) {
+        runCatching {
+            BitmapFactory.decodeResource(
+                resources,
+                R.drawable.standard_gacha_capsule_left_shell_art,
+            )?.asImageBitmap()
+        }.getOrNull()
+    }
+    val rightShellBitmap = remember(resources) {
+        runCatching {
+            BitmapFactory.decodeResource(
+                resources,
+                R.drawable.standard_gacha_capsule_right_shell_art,
+            )?.asImageBitmap()
+        }.getOrNull()
+    }
 
     val capsuleScale by animateFloatAsState(
         targetValue = when (revealPhase) {
@@ -354,28 +371,32 @@ private fun StandardGachaMachine(
                 ) {}
 
                 if (revealPhase == STANDARD_GACHA_PHASE_BURST) {
-                    Image(
-                        painter = painterResource(R.drawable.standard_gacha_capsule_left_shell_art),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(164.dp)
-                            .offset(x = (-54).dp, y = 4.dp)
-                            .graphicsLayer {
-                                rotationZ = -12f
-                                alpha = shellAlpha
-                            },
-                    )
-                    Image(
-                        painter = painterResource(R.drawable.standard_gacha_capsule_right_shell_art),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(164.dp)
-                            .offset(x = 54.dp, y = (-2).dp)
-                            .graphicsLayer {
-                                rotationZ = 12f
-                                alpha = shellAlpha
-                            },
-                    )
+                    leftShellBitmap?.let { bitmap ->
+                        Image(
+                            bitmap = bitmap,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(164.dp)
+                                .offset(x = (-54).dp, y = 4.dp)
+                                .graphicsLayer {
+                                    rotationZ = -12f
+                                    alpha = shellAlpha
+                                },
+                        )
+                    }
+                    rightShellBitmap?.let { bitmap ->
+                        Image(
+                            bitmap = bitmap,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(164.dp)
+                                .offset(x = 54.dp, y = (-2).dp)
+                                .graphicsLayer {
+                                    rotationZ = 12f
+                                    alpha = shellAlpha
+                                },
+                        )
+                    }
                 } else {
                     Image(
                         painter = painterResource(R.drawable.standard_gacha_capsule_base_art),
