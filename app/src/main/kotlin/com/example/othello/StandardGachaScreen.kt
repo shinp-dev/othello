@@ -5,7 +5,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,6 +47,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.othello.designsystem.ChanrivaColors
 import com.example.othello.designsystem.ChanrivaScreenHeader
@@ -196,11 +196,13 @@ private fun StandardGachaScreen(
             totalCount = snapshot.entries.size,
         )
 
-        Text(
-            text = appString(R.string.standard_gacha_supporting),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (resultEntry == null) {
+            Text(
+                text = appString(R.string.standard_gacha_supporting),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
         Text(
             text = appString(
@@ -257,19 +259,21 @@ private fun StandardGachaScreen(
             Text(appString(R.string.standard_gacha_open_collection))
         }
 
-        Text(
-            text = when {
-                !dailyState.canDrawForFree -> appString(R.string.standard_gacha_daily_limit_reached)
-                snapshot.entries.isNotEmpty() &&
-                    snapshot.entries.all { it.card.id in obtainedCardIds } ->
-                    appString(R.string.standard_gacha_complete_supporting)
-                else -> appString(R.string.standard_gacha_duplicate_supporting)
-            },
-            modifier = Modifier.fillMaxWidth(),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
+        if (resultEntry == null) {
+            Text(
+                text = when {
+                    !dailyState.canDrawForFree -> appString(R.string.standard_gacha_daily_limit_reached)
+                    snapshot.entries.isNotEmpty() &&
+                        snapshot.entries.all { it.card.id in obtainedCardIds } ->
+                        appString(R.string.standard_gacha_complete_supporting)
+                    else -> appString(R.string.standard_gacha_duplicate_supporting)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }
 
@@ -458,12 +462,7 @@ private fun StandardGachaResultCard(
     entry: StandardContentEntry,
     isNew: Boolean,
 ) {
-    val bitmap = remember(entry.imageFile?.absolutePath) {
-        entry.imageFile
-            ?.takeIf { it.isFile }
-            ?.let { BitmapFactory.decodeFile(it.absolutePath) }
-            ?.asImageBitmap()
-    }
+    val rarityColors = entry.card.rarity.visualColors
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -472,76 +471,25 @@ private fun StandardGachaResultCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(ChanrivaSpacing.section),
+                .padding(vertical = 24.dp, horizontal = ChanrivaSpacing.section),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.control),
         ) {
-            if (isNew) {
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                ) {
-                    Text(
-                        text = appString(R.string.standard_gacha_new),
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                }
-            } else {
-                Text(
-                    text = appString(R.string.standard_gacha_duplicate),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Surface(
-                modifier = Modifier.size(128.dp),
-                shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.secondaryContainer,
-            ) {
-                if (bitmap != null) {
-                    Image(
-                        bitmap = bitmap,
-                        contentDescription = entry.card.title,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+            Text(
+                text = if (isNew) {
+                    appString(R.string.standard_gacha_new)
                 } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.secondaryContainer),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = standardGachaTypeShortLabel(entry.card.type),
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        )
-                    }
-                }
-            }
+                    appString(R.string.standard_gacha_duplicate)
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = if (isNew) ChanrivaColors.accent else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = standardGachaTypeLabel(entry.card.type),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = ChanrivaColors.accent,
-                )
-                Text(
-                    text = "·",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = standardGachaRarityLabel(entry.card.rarity),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = ChanrivaColors.accent,
-                )
-            }
+            StandardContentArtwork(
+                entry = entry,
+                obtained = true,
+                modifier = Modifier.size(168.dp),
+            )
 
             Text(
                 text = entry.card.title,
@@ -550,20 +498,43 @@ private fun StandardGachaResultCard(
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
             )
+
+            Surface(
+                shape = MaterialTheme.shapes.small,
+                color = rarityColors.background,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = standardGachaTypeLabel(entry.card.type),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = rarityColors.foreground,
+                    )
+                    Text(
+                        text = "·",
+                        color = rarityColors.foreground.copy(alpha = 0.72f),
+                    )
+                    Text(
+                        text = standardGachaRarityLabel(entry.card.rarity),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = rarityColors.foreground,
+                    )
+                }
+            }
+
             Text(
                 text = entry.card.summary,
                 modifier = Modifier.fillMaxWidth(),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
-            entry.card.attributes["author"]?.let { author ->
-                Text(
-                    text = appString(R.string.standard_gacha_author, author),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
         }
     }
 }
