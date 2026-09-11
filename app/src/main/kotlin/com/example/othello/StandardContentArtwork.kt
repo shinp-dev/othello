@@ -15,7 +15,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -24,6 +24,7 @@ internal fun StandardContentArtwork(
     obtained: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val customBitmap = remember(entry.imageFile?.absolutePath, obtained) {
         if (obtained) {
             entry.imageFile
@@ -33,6 +34,12 @@ internal fun StandardContentArtwork(
         } else {
             null
         }
+    }
+    val categoryBitmap = remember(entry.card.type) {
+        runCatching {
+            BitmapFactory.decodeResource(context.resources, entry.card.type.iconRes)
+                ?.asImageBitmap()
+        }.getOrNull()
     }
     val shape = RoundedCornerShape(20.dp)
     val colors = entry.card.rarity.visualColors
@@ -59,13 +66,19 @@ internal fun StandardContentArtwork(
                 contentDescription = entry.card.title,
                 modifier = Modifier.fillMaxSize(),
             )
-        } else {
+        } else if (categoryBitmap != null) {
             Image(
-                painter = painterResource(entry.card.type.iconRes),
+                bitmap = categoryBitmap,
                 contentDescription = null,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(18.dp),
+            )
+        } else {
+            androidx.compose.material3.Text(
+                text = "?",
+                style = androidx.compose.material3.MaterialTheme.typography.headlineMedium,
+                color = colors.foreground.copy(alpha = 0.68f),
             )
         }
     }

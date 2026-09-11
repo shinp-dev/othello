@@ -1,6 +1,9 @@
 package com.example.othello
 
 import java.io.File
+import javax.imageio.ImageIO
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.junit.Test
 
@@ -11,7 +14,7 @@ class StandardContentArtworkUiContractTest {
     @Test
     fun everyContentTypeHasARealCategoryArtworkAsset() {
         val assets = listOf(
-            "standard_content_icon_trivia.webp",
+            "standard_content_icon_trivia.png",
             "standard_content_icon_book.webp",
             "standard_content_icon_person.webp",
             "standard_content_icon_history.webp",
@@ -29,6 +32,23 @@ class StandardContentArtworkUiContractTest {
             assertTrue(asset.isFile, "Missing category artwork: $assetName")
             assertTrue(asset.length() > 1_000L, "Category artwork is unexpectedly small: $assetName")
         }
+    }
+
+    @Test
+    fun triviaArtworkIsADecodable192PixelPng() {
+        val asset = File("src/main/res/drawable-nodpi/standard_content_icon_trivia.png")
+        val image = assertNotNull(ImageIO.read(asset), "Trivia artwork must be decodable")
+
+        assertEquals(192, image.width)
+        assertEquals(192, image.height)
+    }
+
+    @Test
+    fun corruptCategoryArtworkFallsBackInsteadOfCrashing() {
+        assertTrue("BitmapFactory.decodeResource" in source)
+        assertTrue("runCatching" in source)
+        assertTrue("categoryBitmap != null" in source)
+        assertTrue("painterResource(entry.card.type.iconRes)" !in source)
     }
 
     @Test
