@@ -164,11 +164,6 @@ private fun StandardHomeScreen(
 ) {
     StandardSurface {
         ChanrivaScreenHeader(title = appString(R.string.standard_mode))
-        ModeCard(
-            title = appString(StandardFeature.AI.titleRes),
-            supportingText = appString(StandardFeature.AI.supportingTextRes),
-            onClick = { onFeature(StandardFeature.AI) },
-        )
         StandardOpponentPackPreviewCard(
             pack = StandardOpponentPacks.animal,
             onClick = { onFeature(StandardFeature.AI) },
@@ -183,13 +178,11 @@ private fun StandardHomeScreen(
             supportingText = appString(R.string.standard_collection_home_supporting),
             onClick = onCollection,
         )
-        listOf(StandardFeature.ONLINE, StandardFeature.REAL_EVENT).forEach { feature ->
-            ModeCard(
-                title = appString(feature.titleRes),
-                supportingText = appString(feature.supportingTextRes),
-                onClick = { onFeature(feature) },
-            )
-        }
+        ModeCard(
+            title = appString(StandardFeature.REAL_EVENT.titleRes),
+            supportingText = appString(StandardFeature.REAL_EVENT.supportingTextRes),
+            onClick = { onFeature(StandardFeature.REAL_EVENT) },
+        )
         TextButton(
             onClick = onSwitchMode,
             modifier = Modifier.fillMaxWidth(),
