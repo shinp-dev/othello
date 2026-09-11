@@ -6,12 +6,11 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -29,6 +28,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -230,20 +230,14 @@ private fun StandardOpponentPackPreviewCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                pack.previewLevels.forEach { level ->
-                    val opponent = pack.opponent(level)
-                    Image(
-                        painter = painterResource(opponent.winDrawableRes),
-                        contentDescription = appString(R.string.standard_ai_pack_preview_description),
-                        modifier = Modifier.size(64.dp),
-                    )
-                }
-            }
+            Image(
+                painter = painterResource(pack.bannerDrawableRes),
+                contentDescription = appString(R.string.standard_ai_pack_preview_description),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(3f),
+                contentScale = ContentScale.Fit,
+            )
         }
     }
 }

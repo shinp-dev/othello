@@ -15,6 +15,7 @@ internal data class StandardOpponentPackUi(
     val id: String,
     @StringRes val titleRes: Int,
     @StringRes val supportingTextRes: Int,
+    @DrawableRes val bannerDrawableRes: Int,
     val opponents: List<StandardOpponentUi>,
     val previewLevels: List<StandardAiLevel>,
 ) {
@@ -27,6 +28,7 @@ internal object StandardOpponentPacks {
         id = "animal",
         titleRes = R.string.standard_ai_animal_pack_name,
         supportingTextRes = R.string.standard_ai_animal_pack_supporting,
+        bannerDrawableRes = R.drawable.standard_ai_animal_pack_banner,
         opponents = listOf(
             StandardOpponentUi(
                 StandardAiLevel.LV1,

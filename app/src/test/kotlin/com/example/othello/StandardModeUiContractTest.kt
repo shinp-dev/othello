@@ -38,6 +38,17 @@ class StandardModeUiContractTest {
     }
 
     @Test
+    fun animalPackUsesOneWideSceneInsteadOfFourSeparateIcons() {
+        val card = source.substringAfter("private fun StandardOpponentPackPreviewCard(")
+            .substringBefore("@Composable\nprivate fun StandardComingSoonScreen")
+
+        assertTrue("painterResource(pack.bannerDrawableRes)" in card)
+        assertTrue(".aspectRatio(3f)" in card)
+        assertTrue("contentScale = ContentScale.Fit" in card)
+        assertFalse("pack.previewLevels.forEach" in card)
+    }
+
+    @Test
     fun unfinishedFeaturesShareOneComingSoonComposable() {
         assertEquals(1, source.split("private fun StandardComingSoonScreen(").size - 1)
         assertTrue("R.string.feature_coming_soon" in source)
