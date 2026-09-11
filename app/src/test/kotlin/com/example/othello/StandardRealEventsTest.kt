@@ -17,7 +17,8 @@ class StandardRealEventsTest {
                 "date": "2026-11-03",
                 "eventName": "オセロ交流会",
                 "venueName": "大阪ホール",
-                "sourceUrl": "https://example.com/osaka"
+                "sourceUrl": "https://example.com/osaka",
+                "retrievedDate": "2026-09-12"
               },
               {
                 "prefectureCode": "13",
@@ -25,7 +26,8 @@ class StandardRealEventsTest {
                 "date": "2026-10-18",
                 "eventName": "親子オセロ体験会",
                 "venueName": "東京会館",
-                "sourceUrl": "https://example.com/tokyo-family"
+                "sourceUrl": "https://example.com/tokyo-family",
+                "retrievedDate": "2026-09-11"
               },
               {
                 "prefectureCode": "01",
@@ -33,7 +35,8 @@ class StandardRealEventsTest {
                 "date": "2026-12-01",
                 "eventName": "札幌オセロ会",
                 "venueName": "札幌センター",
-                "sourceUrl": "https://example.com/hokkaido"
+                "sourceUrl": "https://example.com/hokkaido",
+                "retrievedDate": "2026-09-10"
               },
               {
                 "prefectureCode": "13",
@@ -41,7 +44,8 @@ class StandardRealEventsTest {
                 "date": "2026-10-18",
                 "eventName": "オセロ教室",
                 "venueName": "東京文化館",
-                "sourceUrl": "https://example.com/tokyo-class"
+                "sourceUrl": "https://example.com/tokyo-class",
+                "retrievedDate": "2026-09-09"
               }
             ]
             """.trimIndent(),
@@ -56,10 +60,11 @@ class StandardRealEventsTest {
             ),
             events.map { "${it.prefectureCode}|${it.date}|${it.eventName}" },
         )
+        assertEquals("2026-09-10", events.first().retrievedDate)
     }
 
     @Test
-    fun decoderRejectsInvalidPrefectureDateAndSourceUrl() {
+    fun decoderRejectsInvalidPrefectureDateRetrievedDateAndSourceUrl() {
         val base = """
             [{
               "prefectureCode": "%s",
@@ -67,18 +72,30 @@ class StandardRealEventsTest {
               "date": "%s",
               "eventName": "イベント",
               "venueName": "会場",
-              "sourceUrl": "%s"
+              "sourceUrl": "%s",
+              "retrievedDate": "%s"
             }]
         """.trimIndent()
 
         assertFailsWith<StandardRealEventFormatException> {
-            decodeStandardRealEvents(base.format("99", "2026-10-18", "https://example.com/event"))
+            decodeStandardRealEvents(
+                base.format("99", "2026-10-18", "https://example.com/event", "2026-09-12"),
+            )
         }
         assertFailsWith<StandardRealEventFormatException> {
-            decodeStandardRealEvents(base.format("13", "2026-02-30", "https://example.com/event"))
+            decodeStandardRealEvents(
+                base.format("13", "2026-02-30", "https://example.com/event", "2026-09-12"),
+            )
         }
         assertFailsWith<StandardRealEventFormatException> {
-            decodeStandardRealEvents(base.format("13", "2026-10-18", "intent://example"))
+            decodeStandardRealEvents(
+                base.format("13", "2026-10-18", "https://example.com/event", "2026-02-30"),
+            )
+        }
+        assertFailsWith<StandardRealEventFormatException> {
+            decodeStandardRealEvents(
+                base.format("13", "2026-10-18", "intent://example", "2026-09-12"),
+            )
         }
     }
 
@@ -97,7 +114,8 @@ class StandardRealEventsTest {
                           "date": "2026-10-18",
                           "eventName": "イベント",
                           "venueName": "会場",
-                          "sourceUrl": "https://example.com/event"
+                          "sourceUrl": "https://example.com/event",
+                          "retrievedDate": "2026-09-12"
                         }]
                     """.trimIndent(),
                 )
@@ -110,6 +128,7 @@ class StandardRealEventsTest {
         assertEquals("https://example.com/events.json", requestedUrl)
         assertEquals(1, events.size)
         assertEquals("イベント", events.single().eventName)
+        assertEquals("2026-09-12", events.single().retrievedDate)
     }
 
     @Test
