@@ -48,7 +48,7 @@ class StandardGachaDailyStoreTest {
         var today = LocalDate.of(2026, 9, 11)
         val store = StandardGachaDailyStore(preferences) { today }
 
-        repeat(3) { assertNotNull(store.tryConsumeFreeDraw("user")) }
+        repeat(STANDARD_GACHA_DAILY_FREE_DRAW_LIMIT) { assertNotNull(store.tryConsumeFreeDraw("user")) }
         today = LocalDate.of(2026, 9, 10)
 
         val rolledBack = store.state("user")
