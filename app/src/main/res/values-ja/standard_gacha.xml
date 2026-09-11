@@ -10,6 +10,8 @@
     <string name="standard_gacha_drawing">抽選中…</string>
     <string name="standard_gacha_machine_idle">何が出るかな？</string>
     <string name="standard_gacha_machine_revealing">開封中…</string>
+    <string name="standard_gacha_capsule_tap">カプセルをタップ</string>
+    <string name="standard_gacha_capsule_description">オセロ石をモチーフにしたガチャカプセル</string>
     <string name="standard_gacha_new">NEW!</string>
     <string name="standard_gacha_duplicate">取得済み</string>
     <string name="standard_gacha_open_collection">オセロ図鑑を見る</string>
