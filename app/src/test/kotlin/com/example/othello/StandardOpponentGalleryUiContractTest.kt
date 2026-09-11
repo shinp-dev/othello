@@ -55,7 +55,7 @@ class StandardOpponentGalleryUiContractTest {
         assertTrue("Icons.Filled.CheckCircle" in source)
         assertTrue("Icons.Filled.Lock" in source)
         assertTrue("standard-ai-state-" in source)
-        assertTrue("R.string.standard_ai_opponent_unknown" in source)
+        assertTrue("R.string.standard_ai_locked_opponent_description" in source)
         assertFalse("statusRes" in source)
         assertFalse("standard_ai_opponent_status_next" in source)
         assertFalse("standard_ai_opponent_status_selected" in source)
