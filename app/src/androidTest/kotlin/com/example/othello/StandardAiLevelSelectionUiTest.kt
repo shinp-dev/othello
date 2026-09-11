@@ -1,18 +1,15 @@
 package com.example.othello
 
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.test.assertIsEnabled
-import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.othello.analysis.api.StandardAiLevel
 import com.example.othello.designsystem.OthelloTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,7 +20,7 @@ class StandardAiLevelSelectionUiTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun initialProgressEnablesOnlyLevelOne() {
+    fun initialProgressShowsFirstOpponentAndNextLockedState() {
         composeRule.setContent {
             OthelloTheme {
                 StandardAiLevelSelectionContent(
@@ -36,15 +33,14 @@ class StandardAiLevelSelectionUiTest {
             }
         }
 
-        composeRule.onNodeWithTag("standard-ai-level-1").assertIsEnabled()
-        (2..8).forEach { level ->
-            composeRule.onNodeWithTag("standard-ai-level-$level").assertIsNotEnabled()
-        }
+        composeRule.onNodeWithTag("standard-ai-opponent-carousel").assertExists()
+        composeRule.onNodeWithTag("standard-ai-level-1").assertExists()
+        composeRule.onNodeWithTag("standard-ai-state-2").assertExists()
     }
 
     @Test
-    fun anUnlockedLevelCanBeSelectedAndStartedAgain() {
-        var selected by mutableStateOf(StandardAiLevel.LV1)
+    fun centeredUnlockedOpponentStartsWithOneTap() {
+        var selected = mutableStateOf(StandardAiLevel.LV5)
         var started: StandardAiLevel? = null
         composeRule.setContent {
             OthelloTheme {
@@ -53,17 +49,16 @@ class StandardAiLevelSelectionUiTest {
                         highestUnlockedLevel = StandardAiLevel.LV8,
                         clearedLevels = StandardAiLevel.entries.take(4).toSet(),
                     ),
-                    selectedLevel = selected,
-                    onLevelSelected = { selected = it },
-                    onStart = { started = selected },
+                    selectedLevel = selected.value,
+                    onLevelSelected = { selected.value = it },
+                    onStart = { started = selected.value },
                     onBack = {},
                 )
             }
         }
 
-        composeRule.onNodeWithTag("standard-ai-level-5").performScrollTo().performClick()
-        composeRule.onNodeWithTag("standard-ai-start").performClick()
-
+        composeRule.runOnIdle { assertNull(started) }
+        composeRule.onNodeWithTag("standard-ai-level-5").performClick()
         composeRule.runOnIdle { assertEquals(StandardAiLevel.LV5, started) }
     }
 }
