@@ -63,8 +63,8 @@ internal fun StandardOpponentSelectionPanel(
         }
     }
 
-    LaunchedEffect(pagerState.currentPage, progress.highestUnlockedLevel) {
-        val centered = pack.opponents[pagerState.currentPage]
+    LaunchedEffect(pagerState.settledPage, progress.highestUnlockedLevel) {
+        val centered = pack.opponents[pagerState.settledPage]
         if (progress.isUnlocked(centered.level) && centered.level != selectedLevel) {
             onLevelSelected(centered.level)
         }
