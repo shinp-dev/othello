@@ -54,7 +54,7 @@ internal enum class AuthenticatedModeDestination {
     STANDARD_GACHA,
     STANDARD_COLLECTION,
     STANDARD_ONLINE_COMING_SOON,
-    STANDARD_REAL_EVENT_COMING_SOON,
+    STANDARD_REAL_EVENT,
     ADVANCED,
 }
 
@@ -69,7 +69,7 @@ internal fun destinationFor(mode: AppMode): AuthenticatedModeDestination = when 
 internal fun destinationFor(feature: StandardFeature): AuthenticatedModeDestination = when (feature) {
     StandardFeature.AI -> AuthenticatedModeDestination.STANDARD_AI
     StandardFeature.ONLINE -> AuthenticatedModeDestination.STANDARD_ONLINE_COMING_SOON
-    StandardFeature.REAL_EVENT -> AuthenticatedModeDestination.STANDARD_REAL_EVENT_COMING_SOON
+    StandardFeature.REAL_EVENT -> AuthenticatedModeDestination.STANDARD_REAL_EVENT
 }
 
 internal fun authenticatedModeBackDestination(
@@ -80,7 +80,7 @@ internal fun authenticatedModeBackDestination(
     AuthenticatedModeDestination.STANDARD_GACHA,
     AuthenticatedModeDestination.STANDARD_COLLECTION,
     AuthenticatedModeDestination.STANDARD_ONLINE_COMING_SOON,
-    AuthenticatedModeDestination.STANDARD_REAL_EVENT_COMING_SOON -> AuthenticatedModeDestination.STANDARD_HOME
+    AuthenticatedModeDestination.STANDARD_REAL_EVENT -> AuthenticatedModeDestination.STANDARD_HOME
     AuthenticatedModeDestination.MODE_SELECTION,
     AuthenticatedModeDestination.ADVANCED -> null
 }
@@ -125,8 +125,7 @@ internal fun AuthenticatedModeRoute(
             feature = StandardFeature.ONLINE,
             onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
         )
-        AuthenticatedModeDestination.STANDARD_REAL_EVENT_COMING_SOON -> StandardComingSoonScreen(
-            feature = StandardFeature.REAL_EVENT,
+        AuthenticatedModeDestination.STANDARD_REAL_EVENT -> StandardRealEventRoute(
             onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
         )
         AuthenticatedModeDestination.ADVANCED -> advancedContent()
