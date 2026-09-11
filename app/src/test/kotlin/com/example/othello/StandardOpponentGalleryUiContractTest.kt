@@ -31,15 +31,27 @@ class StandardOpponentGalleryUiContractTest {
     }
 
     @Test
-    fun opponentCardsUseGameLikeCardStylingAndCompactSideLabels() {
+    fun opponentCardsUseGameLikeCardStylingAndSupplementaryLevels() {
         assertTrue("Color(0xFF1C232C)" in source)
         assertTrue("Color(0xFF141A21)" in source)
         assertTrue("Color(0xFF161C23)" in source)
+        assertTrue("Color(0xFF10151B)" in source)
+        assertTrue("Color(0xFF27313C)" in source)
         assertTrue("BorderStroke(1.dp" in source)
         assertTrue("RoundedCornerShape" in source)
         assertTrue("maxLines = 1" in source)
         assertTrue("TextOverflow.Ellipsis" in source)
         assertTrue("\"Lv\${opponent.level.value}\"" in source)
+        assertTrue("text = appString(opponent.nameRes)" in source)
+        assertFalse("R.string.standard_ai_opponent_level_name" in source)
+    }
+
+    @Test
+    fun strengthDirectionIsShownBelowTheCards() {
+        assertTrue("standard-ai-strength-guide" in source)
+        assertTrue("R.string.standard_ai_strength_weaker" in source)
+        assertTrue("R.string.standard_ai_strength_stronger" in source)
+        assertTrue("Arrangement.SpaceBetween" in source)
     }
 
     @Test
