@@ -61,7 +61,9 @@ internal fun StandardOpponentSelectionPanel(
     }
 
     Column(
-        verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.control),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
             text = appString(pack.titleRes),
@@ -134,6 +136,25 @@ internal fun StandardOpponentSelectionPanel(
                 Box(Modifier.weight(SIDE_WEIGHT))
             }
         }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+                .testTag("standard-ai-strength-guide"),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = appString(R.string.standard_ai_strength_weaker),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = appString(R.string.standard_ai_strength_stronger),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -148,7 +169,7 @@ private fun StandardOpponentCard(
     val unlocked = progress.isUnlocked(opponent.level)
     val cleared = progress.isCleared(opponent.level)
     val cardColor = if (centered) CENTER_CARD_COLOR else SIDE_CARD_COLOR
-    val labelColor = if (centered) CENTER_LABEL_COLOR else SIDE_CARD_COLOR
+    val labelColor = if (centered) CENTER_LABEL_COLOR else SIDE_LABEL_COLOR
 
     Card(
         onClick = onClick,
@@ -162,7 +183,7 @@ private fun StandardOpponentCard(
         border = if (centered) {
             BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.55f))
         } else {
-            null
+            BorderStroke(1.dp, SIDE_CARD_BORDER)
         },
         colors = CardDefaults.cardColors(
             containerColor = cardColor,
@@ -190,46 +211,48 @@ private fun StandardOpponentCard(
                 },
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .padding(bottom = if (centered) 42.dp else 26.dp)
+                    .padding(bottom = if (centered) 42.dp else 24.dp)
                     .size(if (centered) 216.dp else 94.dp)
                     .graphicsLayer {
                         alpha = if (unlocked) 1f else 0.28f
                     },
             )
 
+            Text(
+                text = "Lv${opponent.level.value}",
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(if (centered) 14.dp else 9.dp),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                    alpha = if (centered) 0.82f else 0.68f,
+                ),
+            )
+
             Surface(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .height(if (centered) 76.dp else 52.dp),
+                    .height(if (centered) 76.dp else 48.dp),
                 color = labelColor,
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = if (centered) 14.dp else 4.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = if (centered) {
-                            appString(
-                                R.string.standard_ai_opponent_level_name,
-                                opponent.level.value,
-                                appString(opponent.nameRes),
-                            )
-                        } else {
-                            "Lv${opponent.level.value}"
-                        },
-                        style = if (centered) {
-                            MaterialTheme.typography.titleMedium
-                        } else {
-                            MaterialTheme.typography.labelMedium
-                        },
-                        fontWeight = if (centered) FontWeight.Bold else FontWeight.SemiBold,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                if (centered) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 14.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = appString(opponent.nameRes),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
 
@@ -282,6 +305,8 @@ private fun StandardOpponentCard(
 private val CENTER_CARD_COLOR = Color(0xFF1C232C)
 private val CENTER_LABEL_COLOR = Color(0xFF161C23)
 private val SIDE_CARD_COLOR = Color(0xFF141A21)
+private val SIDE_LABEL_COLOR = Color(0xFF10151B)
+private val SIDE_CARD_BORDER = Color(0xFF27313C)
 private const val SIDE_WEIGHT = 0.22f
 private const val CENTER_WEIGHT = 0.56f
 private const val SWIPE_THRESHOLD_PX = 72f
