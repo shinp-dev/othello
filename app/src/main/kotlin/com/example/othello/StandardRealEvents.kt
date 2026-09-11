@@ -139,7 +139,8 @@ internal fun decodeStandardRealEvents(encoded: String): List<StandardRealEvent> 
         }
         val sourceUri = runCatching { URI(sourceUrl) }
             .getOrElse { throw StandardRealEventFormatException() }
-        if (sourceUri.scheme?.lowercase() !in setOf("http", "https") || sourceUri.host.isNullOrBlank()) {
+        val sourceScheme = sourceUri.scheme?.lowercase()
+        if ((sourceScheme != "http" && sourceScheme != "https") || sourceUri.host.isNullOrBlank()) {
             throw StandardRealEventFormatException()
         }
 
