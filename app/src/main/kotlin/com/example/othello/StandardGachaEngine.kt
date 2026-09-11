@@ -16,9 +16,7 @@ internal class StandardGachaEngine(
     ): StandardGachaDraw? {
         if (entries.isEmpty()) return null
 
-        val uncollected = entries.filter { it.card.id !in obtainedCardIds }
-        val pool = uncollected.ifEmpty { entries }
-        val byRarity = pool.groupBy { it.card.rarity }
+        val byRarity = entries.groupBy { it.card.rarity }
         val availableWeights = rarityWeights.filter { (rarity, _) ->
             byRarity[rarity].orEmpty().isNotEmpty()
         }

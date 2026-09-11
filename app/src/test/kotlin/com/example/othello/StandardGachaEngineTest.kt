@@ -9,7 +9,7 @@ import org.junit.Test
 
 class StandardGachaEngineTest {
     @Test
-    fun uncollectedCardsAreGuaranteedUntilCollectionIsComplete() {
+    fun duplicatesCanAppearBeforeCollectionIsComplete() {
         val engine = engineWith(0.0, 0.0)
         val entries = listOf(
             entry("trivia.common.001", StandardContentRarity.COMMON),
@@ -23,8 +23,8 @@ class StandardGachaEngineTest {
             ),
         )
 
-        assertEquals("trivia.common.002", draw.entry.card.id)
-        assertTrue(draw.isNew)
+        assertEquals("trivia.common.001", draw.entry.card.id)
+        assertFalse(draw.isNew)
     }
 
     @Test
