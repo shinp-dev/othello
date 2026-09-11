@@ -22,9 +22,22 @@ class StandardGachaUiContractTest {
     }
 
     @Test
-    fun gachaHasRevealLoopNewStateAndCollectionExit() {
-        assertTrue("STANDARD_GACHA_REVEAL_DELAY_MILLIS" in source)
-        assertTrue("rememberInfiniteTransition" in source)
+    fun gachaHasCapsuleCrackGlowRevealAndCollectionExit() {
+        assertTrue("STANDARD_GACHA_PRESS_MILLIS" in source)
+        assertTrue("STANDARD_GACHA_CRACK_MILLIS" in source)
+        assertTrue("STANDARD_GACHA_BURST_MILLIS" in source)
+        assertTrue("STANDARD_GACHA_PHASE_CRACK" in source)
+        assertTrue("STANDARD_GACHA_PHASE_BURST" in source)
+        assertTrue("R.drawable.standard_gacha_capsule_base" in source)
+        assertTrue("R.drawable.standard_gacha_capsule_cracks" in source)
+        assertTrue("R.drawable.standard_gacha_capsule_left_shell" in source)
+        assertTrue("R.drawable.standard_gacha_capsule_right_shell" in source)
+        assertTrue("standardGachaGlowColor" in source)
+        assertTrue("StandardContentRarity.COMMON -> Color(0xFFDCEBFF)" in source)
+        assertTrue("StandardContentRarity.RARE -> Color(0xFFFFD76A)" in source)
+        assertTrue("StandardContentRarity.SPECIAL -> Color(0xFFFF5A66)" in source)
+        assertTrue("R.string.standard_gacha_capsule_tap" in source)
+        assertTrue(".clickable(" in source)
         assertTrue("R.string.standard_gacha_new" in source)
         assertTrue("R.string.standard_gacha_duplicate" in source)
         assertTrue("R.string.standard_gacha_daily_remaining" in source)
