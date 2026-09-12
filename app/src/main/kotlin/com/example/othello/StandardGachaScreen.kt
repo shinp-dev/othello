@@ -1,6 +1,5 @@
 package com.example.othello
 
-import android.graphics.BitmapFactory
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -40,14 +38,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
+import coil3.gif.repeatCount
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
 import com.example.othello.designsystem.ChanrivaColors
 import com.example.othello.designsystem.ChanrivaScreenHeader
 import com.example.othello.designsystem.ChanrivaSpacing
@@ -55,9 +55,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
-private const val STANDARD_GACHA_PRESS_MILLIS = 120L
-private const val STANDARD_GACHA_CRACK_MILLIS = 460L
-private const val STANDARD_GACHA_BURST_MILLIS = 260L
+private const val STANDARD_GACHA_PRESS_MILLIS = 280L
+private const val STANDARD_GACHA_CRACK_MILLIS = 320L
+private const val STANDARD_GACHA_BURST_MILLIS = 920L
 private const val STANDARD_GACHA_PHASE_IDLE = 0
 private const val STANDARD_GACHA_PHASE_PRESS = 1
 private const val STANDARD_GACHA_PHASE_CRACK = 2
@@ -284,34 +284,15 @@ private fun StandardGachaMachine(
     val rarity = pendingEntry?.card?.rarity
     val glowColor = standardGachaGlowColor(rarity)
     val glowStrength = standardGachaGlowStrength(rarity)
-    val resources = androidx.compose.ui.platform.LocalContext.current.resources
-    val leftShellBitmap = remember(resources) {
-        runCatching {
-            BitmapFactory.decodeResource(
-                resources,
-                R.drawable.standard_gacha_capsule_left_shell_art,
-            )?.asImageBitmap()
-        }.getOrNull()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val revealRequest = remember(context) {
+        ImageRequest.Builder(context)
+            .data(R.drawable.standard_gacha_capsule_reveal)
+            .memoryCachePolicy(CachePolicy.DISABLED)
+            .diskCachePolicy(CachePolicy.DISABLED)
+            .repeatCount(0)
+            .build()
     }
-    val rightShellBitmap = remember(resources) {
-        runCatching {
-            BitmapFactory.decodeResource(
-                resources,
-                R.drawable.standard_gacha_capsule_right_shell_art,
-            )?.asImageBitmap()
-        }.getOrNull()
-    }
-
-    val capsuleScale by animateFloatAsState(
-        targetValue = when (revealPhase) {
-            STANDARD_GACHA_PHASE_PRESS -> 0.94f
-            STANDARD_GACHA_PHASE_CRACK -> 1.02f
-            STANDARD_GACHA_PHASE_BURST -> 1.06f
-            else -> 1f
-        },
-        animationSpec = tween(durationMillis = 120),
-        label = "standard-gacha-capsule-scale",
-    )
     val glowAlpha by animateFloatAsState(
         targetValue = when (revealPhase) {
             STANDARD_GACHA_PHASE_PRESS -> 0.10f * glowStrength
@@ -321,11 +302,6 @@ private fun StandardGachaMachine(
         },
         animationSpec = tween(durationMillis = 180),
         label = "standard-gacha-glow",
-    )
-    val shellAlpha by animateFloatAsState(
-        targetValue = if (revealPhase == STANDARD_GACHA_PHASE_BURST) 1f else 0f,
-        animationSpec = tween(durationMillis = 90),
-        label = "standard-gacha-shells",
     )
 
     Card(
@@ -371,58 +347,20 @@ private fun StandardGachaMachine(
                     color = glowColor,
                 ) {}
 
-                if (revealPhase == STANDARD_GACHA_PHASE_BURST) {
-                    leftShellBitmap?.let { bitmap ->
-                        Image(
-                            bitmap = bitmap,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(164.dp)
-                                .offset(x = (-54).dp, y = 4.dp)
-                                .graphicsLayer {
-                                    rotationZ = -12f
-                                    alpha = shellAlpha
-                                },
-                        )
-                    }
-                    rightShellBitmap?.let { bitmap ->
-                        Image(
-                            bitmap = bitmap,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(164.dp)
-                                .offset(x = 54.dp, y = (-2).dp)
-                                .graphicsLayer {
-                                    rotationZ = 12f
-                                    alpha = shellAlpha
-                                },
-                        )
-                    }
+                if (pendingEntry != null) {
+                    AsyncImage(
+                        model = revealRequest,
+                        contentDescription = appString(R.string.standard_gacha_capsule_description),
+                        placeholder = painterResource(R.drawable.standard_gacha_capsule_reveal),
+                        error = painterResource(R.drawable.standard_gacha_capsule_reveal),
+                        modifier = Modifier.size(228.dp),
+                    )
                 } else {
                     Image(
-                        painter = painterResource(R.drawable.standard_gacha_capsule_base_art),
+                        painter = painterResource(R.drawable.standard_gacha_capsule_reveal),
                         contentDescription = appString(R.string.standard_gacha_capsule_description),
-                        modifier = Modifier
-                            .size(192.dp)
-                            .graphicsLayer {
-                                scaleX = capsuleScale
-                                scaleY = capsuleScale
-                            },
+                        modifier = Modifier.size(228.dp),
                     )
-                    if (revealPhase >= STANDARD_GACHA_PHASE_CRACK) {
-                        Image(
-                            painter = painterResource(R.drawable.standard_gacha_capsule_cracks_art),
-                            contentDescription = null,
-                            colorFilter = ColorFilter.tint(glowColor),
-                            modifier = Modifier
-                                .size(192.dp)
-                                .graphicsLayer {
-                                    scaleX = capsuleScale
-                                    scaleY = capsuleScale
-                                    alpha = 0.92f
-                                },
-                        )
-                    }
                 }
             }
 
