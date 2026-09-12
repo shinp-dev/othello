@@ -31,53 +31,58 @@ internal fun StandardTipBoard(example: StandardTipBoardExample) {
     val focus = remember(example.focusSquares) { example.focusSquares.map(::standardTipPosition).toSet() }
     val warnings = remember(example.warningSquares) { example.warningSquares.map(::standardTipPosition).toSet() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .widthIn(max = 240.dp)
-            .aspectRatio(1f)
-            .background(ChanrivaColors.board)
-            .padding(3.dp),
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center,
     ) {
-        repeat(8) { row ->
-            Row(Modifier.fillMaxWidth().weight(1f)) {
-                repeat(8) { column ->
-                    val position = Position(row, column)
-                    val disc = state.board[position]
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .border(0.5.dp, ChanrivaColors.boardGrid),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (position in focus) {
-                            Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .padding(2.dp)
-                                    .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(3.dp)),
-                            )
-                        }
-                        if (disc != Disc.EMPTY) {
-                            Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .padding(4.dp)
-                                    .background(
-                                        if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc,
-                                        CircleShape,
-                                    )
-                                    .border(1.dp, ChanrivaColors.discOutline, CircleShape),
-                            )
-                        }
-                        if (position in warnings) {
-                            Text(
-                                text = "×",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Black,
-                                color = MaterialTheme.colorScheme.error,
-                            )
+        Column(
+            modifier = Modifier
+                .widthIn(max = 240.dp)
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .background(ChanrivaColors.board)
+                .padding(3.dp),
+        ) {
+            repeat(8) { row ->
+                Row(Modifier.fillMaxWidth().weight(1f)) {
+                    repeat(8) { column ->
+                        val position = Position(row, column)
+                        val disc = state.board[position]
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .border(0.5.dp, ChanrivaColors.boardGrid),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (position in focus) {
+                                Box(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .padding(2.dp)
+                                        .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(3.dp)),
+                                )
+                            }
+                            if (disc != Disc.EMPTY) {
+                                Box(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .padding(4.dp)
+                                        .background(
+                                            if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc,
+                                            CircleShape,
+                                        )
+                                        .border(1.dp, ChanrivaColors.discOutline, CircleShape),
+                                )
+                            }
+                            if (position in warnings) {
+                                Text(
+                                    text = "×",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Black,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
                         }
                     }
                 }
