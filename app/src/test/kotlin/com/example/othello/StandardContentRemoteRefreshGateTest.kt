@@ -2,10 +2,10 @@ package com.example.othello
 
 import java.io.IOException
 import java.util.concurrent.CancellationException
-import kotlinx.coroutines.runBlocking
-import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlinx.coroutines.runBlocking
+import org.junit.Test
 
 class StandardContentRemoteRefreshGateTest {
     @Test
