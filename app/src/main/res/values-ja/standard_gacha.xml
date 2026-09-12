@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="standard_gacha_title">オセロガチャ</string>
-    <string name="standard_gacha_home_supporting">毎日100回無料で引いて、オセロ図鑑を増やす</string>
+    <string name="standard_gacha_title">ちゃんりばガチャ</string>
+    <string name="standard_gacha_home_supporting">毎日100回無料で引いて、リバーシ図鑑を増やす</string>
     <string name="standard_gacha_supporting">オセロの雑学・歴史・本などを集めよう。</string>
     <string name="standard_gacha_loading">ガチャを準備しています…</string>
     <string name="standard_gacha_load_error">ガチャを開けませんでした。取得済み情報は変更されていません。</string>
@@ -14,7 +14,7 @@
     <string name="standard_gacha_capsule_description">オセロ石をモチーフにしたガチャカプセル</string>
     <string name="standard_gacha_new">NEW!</string>
     <string name="standard_gacha_duplicate">取得済み</string>
-    <string name="standard_gacha_open_collection">オセロ図鑑を見る</string>
+    <string name="standard_gacha_open_collection">リバーシ図鑑を見る</string>
     <string name="standard_gacha_progress">図鑑 %1$d / %2$d</string>
     <string name="standard_gacha_daily_limit_reached_button">本日のガチャは終了</string>
     <string name="standard_gacha_daily_limit_reached">本日の100回分は終了しました。端末のローカル時刻で0:00になると回復します。</string>
