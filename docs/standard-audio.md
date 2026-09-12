@@ -15,9 +15,13 @@ Standard game / AI decision
 
 `StandardPresentationEngine` remains semantic and Android-API-free. `AndroidStandardSoundOutput` owns Android playback details only. The Standard match screen is the sole production composition root that creates this sound output.
 
+The Standard gacha uses a separate `AndroidStandardGachaEffects` owner. It preloads three short fanfares with `SoundPool`, selects one from the drawn card's rarity, and releases the pool when the gacha screen leaves composition. Common, rare, and special draws therefore sound distinct without loading match audio into the gacha screen.
+
 ## Bundling
 
 All Standard audio is packaged in the APK/AAB under `app/src/main/res/raw/`. No audio download, network permission, cache, or first-run preparation is required.
+
+The capsule break also calls `View.performHapticFeedback` at the burst boundary. It uses the system `CONFIRM` effect on Android 11 and newer and `CONTEXT_CLICK` on Android 8–10, so it follows the user's system touch-feedback preference and does not require the `VIBRATE` permission.
 
 ## Heartbeat
 

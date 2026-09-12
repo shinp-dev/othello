@@ -163,6 +163,60 @@ def heartbeat(t: float, _rng: random.Random) -> float:
     )
 
 
+def gacha_common(t: float, _rng: random.Random) -> float:
+    """A compact, warm three-note reward without borrowing a recorded sample."""
+    return note_mix(t, [
+        (0.00, 659.25, 0.46, 9.0),
+        (0.09, 783.99, 0.50, 8.3),
+        (0.20, 1046.50, 0.62, 7.4),
+    ]) + 0.08 * thump(t, 92.0, 24.0)
+
+
+def gacha_rare(t: float, _rng: random.Random) -> float:
+    """An ascending five-note reveal with a short crystalline tail."""
+    notes = [
+        (0.00, 587.33, 0.38, 7.6),
+        (0.08, 739.99, 0.42, 7.3),
+        (0.17, 880.00, 0.48, 7.0),
+        (0.28, 1174.66, 0.58, 6.2),
+        (0.43, 1479.98, 0.66, 5.4),
+    ]
+    shimmer = 0.0
+    if 0.38 <= t <= 0.92:
+        progress = (t - 0.38) / 0.54
+        shimmer = (
+            0.09
+            * math.sin(TAU * (1720.0 + 920.0 * progress) * t)
+            * math.sin(math.pi * progress)
+        )
+    return note_mix(t, notes) + shimmer + 0.08 * thump(t, 104.0, 25.0)
+
+
+def gacha_special(t: float, _rng: random.Random) -> float:
+    """A layered original fanfare with low impact, lift, and a sparkling crown."""
+    notes = [
+        (0.00, 392.00, 0.26, 5.5),
+        (0.00, 523.25, 0.34, 5.5),
+        (0.08, 659.25, 0.38, 5.8),
+        (0.17, 783.99, 0.42, 5.6),
+        (0.28, 1046.50, 0.54, 5.0),
+        (0.42, 1318.51, 0.62, 4.7),
+        (0.60, 1567.98, 0.72, 4.2),
+        (0.78, 2093.00, 0.58, 3.8),
+        (0.78, 2637.02, 0.42, 3.8),
+    ]
+    shimmer = 0.0
+    if 0.52 <= t <= 1.34:
+        progress = (t - 0.52) / 0.82
+        shimmer = (
+            0.10
+            * math.sin(TAU * (1900.0 + 1450.0 * progress) * t)
+            * math.sin(math.pi * progress)
+        )
+    impact = 0.15 * thump(t, 82.0, 16.0) + 0.09 * thump(t - 0.40, 96.0, 18.0)
+    return note_mix(t, notes) + shimmer + impact
+
+
 SOUNDS = {
     "standard_stone_place": (0.14, stone),
     "standard_opponent_appear": (0.72, appear),
@@ -172,6 +226,9 @@ SOUNDS = {
     "standard_level_clear": (1.20, level_clear),
     "standard_campaign_conquered": (1.65, conquer),
     "standard_heartbeat": (1.20, heartbeat),
+    "standard_gacha_common": (0.72, gacha_common),
+    "standard_gacha_rare": (1.08, gacha_rare),
+    "standard_gacha_special": (1.52, gacha_special),
 }
 
 
