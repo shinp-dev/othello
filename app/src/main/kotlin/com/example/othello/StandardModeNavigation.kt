@@ -3,6 +3,7 @@ package com.example.othello
 import androidx.activity.compose.BackHandler
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -403,13 +404,6 @@ private fun StandardHomeScreen(
                     onClick = { onFeature(StandardFeature.AI) },
                     modifier = Modifier.height(heroHeight),
                 )
-                StandardHomeWideFeatureCard(
-                    title = appString(R.string.standard_winning_tips_title),
-                    supportingText = appString(R.string.standard_winning_tips_home_supporting),
-                    artworkDrawableRes = R.drawable.standard_home_winning_tips_art,
-                    onClick = onWinningTips,
-                    modifier = Modifier.height(wideCardHeight),
-                )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -431,6 +425,13 @@ private fun StandardHomeScreen(
                         modifier = Modifier.weight(1f),
                     )
                 }
+                StandardHomeWideFeatureCard(
+                    title = appString(R.string.standard_winning_tips_title),
+                    supportingText = appString(R.string.standard_winning_tips_home_supporting),
+                    artworkDrawableRes = R.drawable.standard_home_winning_tips_art,
+                    onClick = onWinningTips,
+                    modifier = Modifier.height(wideCardHeight),
+                )
                 StandardHomeWideFeatureCard(
                     title = appString(StandardFeature.REAL_EVENT.titleRes),
                     supportingText = appString(StandardFeature.REAL_EVENT.supportingTextRes),
@@ -461,6 +462,8 @@ private fun StandardOpponentPackPreviewCard(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        border = standardHomeCardBorder(),
+        elevation = standardHomeCardElevation(),
     ) {
         Box(Modifier.fillMaxSize()) {
             Image(
@@ -511,6 +514,8 @@ private fun StandardHomeWideFeatureCard(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = ChanrivaColors.surfaceElevated),
+        border = standardHomeCardBorder(),
+        elevation = standardHomeCardElevation(),
     ) {
         Box(Modifier.fillMaxSize()) {
             Image(
@@ -569,6 +574,8 @@ private fun StandardHomeMiniFeatureCard(
         onClick = onClick,
         modifier = modifier.fillMaxSize(),
         colors = CardDefaults.cardColors(containerColor = ChanrivaColors.surfaceElevated),
+        border = standardHomeCardBorder(),
+        elevation = standardHomeCardElevation(),
     ) {
         Row(
             modifier = Modifier
@@ -593,6 +600,18 @@ private fun StandardHomeMiniFeatureCard(
         }
     }
 }
+
+@Composable
+private fun standardHomeCardBorder(): BorderStroke = BorderStroke(
+    width = 1.dp,
+    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
+)
+
+@Composable
+private fun standardHomeCardElevation() = CardDefaults.cardElevation(
+    defaultElevation = 1.dp,
+    pressedElevation = 0.dp,
+)
 
 @Composable
 private fun StandardComingSoonScreen(
