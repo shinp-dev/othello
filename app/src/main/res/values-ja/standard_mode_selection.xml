@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mode_selection_title">楽しみ方を選ぶ</string>
+    <string name="mode_selection_supporting">今日の気分に合う、ちゃんりばの遊び方を選んでください。</string>
+    <string name="mode_selection_recommended">おすすめ</string>
+    <string name="mode_selection_advanced_badge">上級者向け</string>
+    <string name="mode_selection_standard_supporting">はじめての人・楽しく遊びたい人へ</string>
+    <string name="mode_selection_standard_features">どうぶつチャレンジ ・ ガチャ ・ 図鑑 ・ イベント</string>
+    <string name="mode_selection_advanced_supporting">本格的に打ちたい・研究したい人へ</string>
+    <string name="mode_selection_advanced_features">AI対局 ・ 解析 ・ 棋譜レビュー ・ 理論探求</string>
+    <string name="mode_selection_switch_note">モードはあとからいつでも切り替えられます。</string>
+    <string name="mode_selection_analysis_preview">AI解析</string>
+    <string name="mode_selection_study_preview">棋譜レビュー・理論探求</string>
+</resources>

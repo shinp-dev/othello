@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mode_selection_title">Choose how to play</string>
+    <string name="mode_selection_supporting">Choose the side of CHANRIVA that fits you today.</string>
+    <string name="mode_selection_recommended">Recommended</string>
+    <string name="mode_selection_advanced_badge">For advanced players</string>
+    <string name="mode_selection_standard_supporting">For first-timers and anyone who wants to play for fun</string>
+    <string name="mode_selection_standard_features">Animal Challenge · Gacha · Collection · Events</string>
+    <string name="mode_selection_advanced_supporting">For serious play, review, and deeper study</string>
+    <string name="mode_selection_advanced_features">AI matches · Analysis · Game review · Theory</string>
+    <string name="mode_selection_switch_note">You can switch modes anytime.</string>
+    <string name="mode_selection_analysis_preview">AI analysis</string>
+    <string name="mode_selection_study_preview">Review &amp; theory</string>
+</resources>
