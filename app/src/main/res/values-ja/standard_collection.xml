@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="standard_collection_title">オセロ図鑑</string>
-    <string name="standard_collection_home_supporting">集めたオセロ雑学や本を見返す</string>
+    <string name="standard_collection_title">リバーシ図鑑</string>
+    <string name="standard_collection_home_supporting">集めたリバーシ雑学や本を見返す</string>
     <string name="standard_collection_supporting">集めたカードを見返せます。未取得カードは手に入れるまで秘密です。</string>
     <string name="standard_collection_loading">図鑑を開いています…</string>
     <string name="standard_collection_load_error">図鑑を開けませんでした。取得済み情報は変更されていません。</string>
