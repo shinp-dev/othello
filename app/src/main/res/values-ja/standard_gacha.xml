@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="standard_gacha_title">ちゃんりばガチャ</string>
-    <string name="standard_gacha_home_supporting">毎日100回無料で引いて、リバーシ図鑑を増やす</string>
+    <string name="standard_gacha_home_supporting">毎日100回まで無料で引いて、リバーシ図鑑を増やす</string>
     <string name="standard_gacha_supporting">リバーシの雑学・歴史・本などを集めよう。</string>
     <string name="standard_gacha_loading">ガチャを準備しています…</string>
     <string name="standard_gacha_load_error">ガチャを開けませんでした。取得済み情報は変更されていません。</string>
