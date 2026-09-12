@@ -8,13 +8,13 @@ enum class StandardAiLevel(
     val edaxLevel: Int,
 ) {
     LV1(1, 1),
-    LV2(2, 2),
-    LV3(3, 3),
-    LV4(4, 4),
-    LV5(5, 1),
+    LV2(2, 1),
+    LV3(3, 1),
+    LV4(4, 1),
+    LV5(5, 2),
     LV6(6, 2),
-    LV7(7, 3),
-    LV8(8, 4),
+    LV7(7, 2),
+    LV8(8, 2),
     ;
 
     fun next(): StandardAiLevel? = entries.getOrNull(ordinal + 1)
