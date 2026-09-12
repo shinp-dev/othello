@@ -8,5 +8,12 @@
     <string name="standard_ai_result_draw">Draw!</string>
     <string name="standard_ai_first_clear">Lv%1$d cleared!</string>
     <string name="standard_ai_next_level_unlocked">Lv%1$d unlocked!</string>
-    <string name="standard_ai_result_continue">Continue</string>
+    <string name="standard_ai_result_next_opponent">Meet the next animal</string>
+    <string name="standard_ai_result_retry">Try again</string>
+    <string name="standard_ai_result_rematch">Play again</string>
+    <string name="standard_ai_result_choose_opponent">Choose an animal</string>
+    <string name="standard_ai_result_opponent_list">View animal list</string>
+    <string name="standard_ai_exit_title">Leave this match?</string>
+    <string name="standard_ai_exit_message">End this match and return to animal selection.</string>
+    <string name="standard_ai_exit_action">Leave match</string>
 </resources>

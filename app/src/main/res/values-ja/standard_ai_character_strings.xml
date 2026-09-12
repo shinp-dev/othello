@@ -8,5 +8,12 @@
     <string name="standard_ai_result_draw">引き分け！</string>
     <string name="standard_ai_first_clear">Lv%1$d クリア！</string>
     <string name="standard_ai_next_level_unlocked">Lv%1$d が解放された！</string>
-    <string name="standard_ai_result_continue">続ける</string>
+    <string name="standard_ai_result_next_opponent">次のどうぶつへ</string>
+    <string name="standard_ai_result_retry">もういちど挑戦</string>
+    <string name="standard_ai_result_rematch">もういちど対局</string>
+    <string name="standard_ai_result_choose_opponent">どうぶつを選ぶ</string>
+    <string name="standard_ai_result_opponent_list">どうぶつ一覧へ</string>
+    <string name="standard_ai_exit_title">対局をやめますか？</string>
+    <string name="standard_ai_exit_message">この対局を終えて、どうぶつ選択へ戻ります。</string>
+    <string name="standard_ai_exit_action">対局をやめる</string>
 </resources>
