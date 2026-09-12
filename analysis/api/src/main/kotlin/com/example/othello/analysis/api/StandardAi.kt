@@ -73,11 +73,7 @@ data class StandardAiConfig(
 /** Current campaign preset. Display level, Edax strength, and personality remain distinct concepts. */
 fun standardCampaignAiConfig(level: StandardAiLevel): StandardAiConfig = StandardAiConfig(
     edaxLevel = level.edaxLevel,
-    personality = if (level.value <= StandardAiLevel.LV4.value) {
-        StandardAiPersonalities.natural(level)
-    } else {
-        StandardAiPersonalities.serious()
-    },
+    personality = StandardAiPersonalities.natural(level),
 )
 
 data class StandardAiMoveResult(
