@@ -12,57 +12,57 @@
     <string name="standard_winning_tips_previous">Previous</string>
     <string name="standard_winning_tips_next">Next</string>
 
-    <string name="standard_winning_tip_take_less_title">Do not grab too many discs early</string>
-    <string name="standard_winning_tip_take_less_lead">More discs does not always mean a better position.</string>
-    <string name="standard_winning_tip_take_less_body">Early in the game, flipping many discs can expose more edges of your own discs and give your opponent useful choices. A quiet move that flips only a little can be easier to control.</string>
-    <string name="standard_winning_tip_take_less_takeaway">Do not automatically choose the move that flips the most discs.</string>
-    <string name="standard_winning_tip_take_less_caption">The outlined move flips only one disc. The × move flips four, but taking more is not automatically better.</string>
+    <string name="standard_winning_tip_take_less_title">Take fewer discs early</string>
+    <string name="standard_winning_tip_take_less_lead">Early in the game, choose moves that flip fewer discs.</string>
+    <string name="standard_winning_tip_take_less_body">Flipping many discs early exposes more of your discs and gives the opponent more choices. Keep your discs compact and flip as little as you can.</string>
+    <string name="standard_winning_tip_take_less_takeaway">Do not pick the move that flips the most. Look for a smaller flip.</string>
+    <string name="standard_winning_tip_take_less_caption">Outlined: 1 disc. ×: 4 discs.\nEarly on, choose the smaller flip.</string>
 
     <string name="standard_winning_tip_mobility_title">Reduce your opponent’s choices</string>
-    <string name="standard_winning_tip_mobility_lead">A strong move often leaves the opponent with fewer places to play.</string>
-    <string name="standard_winning_tip_mobility_body">Instead of asking only how many discs you flip, look at what the opponent can do next. In this example the outlined move leaves much less freedom than the × move.</string>
-    <string name="standard_winning_tip_mobility_takeaway">Before you play, ask: “How many moves will they have after this?”</string>
-    <string name="standard_winning_tip_mobility_caption">Outlined: the opponent gets 4 legal moves. ×: the opponent gets 9.</string>
+    <string name="standard_winning_tip_mobility_lead">A strong move reduces the opponent’s options.</string>
+    <string name="standard_winning_tip_mobility_body">Do not focus on how many discs you flip. Look at how many legal moves the opponent gets next. Fewer choices for them means more control for you.</string>
+    <string name="standard_winning_tip_mobility_takeaway">Before you play, ask: “How many moves will they have next?”</string>
+    <string name="standard_winning_tip_mobility_caption">Outlined: 4 legal moves for the opponent.\n×: 9 legal moves. Choose the outlined move.</string>
 
-    <string name="standard_winning_tip_corner_title">Corners are very strong</string>
-    <string name="standard_winning_tip_corner_lead">A disc in a corner can never be flipped.</string>
-    <string name="standard_winning_tip_corner_body">Corners are special because nothing can surround them from outside the board. Taking one often gives you a stable base for the nearby edge as well.</string>
-    <string name="standard_winning_tip_corner_takeaway">When a corner is available, check it before looking elsewhere.</string>
-    <string name="standard_winning_tip_corner_caption">The outlined corner is a legal move in this position.</string>
+    <string name="standard_winning_tip_corner_title">Take a corner when you can</string>
+    <string name="standard_winning_tip_corner_lead">If a corner is available, take it.</string>
+    <string name="standard_winning_tip_corner_body">A corner disc can never be flipped. Taking a corner also gives you a strong base for securing the nearby edge. Check corners first.</string>
+    <string name="standard_winning_tip_corner_takeaway">If you can play a corner, take the corner first.</string>
+    <string name="standard_winning_tip_corner_caption">The outlined corner is available.\nTake the corner in this position.</string>
 
-    <string name="standard_winning_tip_x_square_title">Be careful next to an empty corner</string>
-    <string name="standard_winning_tip_x_square_lead">The diagonal square beside a corner can hand that corner to your opponent.</string>
-    <string name="standard_winning_tip_x_square_body">The diagonal square next to a corner is often called an X-square. It is not always bad, but playing there without checking can make the corner immediately available to the opponent.</string>
-    <string name="standard_winning_tip_x_square_takeaway">Before playing diagonally beside an empty corner, check whether the opponent can take the corner next.</string>
-    <string name="standard_winning_tip_x_square_caption">Playing the × at b2 makes the outlined a1 corner available to the opponent.</string>
+    <string name="standard_winning_tip_x_square_title">Stay off the diagonal next to an empty corner</string>
+    <string name="standard_winning_tip_x_square_lead">Do not play diagonally next to an empty corner.</string>
+    <string name="standard_winning_tip_x_square_body">Playing on that diagonal square gives the opponent an easy path to the corner. While the corner is empty, stay off that square.</string>
+    <string name="standard_winning_tip_x_square_takeaway">Avoid the diagonal square beside an empty corner.</string>
+    <string name="standard_winning_tip_x_square_caption">Playing × at b2 gives the opponent the a1 corner.\nStay off the diagonal beside an empty corner.</string>
 
     <string name="standard_winning_tip_edge_title">Do not rush to the edge</string>
-    <string name="standard_winning_tip_edge_lead">An edge looks safe, but taking it too early can make the position harder to control.</string>
-    <string name="standard_winning_tip_edge_body">Edge discs are harder to flip than interior discs, but they are not automatically stable. Early edge moves can create access to corners or force you into awkward follow-up moves.</string>
-    <string name="standard_winning_tip_edge_takeaway">Do not choose a move just because it reaches the edge.</string>
-    <string name="standard_winning_tip_edge_caption">The × move reaches the edge. The outlined interior move is worth comparing first.</string>
+    <string name="standard_winning_tip_edge_lead">In the opening and midgame, do not rush to the edge.</string>
+    <string name="standard_winning_tip_edge_body">Going to the edge too early reduces your future choices and makes corners easier for the opponent to attack. Prefer an interior move first.</string>
+    <string name="standard_winning_tip_edge_takeaway">Choose the interior before the edge.</string>
+    <string name="standard_winning_tip_edge_caption">× goes to the edge. The outline stays inside.\nAt this stage, choose the interior move.</string>
 
-    <string name="standard_winning_tip_endgame_title">In the endgame, count discs again</string>
-    <string name="standard_winning_tip_endgame_lead">The goal changes as the board fills up: the final disc count now matters directly.</string>
-    <string name="standard_winning_tip_endgame_body">Early on, mobility matters more than the current score. With only a few empty squares left, start comparing how many discs each sequence can leave you with at the end.</string>
-    <string name="standard_winning_tip_endgame_takeaway">When the empty spaces become few, switch from “stay flexible” to “how does this finish?”</string>
-    <string name="standard_winning_tip_endgame_caption">Only 10 empty squares remain. The outlined move is one of the large-flip candidates to compare.</string>
+    <string name="standard_winning_tip_endgame_title">In the endgame, play for the final count</string>
+    <string name="standard_winning_tip_endgame_lead">In the endgame, play for the number of discs you will have at the finish.</string>
+    <string name="standard_winning_tip_endgame_body">Early on, keep your disc count low and your options open. Once only a few empty squares remain, switch gears and choose the sequence that leaves you with more discs at the end.</string>
+    <string name="standard_winning_tip_endgame_takeaway">In the endgame, ask: “How many discs will I have at the finish?”</string>
+    <string name="standard_winning_tip_endgame_caption">10 empty squares remain.\nFrom here, focus on the final disc count.</string>
 
-    <string name="standard_winning_tip_stable_title">Notice discs that can no longer flip</string>
-    <string name="standard_winning_tip_stable_lead">Stable discs are points you can rely on until the game ends.</string>
-    <string name="standard_winning_tip_stable_body">A corner disc is always stable. From a secured corner, connected edge discs can also become stable. Learning to notice these discs makes the final score easier to estimate.</string>
-    <string name="standard_winning_tip_stable_takeaway">After someone takes a corner, look along the connected edges for discs that may already be safe.</string>
-    <string name="standard_winning_tip_stable_caption">The outlined corner has already been taken, so that disc can never flip again.</string>
+    <string name="standard_winning_tip_stable_title">Count discs that can never flip</string>
+    <string name="standard_winning_tip_stable_lead">A disc that can no longer flip is yours for the rest of the game.</string>
+    <string name="standard_winning_tip_stable_body">Corner discs stay yours forever. Same-color edge discs connected to a secured corner are stable too. Count these stable discs in the endgame.</string>
+    <string name="standard_winning_tip_stable_takeaway">After taking a corner, count the stable discs along its edges.</string>
+    <string name="standard_winning_tip_stable_caption">The outlined corner has already been taken.\nThat disc can never flip again.</string>
 
-    <string name="standard_winning_tip_parity_title">Parity: look at even and odd empty regions</string>
-    <string name="standard_winning_tip_parity_lead">This is an expert idea. Near the end, who gets the last move in a region can matter a lot.</string>
-    <string name="standard_winning_tip_parity_body">When empty squares split into small regions, count how many squares each region has. Even and odd regions interact with whose turn it is, passes, and move order. Use this only after the earlier endgame ideas feel comfortable.</string>
-    <string name="standard_winning_tip_parity_takeaway">Start simply: when the board is nearly full, notice whether an isolated empty region has an even or odd number of squares.</string>
-    <string name="standard_winning_tip_parity_caption">The outlined top-right region has 2 empty squares: an even-sized region.</string>
+    <string name="standard_winning_tip_parity_title">Parity: count even and odd empty regions</string>
+    <string name="standard_winning_tip_parity_lead">In the endgame, count whether each empty region has an even or odd number of squares.</string>
+    <string name="standard_winning_tip_parity_body">When empty squares split into small regions, count the size of each region. Even and odd counts tell you who is set up to make the last move there. Use parity to plan the remaining order of play.</string>
+    <string name="standard_winning_tip_parity_takeaway">When you see an isolated empty region, count whether it is even or odd.</string>
+    <string name="standard_winning_tip_parity_caption">The outlined top-right region has 2 empty squares.\nIt is an even region.</string>
 
     <string name="standard_winning_tip_tempo_title">Count remaining moves, not only discs</string>
-    <string name="standard_winning_tip_tempo_lead">Another expert habit is to estimate how many useful moves each side can still make.</string>
-    <string name="standard_winning_tip_tempo_body">In a tight endgame, a move can be valuable because it changes who is forced to enter a region first. Counting the remaining empty squares and likely move order is the bridge from simple endgame play to deeper reading.</string>
-    <string name="standard_winning_tip_tempo_takeaway">With only a few spaces left, count the likely moves before choosing the move that flips the most right now.</string>
-    <string name="standard_winning_tip_tempo_caption">The outlined empty squares are useful checkpoints when counting the remaining move order.</string>
+    <string name="standard_winning_tip_tempo_lead">In the endgame, count remaining moves before current flips.</string>
+    <string name="standard_winning_tip_tempo_body">Once only a few empty squares remain, count where each side can still play and how many turns are left. Read the sequence first, then choose the current move.</string>
+    <string name="standard_winning_tip_tempo_takeaway">In the endgame, ask “How many moves are left?” before “How many discs flip now?”</string>
+    <string name="standard_winning_tip_tempo_caption">Use the outlined empty squares as checkpoints.\nCount the remaining sequence.</string>
 </resources>
