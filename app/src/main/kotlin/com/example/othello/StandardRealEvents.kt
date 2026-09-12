@@ -349,6 +349,10 @@ private fun StandardRealEventScreen(
                     }
                 }
             }
+
+            item {
+                StandardOfficialOthelloBlockLinks()
+            }
         }
     }
 }

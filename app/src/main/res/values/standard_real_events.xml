@@ -6,4 +6,21 @@
     <string name="standard_real_event_retry">Try again</string>
     <string name="standard_real_event_source">Open source</string>
     <string name="standard_real_event_retrieved_date">Information retrieved: %1$s</string>
+    <string name="standard_real_event_official_title">Find official tournaments</string>
+    <string name="standard_real_event_official_supporting">Check the latest tournaments and meetups on each Japan Othello Association regional page.</string>
+    <string name="standard_real_event_block_hokkaido">Hokkaido</string>
+    <string name="standard_real_event_block_tohoku">Tohoku</string>
+    <string name="standard_real_event_block_kita_kantou">North Kanto</string>
+    <string name="standard_real_event_block_higashi_kantou">East Kanto</string>
+    <string name="standard_real_event_block_ibaraki">Ibaraki</string>
+    <string name="standard_real_event_block_tokyo">Tokyo</string>
+    <string name="standard_real_event_block_kanagawa">Kanagawa</string>
+    <string name="standard_real_event_block_niigata">Niigata</string>
+    <string name="standard_real_event_block_tokai">Tokai</string>
+    <string name="standard_real_event_block_chubu">Chubu</string>
+    <string name="standard_real_event_block_hokuriku">Hokuriku</string>
+    <string name="standard_real_event_block_kinki">Kinki</string>
+    <string name="standard_real_event_block_hyogo">Hyogo</string>
+    <string name="standard_real_event_block_chushikoku">Chugoku/Shikoku</string>
+    <string name="standard_real_event_block_kyushu">Kyushu</string>
 </resources>
