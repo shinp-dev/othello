@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="standard_gacha_title">Othello Gacha</string>
-    <string name="standard_gacha_home_supporting">Draw up to 100 free cards each day and grow your Othello collection</string>
+    <string name="standard_gacha_title">CHANRIVA Gacha</string>
+    <string name="standard_gacha_home_supporting">Draw up to 100 free cards each day and grow your Reversi collection</string>
     <string name="standard_gacha_supporting">Collect Othello facts, history, books and more.</string>
     <string name="standard_gacha_loading">Preparing the gacha…</string>
     <string name="standard_gacha_load_error">The gacha could not be opened. Your collection was not changed.</string>
@@ -14,7 +14,7 @@
     <string name="standard_gacha_capsule_description">Gacha capsule inspired by an Othello disc</string>
     <string name="standard_gacha_new">NEW!</string>
     <string name="standard_gacha_duplicate">Already collected</string>
-    <string name="standard_gacha_open_collection">Open Othello Collection</string>
+    <string name="standard_gacha_open_collection">Open Reversi Collection</string>
     <string name="standard_gacha_progress">Collection %1$d / %2$d</string>
     <string name="standard_gacha_daily_limit_reached_button">No draws left today</string>
     <string name="standard_gacha_daily_limit_reached">Today’s 100 free draws are used up. They reset at 00:00 in the device local time.</string>
