@@ -12,57 +12,57 @@
     <string name="standard_winning_tips_previous">前へ</string>
     <string name="standard_winning_tips_next">次へ</string>
 
-    <string name="standard_winning_tip_take_less_title">最初から石を取りすぎない</string>
-    <string name="standard_winning_tip_take_less_lead">石が多い＝有利、とは限りません。</string>
-    <string name="standard_winning_tip_take_less_body">序盤にたくさん返すと、自分の石のまわりが相手に使われやすくなり、相手の選択肢を増やすことがあります。少しだけ返す静かな手のほうが、局面をコントロールしやすいことがあります。</string>
-    <string name="standard_winning_tip_take_less_takeaway">一番たくさん取れる手を、反射的に選ばない。</string>
-    <string name="standard_winning_tip_take_less_caption">枠の手は1枚返し。×の手は4枚返しますが、多く取るだけでは強い手とは限りません。</string>
+    <string name="standard_winning_tip_take_less_title">序盤は石を取りすぎない</string>
+    <string name="standard_winning_tip_take_less_lead">序盤は、石を少なく取る手を選びましょう。</string>
+    <string name="standard_winning_tip_take_less_body">序盤にたくさん返すと、自分の石のまわりを相手に使われ、相手の選択肢が増えます。少なく返して、自分の石を内側にまとめるのが基本です。</string>
+    <string name="standard_winning_tip_take_less_takeaway">一番たくさん取れる手は選ばない。少なく返す手を探す。</string>
+    <string name="standard_winning_tip_take_less_caption">枠の手は1枚返し。×の手は4枚返し。\n序盤は、枠のように少なく返す手を選びます。</string>
 
     <string name="standard_winning_tip_mobility_title">相手が置ける場所を減らそう</string>
-    <string name="standard_winning_tip_mobility_lead">強い手は、相手の選択肢を少なくすることがあります。</string>
-    <string name="standard_winning_tip_mobility_body">自分が何枚返すかだけでなく、そのあと相手がどこへ置けるかも見てみましょう。この例では、枠の手のほうが×の手より相手の自由をかなり減らせます。</string>
-    <string name="standard_winning_tip_mobility_takeaway">「この手を打ったら、相手は何か所に置ける？」だけ考えてみる。</string>
-    <string name="standard_winning_tip_mobility_caption">枠の手なら相手は4か所、×の手なら9か所に置けます。</string>
+    <string name="standard_winning_tip_mobility_lead">強い手は、相手が置ける場所を減らす手です。</string>
+    <string name="standard_winning_tip_mobility_body">自分が何枚返すかより、そのあと相手が何か所に置けるかを見ましょう。相手の選択肢を減らすほど、こちらが局面をコントロールしやすくなります。</string>
+    <string name="standard_winning_tip_mobility_takeaway">打つ前に「相手は次に何か所へ置ける？」と考える。</string>
+    <string name="standard_winning_tip_mobility_caption">枠の手なら相手は4か所。\n×の手なら9か所に置けます。枠の手を選びます。</string>
 
-    <string name="standard_winning_tip_corner_title">角はとても強い</string>
-    <string name="standard_winning_tip_corner_lead">角に置いた石は、もう二度とひっくり返りません。</string>
-    <string name="standard_winning_tip_corner_body">角は盤の外側から挟まれることがない特別な場所です。角を取ると、その近くの辺も安定させやすくなります。</string>
-    <string name="standard_winning_tip_corner_takeaway">角に置けるときは、ほかの手より先に一度チェックする。</string>
-    <string name="standard_winning_tip_corner_caption">この局面では、枠で示した角に実際に置けます。</string>
+    <string name="standard_winning_tip_corner_title">角は取れるなら取る</string>
+    <string name="standard_winning_tip_corner_lead">角に置けるなら、角を取りましょう。</string>
+    <string name="standard_winning_tip_corner_body">角の石は二度とひっくり返りません。角を取ると、その近くの辺も自分の石で固めやすくなります。角は最優先で確認する場所です。</string>
+    <string name="standard_winning_tip_corner_takeaway">角に置けるときは、まず角を取る。</string>
+    <string name="standard_winning_tip_corner_caption">枠で示した角に置けます。\nこの局面では角を取ります。</string>
 
-    <string name="standard_winning_tip_x_square_title">角のとなりはちょっと危険</string>
-    <string name="standard_winning_tip_x_square_lead">空いている角の斜め隣は、相手に角を渡す原因になりやすい場所です。</string>
-    <string name="standard_winning_tip_x_square_body">角の斜め隣はX打ちと呼ばれることがあります。いつでも悪いわけではありませんが、何も考えずに置くと、その直後に相手が角を取れる形になることがあります。</string>
-    <string name="standard_winning_tip_x_square_takeaway">空いている角の斜め隣に置く前に、次に相手が角を取れないか確認する。</string>
-    <string name="standard_winning_tip_x_square_caption">b2の×へ置くと、相手が枠で示したa1の角を取れるようになります。</string>
+    <string name="standard_winning_tip_x_square_title">角の斜め隣には置かない</string>
+    <string name="standard_winning_tip_x_square_lead">空いている角の斜め隣には置かない。</string>
+    <string name="standard_winning_tip_x_square_body">角の斜め隣へ置くと、相手に角を渡しやすくなります。角が空いている間は、このマスを避けると覚えましょう。</string>
+    <string name="standard_winning_tip_x_square_takeaway">空いている角の斜め隣は避ける。</string>
+    <string name="standard_winning_tip_x_square_caption">b2の×へ置くと、相手がa1の角を取れます。\n空いている角の斜め隣は避けます。</string>
 
-    <string name="standard_winning_tip_edge_title">辺も急いで取らなくていい</string>
-    <string name="standard_winning_tip_edge_lead">端にあるから安全、とは限りません。</string>
-    <string name="standard_winning_tip_edge_body">辺の石は内側より返されにくいですが、確定しているとは限りません。早い段階で辺へ出ると、角への道を作ったり、その後の手を苦しくしたりすることがあります。</string>
-    <string name="standard_winning_tip_edge_takeaway">「辺だから強そう」という理由だけで選ばない。</string>
-    <string name="standard_winning_tip_edge_caption">×は辺へ出る手。まずは枠で示した内側の手とも比べてみましょう。</string>
+    <string name="standard_winning_tip_edge_title">辺は急いで取らない</string>
+    <string name="standard_winning_tip_edge_lead">序盤・中盤は、辺を急いで取りません。</string>
+    <string name="standard_winning_tip_edge_body">辺へ早く出ると、その後の打てる場所が減り、角も相手に狙われやすくなります。端にあるだけで強い手にはなりません。まず内側の手を選びましょう。</string>
+    <string name="standard_winning_tip_edge_takeaway">辺より、まず内側の手を選ぶ。</string>
+    <string name="standard_winning_tip_edge_caption">×は辺へ出る手。枠は内側の手。\nこの段階では枠の手を選びます。</string>
 
-    <string name="standard_winning_tip_endgame_title">終盤になったら石数も意識する</string>
-    <string name="standard_winning_tip_endgame_lead">盤が埋まってきたら、最後に何枚残るかが直接大事になります。</string>
-    <string name="standard_winning_tip_endgame_body">序盤は今の石数より自由に打てることが重要です。空きマスが少なくなったら、そこから先の手順で最終的に何枚残せるかを少しずつ考えていきます。</string>
-    <string name="standard_winning_tip_endgame_takeaway">空きマスが少なくなったら「自由に打つ」から「どう終わる？」へ頭を切り替える。</string>
-    <string name="standard_winning_tip_endgame_caption">残り10マス。枠の手は、一度に多く返せる候補の1つです。</string>
+    <string name="standard_winning_tip_endgame_title">終盤は石数を取りにいく</string>
+    <string name="standard_winning_tip_endgame_lead">終盤は、最後に残る石の数を取りにいきます。</string>
+    <string name="standard_winning_tip_endgame_body">序盤は石数を増やさないのが基本ですが、空きマスが少なくなったら考え方を切り替えます。残りの手順を見て、最後に自分の石が多く残る手を選びましょう。</string>
+    <string name="standard_winning_tip_endgame_takeaway">終盤になったら「最後に何枚残る？」で手を選ぶ。</string>
+    <string name="standard_winning_tip_endgame_caption">残り10マス。\nここからは最終石数を意識して手を選びます。</string>
 
-    <string name="standard_winning_tip_stable_title">もう返らない石に気づこう</string>
-    <string name="standard_winning_tip_stable_lead">最後まで返らない石が分かると、終盤の見通しがよくなります。</string>
-    <string name="standard_winning_tip_stable_body">角の石は必ず確定石です。角からつながった辺の石も、並び方によってはそのまま確定していきます。返らない石を見つけられると、最終石数を考えやすくなります。</string>
-    <string name="standard_winning_tip_stable_takeaway">角が取られたら、その角から辺に沿って「もう返らない石」がないか見る。</string>
-    <string name="standard_winning_tip_stable_caption">枠の角はすでに取られているため、この石はもう返りません。</string>
+    <string name="standard_winning_tip_stable_title">もう返らない石を数えよう</string>
+    <string name="standard_winning_tip_stable_lead">もう返らない石は、そのまま最後まで自分の石です。</string>
+    <string name="standard_winning_tip_stable_body">角の石は必ず最後まで残ります。角から同じ色でつながった辺の石も、返らない石になります。終盤は、もう返らない石を数えて勝ち筋を見つけましょう。</string>
+    <string name="standard_winning_tip_stable_takeaway">角を取ったら、辺に沿って「もう返らない石」を数える。</string>
+    <string name="standard_winning_tip_stable_caption">枠の角はすでに取られています。\nこの石はもう返りません。</string>
 
     <string name="standard_winning_tip_parity_title">偶数理論：空きマスの偶奇を見る</string>
-    <string name="standard_winning_tip_parity_lead">ここからはエキスパート級。終盤では、空き領域の最後をどちらが打つかが効いてきます。</string>
-    <string name="standard_winning_tip_parity_body">空きマスが小さな領域に分かれてきたら、その領域が何マスあるか数えます。偶数か奇数かは手番やパス、打つ順番と組み合わさって効いてきます。まずは前までの終盤の考え方が自然に使えてからで十分です。</string>
-    <string name="standard_winning_tip_parity_takeaway">終盤だけでいいので、孤立した空き領域が偶数マスか奇数マスか見てみる。</string>
-    <string name="standard_winning_tip_parity_caption">右上の枠で示した領域は空き2マス。偶数の小領域です。</string>
+    <string name="standard_winning_tip_parity_lead">終盤では、空き領域が偶数か奇数かを数えます。</string>
+    <string name="standard_winning_tip_parity_body">空きマスが小さな領域に分かれたら、領域ごとのマス数を数えます。偶数・奇数を意識すると、どちらがその領域の最後を打つかを読めます。ここからは終盤の手順を数えて打ちましょう。</string>
+    <string name="standard_winning_tip_parity_takeaway">孤立した空き領域を見つけたら、まず偶数か奇数か数える。</string>
+    <string name="standard_winning_tip_parity_caption">右上の枠の領域は空き2マス。\n偶数の小領域です。</string>
 
     <string name="standard_winning_tip_tempo_title">石数だけでなく残り手数を数える</string>
-    <string name="standard_winning_tip_tempo_lead">もう1つのエキスパート級は「あと何手打てそうか」を考えることです。</string>
-    <string name="standard_winning_tip_tempo_body">終盤では、今たくさん返すことより、どちらが先にある領域へ入らされるかが大事になることがあります。空きマスとおおよその手順を数えることが、深い終盤読みへの入口です。</string>
-    <string name="standard_winning_tip_tempo_takeaway">残りが少ないときだけ、今の返し枚数より先に「あと何手ありそう？」を数える。</string>
-    <string name="standard_winning_tip_tempo_caption">枠の空きマスを目印に、残りの手順を数えてみる例です。</string>
+    <string name="standard_winning_tip_tempo_lead">終盤は、今の返し枚数より残り手数を数えます。</string>
+    <string name="standard_winning_tip_tempo_body">空きマスが少なくなったら、どちらがどこへ何回打てるかを数えます。最後までの手順を先に考えてから、今の一手を選びましょう。これが深い終盤読みの入口です。</string>
+    <string name="standard_winning_tip_tempo_takeaway">終盤は「何枚返る？」より先に「あと何手ある？」を数える。</string>
+    <string name="standard_winning_tip_tempo_caption">枠の空きマスを目印に、\n残りの手順を数えます。</string>
 </resources>
