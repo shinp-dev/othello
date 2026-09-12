@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -38,11 +40,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.othello.designsystem.ChanrivaColors
 import com.example.othello.designsystem.ChanrivaScreenHeader
@@ -372,41 +377,75 @@ private fun StandardHomeScreen(
     onCollection: () -> Unit,
     onSwitchMode: () -> Unit,
 ) {
-    StandardSurface {
-        ChanrivaScreenHeader(title = appString(R.string.standard_mode))
-        StandardOpponentPackPreviewCard(
-            pack = StandardOpponentPacks.animal,
-            onClick = { onFeature(StandardFeature.AI) },
-        )
-        ModeCard(
-            title = appString(R.string.standard_winning_tips_title),
-            supportingText = appString(R.string.standard_winning_tips_home_supporting),
-            bannerDrawableRes = R.drawable.standard_home_winning_tips_banner,
-            onClick = onWinningTips,
-        )
-        ModeCard(
-            title = appString(R.string.standard_gacha_title),
-            supportingText = appString(R.string.standard_gacha_home_supporting),
-            bannerDrawableRes = R.drawable.standard_home_gacha_banner,
-            onClick = onGacha,
-        )
-        ModeCard(
-            title = appString(R.string.standard_collection_title),
-            supportingText = appString(R.string.standard_collection_home_supporting),
-            bannerDrawableRes = R.drawable.standard_home_collection_banner,
-            onClick = onCollection,
-        )
-        ModeCard(
-            title = appString(StandardFeature.REAL_EVENT.titleRes),
-            supportingText = appString(StandardFeature.REAL_EVENT.supportingTextRes),
-            bannerDrawableRes = R.drawable.standard_home_real_event_banner,
-            onClick = { onFeature(StandardFeature.REAL_EVENT) },
-        )
-        TextButton(
-            onClick = onSwitchMode,
-            modifier = Modifier.fillMaxWidth(),
+    Surface(Modifier.fillMaxSize().statusBarsPadding()) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = ChanrivaSpacing.page, vertical = ChanrivaSpacing.compact),
         ) {
-            Text(appString(R.string.switch_to_advanced_mode))
+            val compact = maxHeight < 700.dp
+            val itemSpacing = if (compact) 8.dp else ChanrivaSpacing.compact
+            val heroHeight = if (compact) 160.dp else 188.dp
+            val heroArtworkHeight = if (compact) 78.dp else 100.dp
+            val wideCardHeight = if (compact) 82.dp else 96.dp
+            val miniCardHeight = if (compact) 68.dp else 78.dp
+            val eventCardHeight = if (compact) 88.dp else 104.dp
+            val miniArtworkSize = if (compact) 44.dp else 52.dp
+
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(itemSpacing),
+            ) {
+                ChanrivaScreenHeader(title = appString(R.string.standard_mode))
+                StandardOpponentPackPreviewCard(
+                    pack = StandardOpponentPacks.animal,
+                    artworkHeight = heroArtworkHeight,
+                    onClick = { onFeature(StandardFeature.AI) },
+                    modifier = Modifier.height(heroHeight),
+                )
+                StandardHomeWideFeatureCard(
+                    title = appString(R.string.standard_winning_tips_title),
+                    supportingText = appString(R.string.standard_winning_tips_home_supporting),
+                    artworkDrawableRes = R.drawable.standard_home_winning_tips_art,
+                    onClick = onWinningTips,
+                    modifier = Modifier.height(wideCardHeight),
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(miniCardHeight),
+                    horizontalArrangement = Arrangement.spacedBy(itemSpacing),
+                ) {
+                    StandardHomeMiniFeatureCard(
+                        title = appString(R.string.standard_gacha_title),
+                        artworkDrawableRes = R.drawable.standard_home_gacha_icon,
+                        artworkSize = miniArtworkSize,
+                        onClick = onGacha,
+                        modifier = Modifier.weight(1f),
+                    )
+                    StandardHomeMiniFeatureCard(
+                        title = appString(R.string.standard_collection_title),
+                        artworkDrawableRes = R.drawable.standard_home_collection_icon,
+                        artworkSize = miniArtworkSize,
+                        onClick = onCollection,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                StandardHomeWideFeatureCard(
+                    title = appString(StandardFeature.REAL_EVENT.titleRes),
+                    supportingText = appString(StandardFeature.REAL_EVENT.supportingTextRes),
+                    artworkDrawableRes = R.drawable.standard_home_real_event_photo,
+                    onClick = { onFeature(StandardFeature.REAL_EVENT) },
+                    modifier = Modifier.height(eventCardHeight),
+                )
+                Spacer(Modifier.weight(1f))
+                TextButton(
+                    onClick = onSwitchMode,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(appString(R.string.switch_to_advanced_mode))
+                }
+            }
         }
     }
 }
@@ -414,40 +453,141 @@ private fun StandardHomeScreen(
 @Composable
 private fun StandardOpponentPackPreviewCard(
     pack: StandardOpponentPackUi,
+    artworkHeight: Dp,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Card(
         onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 164.dp),
+        modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
     ) {
-        Column(
-            modifier = Modifier.padding(ChanrivaSpacing.section),
-            verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.control),
-        ) {
-            Text(
-                text = appString(R.string.standard_ai_pack_label),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-            Text(
-                text = appString(pack.titleRes),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-            Text(
-                text = appString(pack.supportingTextRes),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
+        Box(Modifier.fillMaxSize()) {
             Image(
                 painter = painterResource(pack.bannerDrawableRes),
                 contentDescription = appString(R.string.standard_ai_pack_preview_description),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(3f),
+                    .height(artworkHeight)
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = ChanrivaSpacing.control),
+                contentScale = ContentScale.Fit,
+            )
+            Column(
+                modifier = Modifier.padding(ChanrivaSpacing.section),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = appString(R.string.standard_ai_pack_label),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                Text(
+                    text = appString(pack.titleRes),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                Text(
+                    text = appString(pack.supportingTextRes),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StandardHomeWideFeatureCard(
+    title: String,
+    supportingText: String,
+    @DrawableRes artworkDrawableRes: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = ChanrivaColors.surfaceElevated),
+    ) {
+        Box(Modifier.fillMaxSize()) {
+            Image(
+                painter = painterResource(artworkDrawableRes),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                ChanrivaColors.surfaceElevated.copy(alpha = 0.98f),
+                                ChanrivaColors.surfaceElevated.copy(alpha = 0.84f),
+                                ChanrivaColors.surfaceElevated.copy(alpha = 0.34f),
+                            ),
+                        ),
+                    ),
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth(0.68f)
+                    .align(Alignment.CenterStart)
+                    .padding(horizontal = ChanrivaSpacing.section),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = supportingText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StandardHomeMiniFeatureCard(
+    title: String,
+    @DrawableRes artworkDrawableRes: Int,
+    artworkSize: Dp,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        onClick = onClick,
+        modifier = modifier.fillMaxSize(),
+        colors = CardDefaults.cardColors(containerColor = ChanrivaColors.surfaceElevated),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 14.dp, end = ChanrivaSpacing.control),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = title,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Image(
+                painter = painterResource(artworkDrawableRes),
+                contentDescription = null,
+                modifier = Modifier.size(artworkSize),
                 contentScale = ContentScale.Fit,
             )
         }
@@ -505,43 +645,5 @@ private fun StandardSurface(content: @Composable ColumnScope.() -> Unit) {
             verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
             content = content,
         )
-    }
-}
-
-@Composable
-private fun ModeCard(
-    title: String,
-    supportingText: String,
-    @DrawableRes bannerDrawableRes: Int? = null,
-    onClick: () -> Unit,
-) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 104.dp),
-        colors = CardDefaults.cardColors(containerColor = ChanrivaColors.surfaceElevated),
-    ) {
-        Column(
-            modifier = Modifier.padding(ChanrivaSpacing.section),
-            verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.control),
-        ) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(
-                text = supportingText,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (bannerDrawableRes != null) {
-                Image(
-                    painter = painterResource(bannerDrawableRes),
-                    contentDescription = title,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(3f),
-                    contentScale = ContentScale.Fit,
-                )
-            }
-        }
     }
 }

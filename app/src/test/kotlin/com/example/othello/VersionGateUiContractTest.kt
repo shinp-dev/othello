@@ -13,7 +13,7 @@ class VersionGateUiContractTest {
         assertTrue("is VersionGateState.Unsupported -> VersionGateUnsupportedScreen()" in versionGate)
 
         val unsupportedScreen = versionGate.substringAfter("private fun VersionGateUnsupportedScreen()")
-            .substringBefore("@Composable\nprivate fun VersionGateMessageScreen")
+            .substringBefore("private fun VersionGateMessageScreen")
         assertTrue("R.mipmap.ic_launcher" in unsupportedScreen)
         assertTrue("Modifier.size(96.dp)" in unsupportedScreen)
         assertTrue("R.string.update_required" in unsupportedScreen)
