@@ -76,17 +76,24 @@ data class StandardAiPersonality(
 /** Generic weighted selector that can back many personalities without duplicating selection code. */
 data class StandardWeightedMoveProfile(
     val openingWeights: List<Double>,
+    val midgameWeights: List<Double>,
     val endgameWeights: List<Double>,
     val openingMaxScoreLoss: Int,
     val endgameMaxScoreLoss: Int,
-    val fullStrengthPly: Double = 50.0,
+    val midgamePly: Double = 25.0,
+    val endgamePly: Double = 50.0,
 ) {
     init {
         require(openingWeights.isNotEmpty())
+        require(openingWeights.size == midgameWeights.size)
         require(openingWeights.size == endgameWeights.size)
-        require(openingWeights.all { it >= 0.0 } && endgameWeights.all { it >= 0.0 })
+        require(
+            openingWeights.all { it >= 0.0 } &&
+                midgameWeights.all { it >= 0.0 } &&
+                endgameWeights.all { it >= 0.0 },
+        )
         require(openingMaxScoreLoss >= 0 && endgameMaxScoreLoss >= 0)
-        require(fullStrengthPly > 0.0)
+        require(midgamePly > 0.0 && endgamePly > midgamePly)
     }
 }
 
@@ -99,15 +106,25 @@ class StandardWeightedMoveSelectionPolicy(
         if (rankedCandidates.isEmpty()) return context.position.legalMoves.singleOrNull()
         if (rankedCandidates.size == 1) return rankedCandidates.first().move
 
-        val progress = (context.position.ply.toDouble() / profile.fullStrengthPly).coerceIn(0.0, 1.0)
+        val ply = context.position.ply.toDouble().coerceAtLeast(0.0)
         val candidateLimit = profile.openingWeights.size
-        val weights = DoubleArray(candidateLimit) { index ->
-            lerp(profile.openingWeights[index], profile.endgameWeights[index], progress)
+        val weights = when {
+            ply <= profile.midgamePly -> interpolateWeights(
+                profile.openingWeights,
+                profile.midgameWeights,
+                (ply / profile.midgamePly).coerceIn(0.0, 1.0),
+            )
+            else -> interpolateWeights(
+                profile.midgameWeights,
+                profile.endgameWeights,
+                ((ply - profile.midgamePly) / (profile.endgamePly - profile.midgamePly))
+                    .coerceIn(0.0, 1.0),
+            )
         }
         val maxScoreLoss = lerp(
             profile.openingMaxScoreLoss.toDouble(),
             profile.endgameMaxScoreLoss.toDouble(),
-            progress,
+            (ply / profile.endgamePly).coerceIn(0.0, 1.0),
         ).roundToInt()
         val bestScore = rankedCandidates.first().score
         val eligible = rankedCandidates
@@ -131,54 +148,128 @@ class StandardWeightedMoveSelectionPolicy(
     private companion object {
         const val RANDOM_UPPER_BOUND = 0.999999999999
 
+        fun interpolateWeights(
+            start: List<Double>,
+            end: List<Double>,
+            progress: Double,
+        ): DoubleArray = DoubleArray(start.size) { index ->
+            lerp(start[index], end[index], progress)
+        }
+
         fun lerp(start: Double, end: Double, progress: Double): Double =
             start + (end - start) * progress
     }
 }
 
-/** Current Lv1-Lv4 campaign personality, implemented as a data-driven weighted selector. */
+/**
+ * Initial animal-pack campaign tuning.
+ *
+ * Lv1-Lv4 are intentionally beginner-friendly: they consider more ranked moves and permit
+ * larger evaluation losses. Lv5-Lv8 keep the corresponding animal's miss probability and
+ * candidate count, while sharply reducing the maximum evaluation loss so the wild versions
+ * retain their character without playing catastrophic mistakes.
+ */
+internal fun standardCampaignMoveProfile(level: StandardAiLevel): StandardWeightedMoveProfile = when (level) {
+    StandardAiLevel.LV1 -> campaignMoveProfile(
+        candidateLimit = 8,
+        openingBestMoveProbability = 0.05,
+        midgameBestMoveProbability = 0.10,
+        endgameBestMoveProbability = 0.20,
+        openingMaxScoreLoss = 30,
+        endgameMaxScoreLoss = 18,
+    )
+    StandardAiLevel.LV2 -> campaignMoveProfile(
+        candidateLimit = 7,
+        openingBestMoveProbability = 0.10,
+        midgameBestMoveProbability = 0.18,
+        endgameBestMoveProbability = 0.30,
+        openingMaxScoreLoss = 24,
+        endgameMaxScoreLoss = 14,
+    )
+    StandardAiLevel.LV3 -> campaignMoveProfile(
+        candidateLimit = 6,
+        openingBestMoveProbability = 0.16,
+        midgameBestMoveProbability = 0.28,
+        endgameBestMoveProbability = 0.45,
+        openingMaxScoreLoss = 18,
+        endgameMaxScoreLoss = 10,
+    )
+    StandardAiLevel.LV4 -> campaignMoveProfile(
+        candidateLimit = 5,
+        openingBestMoveProbability = 0.24,
+        midgameBestMoveProbability = 0.40,
+        endgameBestMoveProbability = 0.60,
+        openingMaxScoreLoss = 13,
+        endgameMaxScoreLoss = 7,
+    )
+    StandardAiLevel.LV5 -> campaignMoveProfile(
+        candidateLimit = 8,
+        openingBestMoveProbability = 0.05,
+        midgameBestMoveProbability = 0.10,
+        endgameBestMoveProbability = 0.20,
+        openingMaxScoreLoss = 8,
+        endgameMaxScoreLoss = 4,
+    )
+    StandardAiLevel.LV6 -> campaignMoveProfile(
+        candidateLimit = 7,
+        openingBestMoveProbability = 0.10,
+        midgameBestMoveProbability = 0.18,
+        endgameBestMoveProbability = 0.30,
+        openingMaxScoreLoss = 6,
+        endgameMaxScoreLoss = 3,
+    )
+    StandardAiLevel.LV7 -> campaignMoveProfile(
+        candidateLimit = 6,
+        openingBestMoveProbability = 0.16,
+        midgameBestMoveProbability = 0.28,
+        endgameBestMoveProbability = 0.45,
+        openingMaxScoreLoss = 4,
+        endgameMaxScoreLoss = 2,
+    )
+    StandardAiLevel.LV8 -> campaignMoveProfile(
+        candidateLimit = 5,
+        openingBestMoveProbability = 0.24,
+        midgameBestMoveProbability = 0.40,
+        endgameBestMoveProbability = 0.60,
+        openingMaxScoreLoss = 3,
+        endgameMaxScoreLoss = 1,
+    )
+}
+
+private fun campaignMoveProfile(
+    candidateLimit: Int,
+    openingBestMoveProbability: Double,
+    midgameBestMoveProbability: Double,
+    endgameBestMoveProbability: Double,
+    openingMaxScoreLoss: Int,
+    endgameMaxScoreLoss: Int,
+): StandardWeightedMoveProfile = StandardWeightedMoveProfile(
+    openingWeights = phaseWeights(candidateLimit, openingBestMoveProbability),
+    midgameWeights = phaseWeights(candidateLimit, midgameBestMoveProbability),
+    endgameWeights = phaseWeights(candidateLimit, endgameBestMoveProbability),
+    openingMaxScoreLoss = openingMaxScoreLoss,
+    endgameMaxScoreLoss = endgameMaxScoreLoss,
+)
+
+private fun phaseWeights(candidateLimit: Int, bestMoveProbability: Double): List<Double> {
+    require(candidateLimit >= 2)
+    require(bestMoveProbability in 0.0..1.0)
+    val nonBestWeight = (1.0 - bestMoveProbability) / (candidateLimit - 1)
+    return buildList(candidateLimit) {
+        add(bestMoveProbability)
+        repeat(candidateLimit - 1) { add(nonBestWeight) }
+    }
+}
+
+/** Current Lv1-Lv8 campaign personality, implemented as a data-driven weighted selector. */
 class StandardNaturalPlayPolicy(
     level: StandardAiLevel,
     randomUnit: () -> Double = { Random.Default.nextDouble() },
 ) : StandardMoveSelectionPolicy {
-    private val delegate: StandardMoveSelectionPolicy
-
-    init {
-        require(level.value in 1..4) { "Natural-play policy is only for Standard Lv1-Lv4" }
-        delegate = StandardWeightedMoveSelectionPolicy(profileFor(level), randomUnit)
-    }
+    private val delegate: StandardMoveSelectionPolicy =
+        StandardWeightedMoveSelectionPolicy(standardCampaignMoveProfile(level), randomUnit)
 
     override fun select(context: StandardDecisionContext): Position? = delegate.select(context)
-
-    private companion object {
-        fun profileFor(level: StandardAiLevel): StandardWeightedMoveProfile = when (level) {
-            StandardAiLevel.LV1 -> StandardWeightedMoveProfile(
-                openingWeights = listOf(0.30, 0.45, 0.25),
-                endgameWeights = listOf(0.70, 0.25, 0.05),
-                openingMaxScoreLoss = 10,
-                endgameMaxScoreLoss = 5,
-            )
-            StandardAiLevel.LV2 -> StandardWeightedMoveProfile(
-                openingWeights = listOf(0.40, 0.45, 0.15),
-                endgameWeights = listOf(0.85, 0.15, 0.0),
-                openingMaxScoreLoss = 8,
-                endgameMaxScoreLoss = 4,
-            )
-            StandardAiLevel.LV3 -> StandardWeightedMoveProfile(
-                openingWeights = listOf(0.55, 0.35, 0.10),
-                endgameWeights = listOf(0.95, 0.05, 0.0),
-                openingMaxScoreLoss = 6,
-                endgameMaxScoreLoss = 3,
-            )
-            StandardAiLevel.LV4 -> StandardWeightedMoveProfile(
-                openingWeights = listOf(0.70, 0.30, 0.0),
-                endgameWeights = listOf(1.0, 0.0, 0.0),
-                openingMaxScoreLoss = 4,
-                endgameMaxScoreLoss = 2,
-            )
-            else -> error("Natural-play policy is only for Standard Lv1-Lv4")
-        }
-    }
 }
 
 object StandardBestMovePolicy : StandardMoveSelectionPolicy {
