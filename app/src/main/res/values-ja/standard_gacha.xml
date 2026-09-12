@@ -2,7 +2,7 @@
 <resources>
     <string name="standard_gacha_title">ちゃんりばガチャ</string>
     <string name="standard_gacha_home_supporting">毎日100回無料で引いて、リバーシ図鑑を増やす</string>
-    <string name="standard_gacha_supporting">オセロの雑学・歴史・本などを集めよう。</string>
+    <string name="standard_gacha_supporting">リバーシの雑学・歴史・本などを集めよう。</string>
     <string name="standard_gacha_loading">ガチャを準備しています…</string>
     <string name="standard_gacha_load_error">ガチャを開けませんでした。取得済み情報は変更されていません。</string>
     <string name="standard_gacha_draw_free_remaining">ガチャをまわす　残り %1$d / %2$d</string>
@@ -11,7 +11,7 @@
     <string name="standard_gacha_machine_idle">何が出るかな？</string>
     <string name="standard_gacha_machine_revealing">開封中…</string>
     <string name="standard_gacha_capsule_tap">カプセルをタップ</string>
-    <string name="standard_gacha_capsule_description">オセロ石をモチーフにしたガチャカプセル</string>
+    <string name="standard_gacha_capsule_description">白黒の石をモチーフにしたガチャカプセル</string>
     <string name="standard_gacha_new">NEW!</string>
     <string name="standard_gacha_duplicate">取得済み</string>
     <string name="standard_gacha_open_collection">リバーシ図鑑を見る</string>
