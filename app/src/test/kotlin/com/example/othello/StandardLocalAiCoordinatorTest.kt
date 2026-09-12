@@ -49,7 +49,7 @@ class StandardLocalAiCoordinatorTest {
 
         assertTrue(coordinator.play())
 
-        assertEquals(3, provider.edaxLevel)
+        assertEquals(1, provider.edaxLevel)
         assertEquals(evaluation, provider.evaluation)
         assertEquals(provider.selectedMove, match.viewState.moves.last())
         assertEquals(listOf(StandardTensionLevel.CALM), tensions)
