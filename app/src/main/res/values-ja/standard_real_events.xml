@@ -6,4 +6,21 @@
     <string name="standard_real_event_retry">再読み込み</string>
     <string name="standard_real_event_source">取得元を開く</string>
     <string name="standard_real_event_retrieved_date">情報取得日: %1$s</string>
+    <string name="standard_real_event_official_title">公式大会を探す</string>
+    <string name="standard_real_event_official_supporting">日本オセロ連盟の各地域ブロックで、大会・練習会などの最新情報を確認できます。</string>
+    <string name="standard_real_event_block_hokkaido">北海道</string>
+    <string name="standard_real_event_block_tohoku">東北</string>
+    <string name="standard_real_event_block_kita_kantou">北関東</string>
+    <string name="standard_real_event_block_higashi_kantou">東関東</string>
+    <string name="standard_real_event_block_ibaraki">茨城</string>
+    <string name="standard_real_event_block_tokyo">東京</string>
+    <string name="standard_real_event_block_kanagawa">神奈川</string>
+    <string name="standard_real_event_block_niigata">新潟</string>
+    <string name="standard_real_event_block_tokai">東海</string>
+    <string name="standard_real_event_block_chubu">中部</string>
+    <string name="standard_real_event_block_hokuriku">北陸</string>
+    <string name="standard_real_event_block_kinki">近畿</string>
+    <string name="standard_real_event_block_hyogo">兵庫</string>
+    <string name="standard_real_event_block_chushikoku">中四国</string>
+    <string name="standard_real_event_block_kyushu">九州</string>
 </resources>
