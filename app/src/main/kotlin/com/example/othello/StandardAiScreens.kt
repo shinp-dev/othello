@@ -351,7 +351,7 @@ private fun StandardAiMatchScreen(
         )
         ScoreHeader(viewState.game)
         StandardBoardEffectHost(presentationState) {
-            LocalOthelloBoard(viewState, controller)
+            StandardPassAwareBoard(viewState, controller)
         }
         Text(
             localMatchStatusText(viewState.message),
