@@ -22,6 +22,9 @@ Current generated assets:
 | `standard_draw.ogg` | Draw |
 | `standard_level_clear.ogg` | First level clear/unlock |
 | `standard_campaign_conquered.ogg` | Lv8 campaign conquest |
+| `standard_gacha_common.ogg` | Common-card capsule reveal |
+| `standard_gacha_rare.ogg` | Rare-card capsule reveal |
+| `standard_gacha_special.ogg` | Special-card capsule reveal |
 
 ## Reproduction
 

@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -139,6 +140,8 @@ private fun StandardGachaScreen(
     onCollection: () -> Unit,
 ) {
     val engine = remember { StandardGachaEngine() }
+    val gachaEffects = rememberStandardGachaEffects()
+    val hostView = LocalView.current
     var obtainedCardIds by remember(userId, snapshot) {
         mutableStateOf(initialObtainedCardIds)
     }
@@ -162,6 +165,7 @@ private fun StandardGachaScreen(
         revealPhase = STANDARD_GACHA_PHASE_CRACK
         delay(STANDARD_GACHA_CRACK_MILLIS)
         revealPhase = STANDARD_GACHA_PHASE_BURST
+        gachaEffects.reveal(entry.card.rarity, hostView)
         delay(STANDARD_GACHA_BURST_MILLIS)
         withContext(Dispatchers.IO) {
             collectionStore.markObtained(userId, entry.card.id)
