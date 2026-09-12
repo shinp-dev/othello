@@ -77,21 +77,17 @@ private fun StandardWinningTipsIndexScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         StandardWinningTipTier.entries.forEach { tier ->
-            Text(
-                text = appString(tier.titleRes),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
+            StandardTipTierSectionHeader(tier)
             if (tier == StandardWinningTipTier.EXPERT) {
                 Surface(
-                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
                     shape = MaterialTheme.shapes.medium,
                 ) {
                     Text(
                         text = appString(R.string.standard_winning_tips_expert_supporting),
                         modifier = Modifier.padding(ChanrivaSpacing.control),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -159,7 +155,7 @@ private fun StandardWinningTipDetailScreen(
             modifier = Modifier.fillMaxWidth(),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
+            textAlign = TextAlign.Start,
         )
         Text(
             text = appString(tip.bodyRes),
@@ -210,14 +206,41 @@ private fun StandardWinningTipDetailScreen(
 }
 
 @Composable
-private fun StandardTipTierBadge(tier: StandardWinningTipTier) {
+private fun StandardTipTierSectionHeader(tier: StandardWinningTipTier) {
     val containerColor = when (tier) {
-        StandardWinningTipTier.BASIC -> MaterialTheme.colorScheme.surfaceVariant
+        StandardWinningTipTier.BASIC -> MaterialTheme.colorScheme.primaryContainer
         StandardWinningTipTier.STEP_UP -> MaterialTheme.colorScheme.tertiaryContainer
         StandardWinningTipTier.EXPERT -> MaterialTheme.colorScheme.secondaryContainer
     }
     val contentColor = when (tier) {
-        StandardWinningTipTier.BASIC -> MaterialTheme.colorScheme.onSurfaceVariant
+        StandardWinningTipTier.BASIC -> MaterialTheme.colorScheme.onPrimaryContainer
+        StandardWinningTipTier.STEP_UP -> MaterialTheme.colorScheme.onTertiaryContainer
+        StandardWinningTipTier.EXPERT -> MaterialTheme.colorScheme.onSecondaryContainer
+    }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = containerColor,
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Text(
+            text = appString(tier.titleRes),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = contentColor,
+        )
+    }
+}
+
+@Composable
+private fun StandardTipTierBadge(tier: StandardWinningTipTier) {
+    val containerColor = when (tier) {
+        StandardWinningTipTier.BASIC -> MaterialTheme.colorScheme.primaryContainer
+        StandardWinningTipTier.STEP_UP -> MaterialTheme.colorScheme.tertiaryContainer
+        StandardWinningTipTier.EXPERT -> MaterialTheme.colorScheme.secondaryContainer
+    }
+    val contentColor = when (tier) {
+        StandardWinningTipTier.BASIC -> MaterialTheme.colorScheme.onPrimaryContainer
         StandardWinningTipTier.STEP_UP -> MaterialTheme.colorScheme.onTertiaryContainer
         StandardWinningTipTier.EXPERT -> MaterialTheme.colorScheme.onSecondaryContainer
     }
