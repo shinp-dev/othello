@@ -188,17 +188,17 @@ internal fun standardCampaignMoveProfile(level: StandardAiLevel): StandardWeight
     )
     StandardAiLevel.LV3 -> campaignMoveProfile(
         candidateLimit = 6,
-        openingBestMoveProbability = 0.16,
-        midgameBestMoveProbability = 0.28,
-        endgameBestMoveProbability = 0.45,
+        openingBestMoveProbability = 0.13,
+        midgameBestMoveProbability = 0.24,
+        endgameBestMoveProbability = 0.40,
         openingMaxScoreLoss = 18,
         endgameMaxScoreLoss = 10,
     )
     StandardAiLevel.LV4 -> campaignMoveProfile(
         candidateLimit = 5,
-        openingBestMoveProbability = 0.24,
-        midgameBestMoveProbability = 0.40,
-        endgameBestMoveProbability = 0.60,
+        openingBestMoveProbability = 0.20,
+        midgameBestMoveProbability = 0.35,
+        endgameBestMoveProbability = 0.55,
         openingMaxScoreLoss = 13,
         endgameMaxScoreLoss = 7,
     )
@@ -220,17 +220,17 @@ internal fun standardCampaignMoveProfile(level: StandardAiLevel): StandardWeight
     )
     StandardAiLevel.LV7 -> campaignMoveProfile(
         candidateLimit = 6,
-        openingBestMoveProbability = 0.16,
-        midgameBestMoveProbability = 0.28,
-        endgameBestMoveProbability = 0.45,
+        openingBestMoveProbability = 0.13,
+        midgameBestMoveProbability = 0.24,
+        endgameBestMoveProbability = 0.40,
         openingMaxScoreLoss = 4,
         endgameMaxScoreLoss = 2,
     )
     StandardAiLevel.LV8 -> campaignMoveProfile(
         candidateLimit = 5,
-        openingBestMoveProbability = 0.24,
-        midgameBestMoveProbability = 0.40,
-        endgameBestMoveProbability = 0.60,
+        openingBestMoveProbability = 0.20,
+        midgameBestMoveProbability = 0.35,
+        endgameBestMoveProbability = 0.55,
         openingMaxScoreLoss = 3,
         endgameMaxScoreLoss = 1,
     )
