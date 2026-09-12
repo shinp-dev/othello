@@ -17,20 +17,23 @@ class StandardModeUiContractTest {
     }
 
     @Test
-    fun standardHomeShowsAnimalPackThenGachaCollectionAndRealEvent() {
+    fun standardHomeShowsAnimalPackThenWinningTipsGachaCollectionAndRealEvent() {
         val home = source.substringAfter("private fun StandardHomeScreen(")
             .substringBefore("@Composable\nprivate fun StandardOpponentPackPreviewCard")
         val packIndex = home.indexOf("StandardOpponentPackPreviewCard(")
+        val tipsIndex = home.indexOf("R.string.standard_winning_tips_title")
         val gachaIndex = home.indexOf("R.string.standard_gacha_title")
         val collectionIndex = home.indexOf("R.string.standard_collection_title")
         val realEventIndex = home.indexOf("title = appString(StandardFeature.REAL_EVENT.titleRes)")
         assertTrue(packIndex >= 0)
-        assertTrue(gachaIndex > packIndex)
+        assertTrue(tipsIndex > packIndex)
+        assertTrue(gachaIndex > tipsIndex)
         assertTrue(collectionIndex > gachaIndex)
         assertTrue(realEventIndex > collectionIndex)
         assertFalse("title = appString(StandardFeature.AI.titleRes)" in home)
         assertFalse("title = appString(StandardFeature.ONLINE.titleRes)" in home)
         assertTrue("pack = StandardOpponentPacks.animal" in home)
+        assertTrue("onClick = onWinningTips" in home)
         assertTrue("onClick = onGacha" in home)
         assertTrue("onClick = onCollection" in home)
         assertTrue("TextButton(" in home)
@@ -54,6 +57,7 @@ class StandardModeUiContractTest {
         assertTrue("R.string.feature_coming_soon" in source)
         assertTrue("R.string.back_to_standard_home" in source)
         assertTrue("AuthenticatedModeDestination.STANDARD_AI -> StandardAiRoute(" in source)
+        assertTrue("AuthenticatedModeDestination.STANDARD_WINNING_TIPS -> StandardWinningTipsRoute(" in source)
         assertTrue("AuthenticatedModeDestination.STANDARD_GACHA -> StandardGachaRoute(" in source)
         assertTrue("AuthenticatedModeDestination.STANDARD_COLLECTION -> StandardCollectionRoute(" in source)
     }
