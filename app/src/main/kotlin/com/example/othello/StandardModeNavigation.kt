@@ -1,6 +1,7 @@
 package com.example.othello
 
 import androidx.activity.compose.BackHandler
+import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -380,21 +381,25 @@ private fun StandardHomeScreen(
         ModeCard(
             title = appString(R.string.standard_winning_tips_title),
             supportingText = appString(R.string.standard_winning_tips_home_supporting),
+            bannerDrawableRes = R.drawable.standard_home_winning_tips_banner,
             onClick = onWinningTips,
         )
         ModeCard(
             title = appString(R.string.standard_gacha_title),
             supportingText = appString(R.string.standard_gacha_home_supporting),
+            bannerDrawableRes = R.drawable.standard_home_gacha_banner,
             onClick = onGacha,
         )
         ModeCard(
             title = appString(R.string.standard_collection_title),
             supportingText = appString(R.string.standard_collection_home_supporting),
+            bannerDrawableRes = R.drawable.standard_home_collection_banner,
             onClick = onCollection,
         )
         ModeCard(
             title = appString(StandardFeature.REAL_EVENT.titleRes),
             supportingText = appString(StandardFeature.REAL_EVENT.supportingTextRes),
+            bannerDrawableRes = R.drawable.standard_home_real_event_banner,
             onClick = { onFeature(StandardFeature.REAL_EVENT) },
         )
         TextButton(
@@ -507,6 +512,7 @@ private fun StandardSurface(content: @Composable ColumnScope.() -> Unit) {
 private fun ModeCard(
     title: String,
     supportingText: String,
+    @DrawableRes bannerDrawableRes: Int? = null,
     onClick: () -> Unit,
 ) {
     Card(
@@ -526,6 +532,16 @@ private fun ModeCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (bannerDrawableRes != null) {
+                Image(
+                    painter = painterResource(bannerDrawableRes),
+                    contentDescription = title,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(3f),
+                    contentScale = ContentScale.Fit,
+                )
+            }
         }
     }
 }
