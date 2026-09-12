@@ -38,7 +38,8 @@ class StandardAiOpponentPresentationUiTest {
                         firstClear = true,
                         conquered = true,
                     ),
-                    onDismiss = {},
+                    onRetry = {},
+                    onChooseOpponent = {},
                 )
             }
         }

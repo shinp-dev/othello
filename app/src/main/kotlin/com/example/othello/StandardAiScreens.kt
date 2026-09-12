@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -69,7 +68,6 @@ internal fun StandardAiRoute(
     var activeLevelValue by rememberSaveable(userId) { mutableStateOf<Int?>(null) }
     val activeLevel = activeLevelValue?.let(StandardAiLevel::fromValue)
 
-    BackHandler(enabled = activeLevel != null) { activeLevelValue = null }
     LaunchedEffect(preparation) {
         if (preparation.state.value is StandardAiPreparationState.NotPrepared) preparation.prepare()
     }
@@ -105,7 +103,10 @@ internal fun StandardAiRoute(
                 persistence = application.localGameRecordPersistence.coordinator,
                 progressStore = progressStore,
                 onProgressChanged = { progress = it },
-                onBack = { activeLevelValue = null },
+                onReturnToSelection = { selectedLevel ->
+                    selectedLevelValue = selectedLevel.value
+                    activeLevelValue = null
+                },
             )
         }
     }
@@ -205,7 +206,7 @@ private fun StandardAiMatchScreen(
     persistence: LocalGameRecordPersistenceCoordinator,
     progressStore: StandardAiProgressStore,
     onProgressChanged: (StandardAiProgress) -> Unit,
-    onBack: () -> Unit,
+    onReturnToSelection: (StandardAiLevel) -> Unit,
 ) {
     val context = LocalContext.current
     val introStore = remember { StandardAiIntroStore(context) }
@@ -230,6 +231,7 @@ private fun StandardAiMatchScreen(
     var observedMoveCount by remember(controller) { mutableStateOf(viewState.moves.size) }
     var matchGeneration by remember { mutableStateOf(0) }
     var confirmResign by remember { mutableStateOf(false) }
+    var confirmExit by remember { mutableStateOf(false) }
     var handledRecordId by remember { mutableStateOf<String?>(null) }
     var showIntro by remember(userId, level) { mutableStateOf(!introStore.hasSeen(userId, level)) }
     var resultPresentation by remember(level) { mutableStateOf<StandardAiResultPresentation?>(null) }
@@ -342,11 +344,20 @@ private fun StandardAiMatchScreen(
         matchGeneration++
         confirmResign = false
     }
+    fun requestExit() {
+        if (viewState.completedRecord == null) {
+            confirmExit = true
+        } else {
+            onReturnToSelection(level)
+        }
+    }
+
+    BackHandler(onBack = ::requestExit)
 
     StandardAiSurface {
         ChanrivaScreenHeader(
             title = appString(R.string.standard_ai_level, level.value),
-            onBack = onBack,
+            onBack = ::requestExit,
             backLabel = appString(R.string.back),
         )
         ScoreHeader(viewState.game)
@@ -364,42 +375,17 @@ private fun StandardAiMatchScreen(
         localizeUserMessage(context, viewState.error)?.let {
             Text(it, color = MaterialTheme.colorScheme.error)
         }
-        viewState.completedRecord?.let { record ->
-            Text(
-                text = appString(
-                    if (record.humanWon()) R.string.standard_ai_result_win else R.string.standard_ai_result_not_win,
-                ),
-                style = MaterialTheme.typography.titleLarge,
-            )
-            Text(
-                text = appString(R.string.standard_ai_unlock_guidance),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (saveStates[record.localId]?.status == LocalRecordSaveStatus.FAILED) {
-                OutlinedButton(onClick = { persistence.retry(record.localId) }) {
-                    Text(appString(R.string.retry_save))
-                }
-            }
-        }
-        OutlinedButton(
-            onClick = ::undoMove,
-            enabled = viewState.canUndo && viewState.completedRecord == null,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(appString(R.string.undo_move)) }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(ChanrivaSpacing.control)) {
+        if (viewState.completedRecord == null) {
+            OutlinedButton(
+                onClick = ::undoMove,
+                enabled = viewState.canUndo,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(appString(R.string.undo_move)) }
             OutlinedButton(
                 onClick = { confirmResign = true },
-                enabled = viewState.finishReason == null && !viewState.aiThinking,
-                modifier = Modifier.weight(1f),
+                enabled = !viewState.aiThinking,
+                modifier = Modifier.fillMaxWidth(),
             ) { Text(appString(R.string.resign)) }
-            Button(onClick = ::resetMatch, modifier = Modifier.weight(1f)) {
-                Text(appString(R.string.new_match))
-            }
-        }
-        if (viewState.completedRecord != null) {
-            OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-                Text(appString(R.string.standard_ai_back_to_levels))
-            }
         }
     }
     if (showIntro) {
@@ -409,7 +395,35 @@ private fun StandardAiMatchScreen(
         StandardAiResultDialog(
             level = level,
             presentation = presentation,
-            onDismiss = { resultPresentation = null },
+            onRetry = ::resetMatch,
+            onChooseOpponent = onReturnToSelection,
+            saveFailed = viewState.completedRecord?.let { record ->
+                saveStates[record.localId]?.status == LocalRecordSaveStatus.FAILED
+            } == true,
+            onRetrySave = {
+                viewState.completedRecord?.let { persistence.retry(it.localId) }
+            },
+        )
+    }
+    if (confirmExit) {
+        AlertDialog(
+            onDismissRequest = { confirmExit = false },
+            title = { Text(appString(R.string.standard_ai_exit_title)) },
+            text = { Text(appString(R.string.standard_ai_exit_message)) },
+            confirmButton = {
+                ChanrivaDangerButton(
+                    onClick = {
+                        confirmExit = false
+                        coordinator.cancel()
+                        onReturnToSelection(level)
+                    },
+                ) { Text(appString(R.string.standard_ai_exit_action)) }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { confirmExit = false }) {
+                    Text(appString(R.string.continue_label))
+                }
+            },
         )
     }
     if (confirmResign) {
@@ -441,8 +455,6 @@ private fun LocalGameRecord.humanOutcome(): StandardAiHumanOutcome {
         MatchResult.WHITE_WIN -> if (humanDisc == Disc.WHITE) StandardAiHumanOutcome.WIN else StandardAiHumanOutcome.LOSS
     }
 }
-
-private fun LocalGameRecord.humanWon(): Boolean = humanOutcome() == StandardAiHumanOutcome.WIN
 
 @Composable
 private fun StandardAiSurface(content: @Composable ColumnScope.() -> Unit) {

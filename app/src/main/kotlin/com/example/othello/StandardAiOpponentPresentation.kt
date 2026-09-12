@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,6 +37,28 @@ internal data class StandardAiResultPresentation(
     val winReward: StandardWinReward = StandardWinReward.NONE,
     val wildStageAwakened: Boolean = false,
 )
+
+internal enum class StandardAiResultAction { NEXT_OPPONENT, RETRY, CHOOSE_OPPONENT, REMATCH }
+
+internal data class StandardAiResultActions(
+    val primary: StandardAiResultAction,
+    val secondary: StandardAiResultAction,
+)
+
+internal fun standardAiResultActions(presentation: StandardAiResultPresentation): StandardAiResultActions = when {
+    presentation.unlockedLevel != null -> StandardAiResultActions(
+        primary = StandardAiResultAction.NEXT_OPPONENT,
+        secondary = StandardAiResultAction.REMATCH,
+    )
+    presentation.outcome != StandardAiHumanOutcome.WIN -> StandardAiResultActions(
+        primary = StandardAiResultAction.RETRY,
+        secondary = StandardAiResultAction.CHOOSE_OPPONENT,
+    )
+    else -> StandardAiResultActions(
+        primary = StandardAiResultAction.CHOOSE_OPPONENT,
+        secondary = StandardAiResultAction.REMATCH,
+    )
+}
 
 @Composable
 internal fun StandardAiIntroDialog(
@@ -77,8 +100,13 @@ internal fun StandardAiIntroDialog(
 internal fun StandardAiResultDialog(
     level: StandardAiLevel,
     presentation: StandardAiResultPresentation,
-    onDismiss: () -> Unit,
+    onRetry: () -> Unit,
+    onChooseOpponent: (StandardAiLevel) -> Unit,
+    saveFailed: Boolean = false,
+    onRetrySave: () -> Unit = {},
 ) {
+    val actions = standardAiResultActions(presentation)
+    val selectionLevel = presentation.unlockedLevel ?: level
     val title = when {
         presentation.wildStageAwakened -> appString(R.string.standard_ai_wild_stage_title)
         presentation.winReward == StandardWinReward.COMEBACK -> appString(R.string.standard_ai_comeback_title)
@@ -90,7 +118,7 @@ internal fun StandardAiResultDialog(
 
     AlertDialog(
         modifier = Modifier.testTag("standard-ai-result-dialog"),
-        onDismissRequest = onDismiss,
+        onDismissRequest = { onChooseOpponent(selectionLevel) },
         title = { Text(title) },
         text = {
             Column(
@@ -176,13 +204,56 @@ internal fun StandardAiResultDialog(
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
+
+                if (saveFailed) {
+                    Text(
+                        text = appString(R.string.local_record_save_failed),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    OutlinedButton(onClick = onRetrySave) {
+                        Text(appString(R.string.retry_save))
+                    }
+                }
             }
         },
         confirmButton = {
-            Button(onClick = onDismiss) {
-                Text(appString(R.string.standard_ai_result_continue))
+            Button(onClick = { runStandardAiResultAction(actions.primary, selectionLevel, onRetry, onChooseOpponent) }) {
+                Text(standardAiResultActionLabel(actions.primary, presentation.conquered))
             }
         },
+        dismissButton = {
+            OutlinedButton(
+                onClick = { runStandardAiResultAction(actions.secondary, selectionLevel, onRetry, onChooseOpponent) },
+            ) {
+                Text(standardAiResultActionLabel(actions.secondary, presentation.conquered))
+            }
+        },
+    )
+}
+
+private fun runStandardAiResultAction(
+    action: StandardAiResultAction,
+    selectionLevel: StandardAiLevel,
+    onRetry: () -> Unit,
+    onChooseOpponent: (StandardAiLevel) -> Unit,
+) {
+    when (action) {
+        StandardAiResultAction.RETRY,
+        StandardAiResultAction.REMATCH,
+        -> onRetry()
+        StandardAiResultAction.NEXT_OPPONENT,
+        StandardAiResultAction.CHOOSE_OPPONENT,
+        -> onChooseOpponent(selectionLevel)
+    }
+}
+
+@Composable
+private fun standardAiResultActionLabel(action: StandardAiResultAction, conquered: Boolean): String = when (action) {
+    StandardAiResultAction.NEXT_OPPONENT -> appString(R.string.standard_ai_result_next_opponent)
+    StandardAiResultAction.RETRY -> appString(R.string.standard_ai_result_retry)
+    StandardAiResultAction.REMATCH -> appString(R.string.standard_ai_result_rematch)
+    StandardAiResultAction.CHOOSE_OPPONENT -> appString(
+        if (conquered) R.string.standard_ai_result_opponent_list else R.string.standard_ai_result_choose_opponent,
     )
 }
 
