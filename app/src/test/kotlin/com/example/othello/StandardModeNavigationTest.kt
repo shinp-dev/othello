@@ -1,7 +1,6 @@
 package com.example.othello
 
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 import org.junit.Test
 
 class StandardModeNavigationTest {
@@ -59,12 +58,18 @@ class StandardModeNavigationTest {
     }
 
     @Test
-    fun standardHomeReturnsToModeSelectionWithoutChangingAdvancedBackHandling() {
+    fun bothModeHomesReturnToModeSelection() {
         assertEquals(
             AuthenticatedModeDestination.MODE_SELECTION,
             authenticatedModeBackDestination(AuthenticatedModeDestination.STANDARD_HOME),
         )
-        assertNull(authenticatedModeBackDestination(AuthenticatedModeDestination.MODE_SELECTION))
-        assertNull(authenticatedModeBackDestination(AuthenticatedModeDestination.ADVANCED))
+        assertEquals(
+            null,
+            authenticatedModeBackDestination(AuthenticatedModeDestination.MODE_SELECTION),
+        )
+        assertEquals(
+            AuthenticatedModeDestination.MODE_SELECTION,
+            authenticatedModeBackDestination(AuthenticatedModeDestination.ADVANCED),
+        )
     }
 }

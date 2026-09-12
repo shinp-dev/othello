@@ -79,6 +79,7 @@ private fun StudyCategory(
 
 @Composable
 internal fun MoreScreen(
+    onSwitchMode: () -> Unit,
     onAccount: () -> Unit,
     onResearchInfo: () -> Unit,
     onAbout: () -> Unit,
@@ -88,6 +89,7 @@ internal fun MoreScreen(
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
     ) {
         ChanrivaScreenHeader(appString(R.string.more))
+        ChanrivaNavigationRow(appString(R.string.switch_mode), onSwitchMode)
         ChanrivaNavigationRow(appString(R.string.account), onAccount)
         ChanrivaNavigationRow(appString(R.string.research_info), onResearchInfo)
         ChanrivaNavigationRow(appString(R.string.about_app), onAbout)
