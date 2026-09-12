@@ -37,6 +37,10 @@ class StandardModeUiContractTest {
         assertTrue("onClick = onWinningTips" in home)
         assertTrue("onClick = onGacha" in home)
         assertTrue("onClick = onCollection" in home)
+        assertTrue("R.drawable.standard_home_winning_tips_banner" in home)
+        assertTrue("R.drawable.standard_home_gacha_banner" in home)
+        assertTrue("R.drawable.standard_home_collection_banner" in home)
+        assertTrue("R.drawable.standard_home_real_event_banner" in home)
         assertTrue("TextButton(" in home)
         assertTrue("R.string.switch_to_advanced_mode" in home)
     }
@@ -50,6 +54,16 @@ class StandardModeUiContractTest {
         assertTrue(".aspectRatio(3f)" in card)
         assertTrue("contentScale = ContentScale.Fit" in card)
         assertFalse("pack.previewLevels.forEach" in card)
+    }
+
+    @Test
+    fun standardHomeModeCardsCanRenderWideBanners() {
+        val card = source.substringAfter("private fun ModeCard(")
+
+        assertTrue("@DrawableRes bannerDrawableRes: Int? = null" in card)
+        assertTrue("painterResource(bannerDrawableRes)" in card)
+        assertTrue(".aspectRatio(3f)" in card)
+        assertTrue("contentScale = ContentScale.Fit" in card)
     }
 
     @Test
