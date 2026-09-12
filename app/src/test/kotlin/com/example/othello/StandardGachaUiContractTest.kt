@@ -2,15 +2,21 @@ package com.example.othello
 
 import java.io.File
 import javax.imageio.ImageIO
-import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.junit.Test
 
 class StandardGachaUiContractTest {
     private val source =
         File("src/main/kotlin/com/example/othello/StandardGachaScreen.kt").readText()
+    private val appBuild = File("build.gradle.kts").readText()
+
+    @Test
+    fun gachaGifSupportsTheExistingApi26Floor() {
+        assertTrue("minSdk = 26" in appBuild)
+        assertTrue("io.coil-kt.coil3:coil-compose:3.3.0" in appBuild)
+        assertTrue("io.coil-kt.coil3:coil-gif:3.3.0" in appBuild)
+    }
 
     @Test
     fun gachaUsesLocalSnapshotAndCollectionStoreWithoutRemoteRpc() {
@@ -31,14 +37,15 @@ class StandardGachaUiContractTest {
         assertTrue("STANDARD_GACHA_BURST_MILLIS" in source)
         assertTrue("STANDARD_GACHA_PHASE_CRACK" in source)
         assertTrue("STANDARD_GACHA_PHASE_BURST" in source)
-        assertTrue("R.drawable.standard_gacha_capsule_base_art" in source)
-        assertTrue("R.drawable.standard_gacha_capsule_cracks_art" in source)
-        assertTrue("R.drawable.standard_gacha_capsule_left_shell_art" in source)
-        assertTrue("R.drawable.standard_gacha_capsule_right_shell_art" in source)
-        assertTrue("BitmapFactory.decodeResource(" in source)
-        assertTrue("runCatching {" in source)
-        assertTrue("leftShellBitmap?.let" in source)
-        assertTrue("rightShellBitmap?.let" in source)
+        assertTrue("R.drawable.standard_gacha_capsule_reveal" in source)
+        assertTrue("AsyncImage(" in source)
+        assertTrue(".repeatCount(0)" in source)
+        assertTrue("CachePolicy.DISABLED" in source)
+        assertFalse("standard_gacha_capsule_base_art" in source)
+        assertFalse("standard_gacha_capsule_cracks_art" in source)
+        assertFalse("standard_gacha_capsule_left_shell_art" in source)
+        assertFalse("standard_gacha_capsule_right_shell_art" in source)
+        assertFalse("BitmapFactory.decodeResource(" in source)
         assertFalse(".clipToBounds()" in source)
         assertTrue("standardGachaGlowColor" in source)
         assertTrue("StandardContentRarity.COMMON -> Color(0xFFDCEBFF)" in source)
@@ -99,12 +106,19 @@ class StandardGachaUiContractTest {
     }
 
     @Test
-    fun rightCapsuleShellAssetIsDecodable() {
-        val asset = File("src/main/res/drawable-nodpi/standard_gacha_capsule_right_shell_art.png")
-        val image = assertNotNull(ImageIO.read(asset))
+    fun capsuleRevealGifIsValid() {
+        val animation = File("src/main/res/drawable-nodpi/standard_gacha_capsule_reveal.gif")
+        assertTrue(animation.isFile)
+        assertTrue(animation.length() < 1_000_000L, "Reveal GIF should stay below 1 MB")
 
-        assertEquals(256, image.width)
-        assertEquals(256, image.height)
+        val reader = ImageIO.getImageReadersByFormatName("gif").next()
+        ImageIO.createImageInputStream(animation).use { input ->
+            reader.input = input
+            assertTrue(reader.getNumImages(true) >= 28, "Reveal GIF should have smooth motion")
+            assertTrue(reader.getWidth(0) == 320 && reader.getHeight(0) == 320)
+            assertTrue(reader.read(0).colorModel.hasAlpha())
+        }
+        reader.dispose()
     }
 
     @Test

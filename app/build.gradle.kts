@@ -177,6 +177,8 @@ dependencies {
     implementation("androidx.compose.ui:ui:1.6.8")
     implementation("androidx.compose.foundation:foundation:1.6.8")
     implementation("androidx.compose.ui:ui-tooling-preview:1.6.8")
+    implementation("io.coil-kt.coil3:coil-compose:3.3.0")
+    implementation("io.coil-kt.coil3:coil-gif:3.3.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     testImplementation(kotlin("test"))
