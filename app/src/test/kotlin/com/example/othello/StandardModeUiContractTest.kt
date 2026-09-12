@@ -11,7 +11,8 @@ class StandardModeUiContractTest {
 
     @Test
     fun standardRouteIsSeparateFromAdvancedNavigation() {
-        assertTrue("AuthenticatedModeDestination.ADVANCED -> advancedContent()" in source)
+        assertTrue("AuthenticatedModeDestination.ADVANCED -> advancedContent {" in source)
+        assertTrue("destination = AuthenticatedModeDestination.MODE_SELECTION" in source)
         assertFalse("ChanrivaBottomNavigation" in source)
         assertFalse("AppDestination" in source)
     }

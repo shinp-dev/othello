@@ -135,13 +135,14 @@ private fun AuthenticatedRoot(
     sessionOwner: OnlineSessionViewModel = viewModel(),
 ) {
     AuthGate(sessionOwner) { session ->
-        AuthenticatedModeRoute(session.userId) {
+        AuthenticatedModeRoute(session.userId) { onSwitchMode ->
             AuthenticatedApp(
                 debugAutoPlay = debugAutoPlay,
                 debugTimeControlMillis = debugTimeControlMillis,
                 showDiagnostics = showDiagnostics,
                 sessionOwner = sessionOwner,
                 session = session,
+                onSwitchMode = onSwitchMode,
             )
         }
     }
@@ -154,6 +155,7 @@ private fun AuthenticatedApp(
     showDiagnostics: Boolean,
     sessionOwner: OnlineSessionViewModel,
     session: UserSession,
+    onSwitchMode: () -> Unit,
 ) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
@@ -481,6 +483,7 @@ private fun AuthenticatedApp(
                         onBack = { destination = researchSettingsBackDestination },
                     )
                     destination == AppDestination.MORE -> MoreScreen(
+                        onSwitchMode = onSwitchMode,
                         onAccount = { destination = AppDestination.ACCOUNT },
                         onResearchInfo = { destination = AppDestination.RESEARCH_INFO },
                         onAbout = { destination = AppDestination.ABOUT },

@@ -94,14 +94,14 @@ internal fun authenticatedModeBackDestination(
     AuthenticatedModeDestination.STANDARD_COLLECTION,
     AuthenticatedModeDestination.STANDARD_ONLINE_COMING_SOON,
     AuthenticatedModeDestination.STANDARD_REAL_EVENT -> AuthenticatedModeDestination.STANDARD_HOME
-    AuthenticatedModeDestination.MODE_SELECTION,
-    AuthenticatedModeDestination.ADVANCED -> null
+    AuthenticatedModeDestination.MODE_SELECTION -> null
+    AuthenticatedModeDestination.ADVANCED -> AuthenticatedModeDestination.MODE_SELECTION
 }
 
 @Composable
 internal fun AuthenticatedModeRoute(
     userId: String,
-    advancedContent: @Composable () -> Unit,
+    advancedContent: @Composable (onSwitchMode: () -> Unit) -> Unit,
 ) {
     var destination by rememberSaveable(userId) {
         mutableStateOf(initialAuthenticatedModeDestination())
@@ -145,7 +145,9 @@ internal fun AuthenticatedModeRoute(
         AuthenticatedModeDestination.STANDARD_REAL_EVENT -> StandardRealEventRoute(
             onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
         )
-        AuthenticatedModeDestination.ADVANCED -> advancedContent()
+        AuthenticatedModeDestination.ADVANCED -> advancedContent {
+            destination = AuthenticatedModeDestination.MODE_SELECTION
+        }
     }
 }
 
