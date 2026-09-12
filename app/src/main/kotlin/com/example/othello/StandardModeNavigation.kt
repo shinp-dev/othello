@@ -26,7 +26,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -51,6 +50,7 @@ internal enum class AuthenticatedModeDestination {
     MODE_SELECTION,
     STANDARD_HOME,
     STANDARD_AI,
+    STANDARD_WINNING_TIPS,
     STANDARD_GACHA,
     STANDARD_COLLECTION,
     STANDARD_ONLINE_COMING_SOON,
@@ -77,6 +77,7 @@ internal fun authenticatedModeBackDestination(
 ): AuthenticatedModeDestination? = when (current) {
     AuthenticatedModeDestination.STANDARD_HOME -> AuthenticatedModeDestination.MODE_SELECTION
     AuthenticatedModeDestination.STANDARD_AI,
+    AuthenticatedModeDestination.STANDARD_WINNING_TIPS,
     AuthenticatedModeDestination.STANDARD_GACHA,
     AuthenticatedModeDestination.STANDARD_COLLECTION,
     AuthenticatedModeDestination.STANDARD_ONLINE_COMING_SOON,
@@ -104,12 +105,16 @@ internal fun AuthenticatedModeRoute(
         )
         AuthenticatedModeDestination.STANDARD_HOME -> StandardHomeScreen(
             onFeature = { destination = destinationFor(it) },
+            onWinningTips = { destination = AuthenticatedModeDestination.STANDARD_WINNING_TIPS },
             onGacha = { destination = AuthenticatedModeDestination.STANDARD_GACHA },
             onCollection = { destination = AuthenticatedModeDestination.STANDARD_COLLECTION },
             onSwitchMode = { destination = AuthenticatedModeDestination.MODE_SELECTION },
         )
         AuthenticatedModeDestination.STANDARD_AI -> StandardAiRoute(
             userId = userId,
+            onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
+        )
+        AuthenticatedModeDestination.STANDARD_WINNING_TIPS -> StandardWinningTipsRoute(
             onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
         )
         AuthenticatedModeDestination.STANDARD_GACHA -> StandardGachaRoute(
@@ -157,6 +162,7 @@ private fun ModeSelectionScreen(onSelect: (AppMode) -> Unit) {
 @Composable
 private fun StandardHomeScreen(
     onFeature: (StandardFeature) -> Unit,
+    onWinningTips: () -> Unit,
     onGacha: () -> Unit,
     onCollection: () -> Unit,
     onSwitchMode: () -> Unit,
@@ -166,6 +172,11 @@ private fun StandardHomeScreen(
         StandardOpponentPackPreviewCard(
             pack = StandardOpponentPacks.animal,
             onClick = { onFeature(StandardFeature.AI) },
+        )
+        ModeCard(
+            title = appString(R.string.standard_winning_tips_title),
+            supportingText = appString(R.string.standard_winning_tips_home_supporting),
+            onClick = onWinningTips,
         )
         ModeCard(
             title = appString(R.string.standard_gacha_title),
