@@ -14,9 +14,9 @@ import kotlin.test.assertTrue
 
 class StandardAiTest {
     @Test
-    fun displayLevelsAreOneThroughEightAndMapToEdaxOneThroughFourTwice() {
+    fun displayLevelsAreOneThroughEightAndUseFixedPackStrengths() {
         assertEquals((1..8).toList(), StandardAiLevel.entries.map { it.value })
-        assertEquals(listOf(1, 2, 3, 4, 1, 2, 3, 4), StandardAiLevel.entries.map { it.edaxLevel })
+        assertEquals(listOf(1, 1, 1, 1, 2, 2, 2, 2), StandardAiLevel.entries.map { it.edaxLevel })
         assertEquals(StandardAiLevel.LV5, StandardAiLevel.LV4.next())
         assertNull(StandardAiLevel.LV8.next())
     }
@@ -38,12 +38,12 @@ class StandardAiTest {
         val expected = listOf(
             ExpectedMoveProfile(StandardAiLevel.LV1, 8, 0.05, 0.10, 0.20, 30, 18),
             ExpectedMoveProfile(StandardAiLevel.LV2, 7, 0.10, 0.18, 0.30, 24, 14),
-            ExpectedMoveProfile(StandardAiLevel.LV3, 6, 0.16, 0.28, 0.45, 18, 10),
-            ExpectedMoveProfile(StandardAiLevel.LV4, 5, 0.24, 0.40, 0.60, 13, 7),
+            ExpectedMoveProfile(StandardAiLevel.LV3, 6, 0.13, 0.24, 0.40, 18, 10),
+            ExpectedMoveProfile(StandardAiLevel.LV4, 5, 0.20, 0.35, 0.55, 13, 7),
             ExpectedMoveProfile(StandardAiLevel.LV5, 8, 0.05, 0.10, 0.20, 8, 4),
             ExpectedMoveProfile(StandardAiLevel.LV6, 7, 0.10, 0.18, 0.30, 6, 3),
-            ExpectedMoveProfile(StandardAiLevel.LV7, 6, 0.16, 0.28, 0.45, 4, 2),
-            ExpectedMoveProfile(StandardAiLevel.LV8, 5, 0.24, 0.40, 0.60, 3, 1),
+            ExpectedMoveProfile(StandardAiLevel.LV7, 6, 0.13, 0.24, 0.40, 4, 2),
+            ExpectedMoveProfile(StandardAiLevel.LV8, 5, 0.20, 0.35, 0.55, 3, 1),
         )
 
         expected.forEach { target ->
@@ -132,7 +132,7 @@ class StandardAiTest {
             assertTrue(result.targetThinkTimeMs > 0L)
         }
 
-        assertEquals(listOf(1, 2, 3, 4, 1, 2, 3, 4), provider.edaxLevels)
+        assertEquals(listOf(1, 1, 1, 1, 2, 2, 2, 2), provider.edaxLevels)
     }
 
     @Test
