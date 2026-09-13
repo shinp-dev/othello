@@ -12,6 +12,32 @@ import org.junit.Test
 
 class StandardEvaluationDataManagerTest {
     @Test
+    fun failedStandardPreparationLeavesExistingAdvancedAndUserFilesUntouched() = runBlocking<Unit> {
+        val root = Files.createTempDirectory("standard-eval-preserve").toFile()
+        try {
+            val advanced = File(root, "analysis/edax/eval.dat").apply {
+                parentFile.mkdirs()
+                writeText("existing advanced eval")
+            }
+            val userData = File(root, "saved-record.json").apply { writeText("existing record") }
+            val standard = File(root, "analysis/edax/standard/v1").apply { mkdirs() }
+            val previous = File(standard, "existing-eval.dat").apply { writeText("keep existing bytes") }
+            val manager = StandardEvaluationDataManager(
+                standard, MemoryMetadataStore(), FakeInstaller(failFirstDownload = true),
+            )
+
+            assertFails { manager.prepare() }
+
+            assertEquals("existing advanced eval", advanced.readText())
+            assertEquals("existing record", userData.readText())
+            assertEquals("keep existing bytes", previous.readText())
+            assertEquals(listOf("existing-eval.dat"), standard.listFiles()!!.map { it.name })
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun preparesIntoStandardOnlyDirectoryAndReusesTheInstalledAsset() = runBlocking<Unit> {
         val directory = Files.createTempDirectory("standard-eval-test").toFile()
         try {

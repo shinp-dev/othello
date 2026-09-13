@@ -18,24 +18,25 @@ internal sealed interface StandardAiPreparationState {
 }
 
 internal class StandardAiPreparationController(
-    private val source: StandardEvaluationDataSource,
+    private val sourceFactory: () -> StandardEvaluationDataSource,
 ) {
+    constructor(source: StandardEvaluationDataSource) : this({ source })
+
     private val mutex = Mutex()
     private val mutableState = MutableStateFlow<StandardAiPreparationState>(
-        source.current()?.let(StandardAiPreparationState::Ready)
-            ?: StandardAiPreparationState.NotPrepared,
+        StandardAiPreparationState.NotPrepared,
     )
     val state: StateFlow<StandardAiPreparationState> = mutableState.asStateFlow()
 
     suspend fun prepare() = mutex.withLock {
         if (mutableState.value is StandardAiPreparationState.Ready) return@withLock
-        if (!source.nativeAvailable) {
-            mutableState.value = StandardAiPreparationState.Failed(
-                IllegalStateException("Edax native library is unavailable"),
-            )
-            return@withLock
-        }
         try {
+            val source = sourceFactory()
+            check(source.nativeAvailable) { "Edax native library is unavailable" }
+            source.current()?.let {
+                mutableState.value = StandardAiPreparationState.Ready(it)
+                return@withLock
+            }
             mutableState.value = StandardAiPreparationState.Preparing(
                 StandardEvaluationPreparationPhase.DOWNLOADING,
             )

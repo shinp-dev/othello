@@ -10,6 +10,25 @@ class StandardModeUiContractTest {
     private val source = File("src/main/kotlin/com/example/othello/StandardModeNavigation.kt").readText()
 
     @Test
+    fun bootstrapGatesAllStandardDestinationsButNotModeSelectionOrAdvanced() {
+        val route = source.substringAfter("internal fun AuthenticatedModeRoute(")
+            .substringBefore("private fun ModeSelectionScreen(")
+        val bootstrapIndex = route.indexOf("else -> StandardBootstrapRoute(")
+        assertTrue(bootstrapIndex > route.indexOf("AuthenticatedModeDestination.ADVANCED -> advancedContent"))
+        assertTrue(bootstrapIndex > route.indexOf("AuthenticatedModeDestination.MODE_SELECTION -> ModeSelectionScreen"))
+        AuthenticatedModeDestination.entries.filter { it.name.startsWith("STANDARD_") }.forEach {
+            assertTrue(route.indexOf("AuthenticatedModeDestination.$it ->") > bootstrapIndex)
+        }
+        assertTrue("preparationState = aiState" in route)
+        assertEquals(2, route.split("content = content").size - 1)
+        val gate = File("src/main/kotlin/com/example/othello/StandardBootstrapScreen.kt").readText()
+        assertTrue("remember(application, userId)" in gate)
+        assertFalse("rememberSaveable" in gate)
+        assertTrue("is StandardBootstrapState.Ready -> content" in gate)
+        assertTrue("BackHandler(onBack = onBack)" in gate)
+    }
+
+    @Test
     fun standardRouteIsSeparateFromAdvancedNavigation() {
         assertTrue("AuthenticatedModeDestination.ADVANCED -> advancedContent {" in source)
         assertTrue("destination = AuthenticatedModeDestination.MODE_SELECTION" in source)

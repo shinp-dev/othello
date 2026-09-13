@@ -62,22 +62,22 @@ private sealed interface StandardCollectionLoadState {
 @Composable
 internal fun StandardCollectionRoute(
     userId: String,
+    content: StandardContentSnapshot,
     onBack: () -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val application = context.applicationContext as OthelloApplication
     val collectionStore = remember(context) { StandardCollectionStore(context) }
     var retryGeneration by rememberSaveable(userId) { mutableIntStateOf(0) }
-    var loadState by remember(userId) {
+    var loadState by remember(userId, content) {
         mutableStateOf<StandardCollectionLoadState>(StandardCollectionLoadState.Loading)
     }
 
-    LaunchedEffect(userId, retryGeneration) {
+    LaunchedEffect(userId, content, retryGeneration) {
         loadState = StandardCollectionLoadState.Loading
         loadState = withContext(Dispatchers.IO) {
             runCatching {
                 StandardCollectionLoadState.Ready(
-                    snapshot = application.standardContent.snapshot(),
+                    snapshot = content,
                     obtainedCardIds = collectionStore.obtainedCardIds(userId),
                 )
             }.getOrElse {

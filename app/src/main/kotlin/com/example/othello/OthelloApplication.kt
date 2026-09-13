@@ -31,4 +31,10 @@ class OthelloApplication : Application() {
     internal val standardContent by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         StandardContentProcessOwner(this)
     }
+
+    internal val standardAiPreparation by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        StandardAiPreparationController {
+            com.example.othello.analysis.edax.StandardEvaluationDataManager(this)
+        }
+    }
 }

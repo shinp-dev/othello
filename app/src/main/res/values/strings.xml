@@ -24,6 +24,8 @@
     <string name="standard_ai_unlock_guidance">Win without using Undo to unlock the next level.</string>
     <string name="standard_ai_conquered">Standard AI conquered!</string>
     <string name="standard_ai_start_level">Play Lv%1$d</string>
+    <string name="standard_bootstrap_preparing">Preparing Standard mode: checking card packs and setting up AI if needed…</string>
+    <string name="standard_bootstrap_failed">Couldn’t load the card packs. Please retry.</string>
     <string name="standard_ai_preparing">Preparing AI…</string>
     <string name="standard_ai_preparing_download">Downloading the official evaluation data…</string>
     <string name="standard_ai_preparing_extract">Extracting the evaluation data…</string>
