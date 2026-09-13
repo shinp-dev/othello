@@ -1,10 +1,15 @@
-# Verification checklist
+# Opponent presentation verification
 
-- First challenge of each Standard AI level shows its opponent artwork once.
-- Starting the same level again does not repeat the introduction.
-- Human win shows the opponent crying artwork.
-- Opponent win shows the confident opponent artwork.
-- Draw uses the confident artwork with draw copy.
-- First clear without Undo shows clear/unlock messaging.
-- Lv8 first clear shows Standard AI conquest messaging.
-- Replay/new match clears only the transient result presentation.
+- First challenge shows the selected Pack/Player artwork once per user.
+- Existing animal introduction flags are recognized after migration.
+- Human victory uses the player's loss artwork; human defeat/draw uses win artwork.
+- A no-Undo first win records that Pack/Player and reveals newly unlocked players.
+- Multiple prerequisite branches unlock only after all required players are cleared.
+- Pack completion covers all current players, regardless of count or display order.
+- Replay clears transient presentation only.
+- Home scrolls through multiple packs and selects the clicked Pack ID.
+- Locked opponents can be previewed/swiped past; only unlocked players can start.
+- Missing/expired saved Pack selections return a Home navigation option.
+- Offline/corrupt remote catalog keeps a valid installed or bundled entrance.
+
+See [Opponent Packs](opponent-packs.md) for setup, schema, migration, and automated checks.

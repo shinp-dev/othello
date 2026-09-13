@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="opponent_first_clear">%1$s cleared!</string>
+    <string name="opponent_milestone_title">A new challenge!</string>
+    <string name="opponent_milestone_unlocked">A milestone opponent is now available</string>
+    <string name="opponent_pack_unavailable">This opponent pack is no longer available. Please choose a pack from Home.</string>
+    <string name="opponent_previous">← Previous</string>
+    <string name="opponent_next">Next →</string>
+</resources>

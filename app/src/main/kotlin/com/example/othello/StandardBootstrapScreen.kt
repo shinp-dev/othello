@@ -28,7 +28,7 @@ import kotlinx.coroutines.launch
 internal fun StandardBootstrapRoute(
     userId: String,
     onBack: () -> Unit,
-    content: @Composable (StandardContentSnapshot, StandardAiPreparationState, () -> Unit) -> Unit,
+    content: @Composable (StandardContentSnapshot, OpponentPackSnapshot, StandardAiPreparationState, () -> Unit) -> Unit,
 ) {
     val application = LocalContext.current.applicationContext as OthelloApplication
     // Retained across feature navigation, discarded when leaving Standard. Not saveable:
@@ -37,6 +37,7 @@ internal fun StandardBootstrapRoute(
         StandardBootstrapController(
             prepareContent = { application.standardContent.prepareForEntry() },
             aiPreparation = application.standardAiPreparation,
+            prepareOpponents = { application.opponentPacks.prepareForEntry() },
         )
     }
     val state by bootstrap.state.collectAsState()
@@ -45,7 +46,7 @@ internal fun StandardBootstrapRoute(
     LaunchedEffect(bootstrap) { bootstrap.prepare() }
 
     when (val current = state) {
-        is StandardBootstrapState.Ready -> content(current.content, aiState) {
+        is StandardBootstrapState.Ready -> content(current.content, current.opponents, aiState) {
             scope.launch { bootstrap.retryAi() }
         }
         else -> {

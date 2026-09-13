@@ -7,18 +7,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.example.othello.analysis.api.StandardAiLevel
 
 /**
  * Creates the real Standard presentation engine and owns the Android sound adapter lifecycle.
  * Keeping this in a Standard-only composable prevents Advanced screens from acquiring audio side effects.
  */
 @Composable
-internal fun rememberStandardPresentationEngine(level: StandardAiLevel): StandardPresentationEngine {
+internal fun rememberStandardPresentationEngine(player: PlayerKey): StandardPresentationEngine {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val soundOutput = remember(context) { AndroidStandardSoundOutput(context.applicationContext) }
-    val presentationEngine = remember(level, soundOutput) {
+    val presentationEngine = remember(player, soundOutput) {
         StandardPresentationEngine(soundOutput = soundOutput)
     }
 

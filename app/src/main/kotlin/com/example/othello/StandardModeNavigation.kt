@@ -34,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import coil3.compose.AsyncImage
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -113,6 +114,7 @@ internal fun AuthenticatedModeRoute(
     var destination by rememberSaveable(userId) {
         mutableStateOf(initialAuthenticatedModeDestination())
     }
+    var selectedPackId by rememberSaveable(userId) { mutableStateOf<String?>(null) }
     val backDestination = authenticatedModeBackDestination(destination)
     BackHandler(enabled = backDestination != null) {
         destination = requireNotNull(authenticatedModeBackDestination(destination))
@@ -128,16 +130,20 @@ internal fun AuthenticatedModeRoute(
         else -> StandardBootstrapRoute(
             userId = userId,
             onBack = { destination = AuthenticatedModeDestination.MODE_SELECTION },
-        ) { content, aiState, onRetryAi ->
+        ) { content, opponents, aiState, onRetryAi ->
             when (destination) {
                 AuthenticatedModeDestination.STANDARD_HOME -> StandardHomeScreen(
+                    opponents = opponents,
+                    onPackSelected = { selectedPackId = it; destination = AuthenticatedModeDestination.STANDARD_AI },
                     onFeature = { destination = destinationFor(it) },
                     onWinningTips = { destination = AuthenticatedModeDestination.STANDARD_WINNING_TIPS },
                     onGacha = { destination = AuthenticatedModeDestination.STANDARD_GACHA },
                     onCollection = { destination = AuthenticatedModeDestination.STANDARD_COLLECTION },
                     onSwitchMode = { destination = AuthenticatedModeDestination.MODE_SELECTION },
                 )
-                AuthenticatedModeDestination.STANDARD_AI -> StandardAiRoute(
+                AuthenticatedModeDestination.STANDARD_AI -> StandardAiPackRoute(
+                    opponents = opponents,
+                    selectedPackId = selectedPackId,
                     userId = userId,
                     preparationState = aiState,
                     onRetryPreparation = onRetryAi,
@@ -188,7 +194,7 @@ private fun ModeSelectionScreen(onSelect: (AppMode) -> Unit) {
             onClick = { onSelect(AppMode.STANDARD) },
         ) {
             Image(
-                painter = painterResource(StandardOpponentPacks.animal.bannerDrawableRes),
+                painter = painterResource(R.drawable.standard_ai_animal_pack_banner),
                 contentDescription = appString(R.string.standard_ai_pack_preview_description),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -383,7 +389,9 @@ private fun MiniAnalysisBoard() {
 }
 
 @Composable
-private fun StandardHomeScreen(
+internal fun StandardHomeScreen(
+    opponents: OpponentPackSnapshot,
+    onPackSelected: (String) -> Unit,
     onFeature: (StandardFeature) -> Unit,
     onWinningTips: () -> Unit,
     onGacha: () -> Unit,
@@ -398,24 +406,17 @@ private fun StandardHomeScreen(
         ) {
             val compact = maxHeight < 700.dp
             val itemSpacing = if (compact) 8.dp else ChanrivaSpacing.compact
-            val heroHeight = if (compact) 160.dp else 188.dp
-            val heroArtworkHeight = if (compact) 78.dp else 100.dp
             val wideCardHeight = if (compact) 82.dp else 96.dp
             val miniCardHeight = if (compact) 68.dp else 78.dp
             val eventCardHeight = if (compact) 88.dp else 104.dp
             val miniArtworkSize = if (compact) 44.dp else 52.dp
 
             Column(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(itemSpacing),
             ) {
                 ChanrivaScreenHeader(title = appString(R.string.standard_mode))
-                StandardOpponentPackPreviewCard(
-                    pack = StandardOpponentPacks.animal,
-                    artworkHeight = heroArtworkHeight,
-                    onClick = { onFeature(StandardFeature.AI) },
-                    modifier = Modifier.height(heroHeight),
-                )
+                OpponentHomeSectionCards(opponents, OpponentHomeSection.FEATURED, onPackSelected)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -437,6 +438,7 @@ private fun StandardHomeScreen(
                         modifier = Modifier.weight(1f),
                     )
                 }
+                OpponentHomeSectionCards(opponents, OpponentHomeSection.CHALLENGES, onPackSelected)
                 StandardHomeWideFeatureCard(
                     title = appString(R.string.standard_winning_tips_title),
                     supportingText = appString(R.string.standard_winning_tips_home_supporting),
@@ -451,7 +453,7 @@ private fun StandardHomeScreen(
                     onClick = { onFeature(StandardFeature.REAL_EVENT) },
                     modifier = Modifier.height(eventCardHeight),
                 )
-                Spacer(Modifier.weight(1f))
+                Spacer(Modifier.height(itemSpacing))
                 TextButton(
                     onClick = onSwitchMode,
                     modifier = Modifier.fillMaxWidth(),
@@ -465,11 +467,12 @@ private fun StandardHomeScreen(
 
 @Composable
 private fun StandardOpponentPackPreviewCard(
-    pack: StandardOpponentPackUi,
+    installedPack: InstalledOpponentPack,
     artworkHeight: Dp,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val pack = installedPack.definition
     Card(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
@@ -478,8 +481,8 @@ private fun StandardOpponentPackPreviewCard(
         elevation = standardHomeCardElevation(),
     ) {
         Box(Modifier.fillMaxSize()) {
-            Image(
-                painter = painterResource(pack.bannerDrawableRes),
+            AsyncImage(
+                model = installedPack.image(pack.banner),
                 contentDescription = appString(R.string.standard_ai_pack_preview_description),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -498,12 +501,12 @@ private fun StandardOpponentPackPreviewCard(
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
                 Text(
-                    text = appString(pack.titleRes),
+                    text = opponentText(pack.title),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
                 Text(
-                    text = appString(pack.supportingTextRes),
+                    text = opponentText(pack.description),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                     maxLines = 1,
@@ -511,6 +514,19 @@ private fun StandardOpponentPackPreviewCard(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun OpponentHomeSectionCards(snapshot: OpponentPackSnapshot, section: OpponentHomeSection, onSelect: (String) -> Unit) {
+    snapshot.visiblePacks().filter { it.definition.home.section == section }.forEach { installed ->
+        val hero = installed.definition.home.style == OpponentHomeStyle.HERO
+        StandardOpponentPackPreviewCard(
+            installedPack = installed,
+            artworkHeight = if (hero) 100.dp else 44.dp,
+            onClick = { onSelect(installed.definition.id) },
+            modifier = Modifier.height(if (hero) 188.dp else 138.dp),
+        )
     }
 }
 

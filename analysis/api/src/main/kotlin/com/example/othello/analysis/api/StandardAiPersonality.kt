@@ -161,117 +161,6 @@ class StandardWeightedMoveSelectionPolicy(
     }
 }
 
-/**
- * Initial animal-pack campaign tuning.
- *
- * Lv1-Lv4 are intentionally beginner-friendly: they consider more ranked moves and permit
- * larger evaluation losses. Lv5-Lv8 keep the corresponding animal's miss probability and
- * candidate count, while sharply reducing the maximum evaluation loss so the wild versions
- * retain their character without playing catastrophic mistakes.
- */
-internal fun standardCampaignMoveProfile(level: StandardAiLevel): StandardWeightedMoveProfile = when (level) {
-    StandardAiLevel.LV1 -> campaignMoveProfile(
-        candidateLimit = 8,
-        openingBestMoveProbability = 0.05,
-        midgameBestMoveProbability = 0.10,
-        endgameBestMoveProbability = 0.20,
-        openingMaxScoreLoss = 30,
-        endgameMaxScoreLoss = 18,
-    )
-    StandardAiLevel.LV2 -> campaignMoveProfile(
-        candidateLimit = 7,
-        openingBestMoveProbability = 0.10,
-        midgameBestMoveProbability = 0.18,
-        endgameBestMoveProbability = 0.30,
-        openingMaxScoreLoss = 24,
-        endgameMaxScoreLoss = 14,
-    )
-    StandardAiLevel.LV3 -> campaignMoveProfile(
-        candidateLimit = 6,
-        openingBestMoveProbability = 0.13,
-        midgameBestMoveProbability = 0.24,
-        endgameBestMoveProbability = 0.40,
-        openingMaxScoreLoss = 18,
-        endgameMaxScoreLoss = 10,
-    )
-    StandardAiLevel.LV4 -> campaignMoveProfile(
-        candidateLimit = 5,
-        openingBestMoveProbability = 0.20,
-        midgameBestMoveProbability = 0.35,
-        endgameBestMoveProbability = 0.55,
-        openingMaxScoreLoss = 13,
-        endgameMaxScoreLoss = 7,
-    )
-    StandardAiLevel.LV5 -> campaignMoveProfile(
-        candidateLimit = 8,
-        openingBestMoveProbability = 0.05,
-        midgameBestMoveProbability = 0.10,
-        endgameBestMoveProbability = 0.20,
-        openingMaxScoreLoss = 8,
-        endgameMaxScoreLoss = 4,
-    )
-    StandardAiLevel.LV6 -> campaignMoveProfile(
-        candidateLimit = 7,
-        openingBestMoveProbability = 0.10,
-        midgameBestMoveProbability = 0.18,
-        endgameBestMoveProbability = 0.30,
-        openingMaxScoreLoss = 6,
-        endgameMaxScoreLoss = 3,
-    )
-    StandardAiLevel.LV7 -> campaignMoveProfile(
-        candidateLimit = 6,
-        openingBestMoveProbability = 0.13,
-        midgameBestMoveProbability = 0.24,
-        endgameBestMoveProbability = 0.40,
-        openingMaxScoreLoss = 4,
-        endgameMaxScoreLoss = 2,
-    )
-    StandardAiLevel.LV8 -> campaignMoveProfile(
-        candidateLimit = 5,
-        openingBestMoveProbability = 0.20,
-        midgameBestMoveProbability = 0.35,
-        endgameBestMoveProbability = 0.55,
-        openingMaxScoreLoss = 3,
-        endgameMaxScoreLoss = 1,
-    )
-}
-
-private fun campaignMoveProfile(
-    candidateLimit: Int,
-    openingBestMoveProbability: Double,
-    midgameBestMoveProbability: Double,
-    endgameBestMoveProbability: Double,
-    openingMaxScoreLoss: Int,
-    endgameMaxScoreLoss: Int,
-): StandardWeightedMoveProfile = StandardWeightedMoveProfile(
-    openingWeights = phaseWeights(candidateLimit, openingBestMoveProbability),
-    midgameWeights = phaseWeights(candidateLimit, midgameBestMoveProbability),
-    endgameWeights = phaseWeights(candidateLimit, endgameBestMoveProbability),
-    openingMaxScoreLoss = openingMaxScoreLoss,
-    endgameMaxScoreLoss = endgameMaxScoreLoss,
-)
-
-private fun phaseWeights(candidateLimit: Int, bestMoveProbability: Double): List<Double> {
-    require(candidateLimit >= 2)
-    require(bestMoveProbability in 0.0..1.0)
-    val nonBestWeight = (1.0 - bestMoveProbability) / (candidateLimit - 1)
-    return buildList(candidateLimit) {
-        add(bestMoveProbability)
-        repeat(candidateLimit - 1) { add(nonBestWeight) }
-    }
-}
-
-/** Current Lv1-Lv8 campaign personality, implemented as a data-driven weighted selector. */
-class StandardNaturalPlayPolicy(
-    level: StandardAiLevel,
-    randomUnit: () -> Double = { Random.Default.nextDouble() },
-) : StandardMoveSelectionPolicy {
-    private val delegate: StandardMoveSelectionPolicy =
-        StandardWeightedMoveSelectionPolicy(standardCampaignMoveProfile(level), randomUnit)
-
-    override fun select(context: StandardDecisionContext): Position? = delegate.select(context)
-}
-
 object StandardBestMovePolicy : StandardMoveSelectionPolicy {
     override fun select(context: StandardDecisionContext): Position? =
         context.rankedCandidates.firstOrNull()?.move ?: context.position.legalMoves.singleOrNull()
@@ -392,34 +281,8 @@ class StandardAdaptiveTensionPolicy(
     }
 }
 
-/** Built-in personalities used by the Standard campaign. Future personalities compose the same policies. */
+/** Optional application-defined defaults; downloadable players compose these same policies. */
 object StandardAiPersonalities {
-    fun natural(
-        level: StandardAiLevel,
-        randomUnit: () -> Double = { Random.Default.nextDouble() },
-    ): StandardAiPersonality = StandardAiPersonality(
-        id = StandardAiPersonalityId.NATURAL,
-        moveSelectionPolicy = StandardNaturalPlayPolicy(level, randomUnit),
-        thinkTimePolicy = StandardAdaptiveThinkTimePolicy(
-            StandardAdaptiveThinkTimeProfile(
-                baseMs = 520L,
-                forcedMoveMs = 160L,
-                ambiguousGapThreshold = 2,
-                ambiguousBonusMs = 180L,
-                riskyBestScoreThreshold = 3,
-                riskyChoiceBonusMs = 220L,
-                allNegativeBonusMs = 360L,
-                manyMovesThreshold = 8,
-                manyMovesBonusMs = 100L,
-                nonBestChoiceBonusMs = 120L,
-                endgameStartPly = 44,
-                endgameBonusMs = 80L,
-                maxMs = 1_300L,
-            ),
-        ),
-        tensionPolicy = StandardAdaptiveTensionPolicy(),
-    )
-
     fun serious(): StandardAiPersonality = StandardAiPersonality(
         id = StandardAiPersonalityId.SERIOUS,
         moveSelectionPolicy = StandardBestMovePolicy,

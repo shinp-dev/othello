@@ -83,11 +83,11 @@ class StandardPresentationEngineTest {
                 firstClear = true,
                 conquered = false,
                 winReward = StandardWinReward.COMEBACK,
-                wildStageAwakened = true,
+                milestoneUnlocked = true,
             ),
         )
 
-        assertEquals(listOf(StandardSoundCue.WILD_STAGE_AWAKENED), sound.cues)
+        assertEquals(listOf(StandardSoundCue.MILESTONE_UNLOCKED), sound.cues)
     }
 
     @Test

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="opponent_first_clear">%1$sを初クリア！</string>
+    <string name="opponent_milestone_title">新たな挑戦！</string>
+    <string name="opponent_milestone_unlocked">新たな対戦相手が解放されました</string>
+    <string name="opponent_pack_unavailable">この対戦パックは現在利用できません。Homeから選び直してください。</string>
+    <string name="opponent_previous">← 前の相手</string>
+    <string name="opponent_next">次の相手 →</string>
+</resources>

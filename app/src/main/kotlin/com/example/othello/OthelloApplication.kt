@@ -37,4 +37,8 @@ class OthelloApplication : Application() {
             com.example.othello.analysis.edax.StandardEvaluationDataManager(this)
         }
     }
+
+    internal val opponentPacks by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        androidOpponentPackRepository(this)
+    }
 }

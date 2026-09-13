@@ -18,6 +18,27 @@ class StandardBootstrapControllerTest {
     private val snapshot = StandardContentSnapshot(emptyList())
 
     @Test
+    fun bootstrapWaitsForOpponentPacksAndStillAdmitsHomeWhenEvalFails() = runBlocking {
+        val ready = CompletableDeferred<Unit>()
+        val started = CompletableDeferred<Unit>()
+        val opponents = OpponentPackSnapshot(listOf(InstalledOpponentPack(animalPack(), java.io.File("unused"))))
+        val source = FakeEvaluationSource().apply { download = { error("offline") } }
+        val bootstrap = StandardBootstrapController(
+            { snapshot }, StandardAiPreparationController(source),
+            { started.complete(Unit); ready.await(); opponents }, Dispatchers.Unconfined,
+        )
+        val task = async { bootstrap.prepare() }
+        started.await()
+        assertIs<StandardBootstrapState.Preparing>(bootstrap.state.value)
+        assertEquals(0, source.downloadCalls)
+        ready.complete(Unit)
+        task.await()
+        assertSame(opponents, assertIs<StandardBootstrapState.Ready>(bootstrap.state.value).opponents)
+        assertIs<StandardAiPreparationState.Failed>(bootstrap.aiState.value)
+        Unit
+    }
+
+    @Test
     fun entryWaitsForPackAndInitialEvalThenDoesNotRepeatForFeatureNavigation() = runBlocking {
         val source = FakeEvaluationSource()
         val downloaded = CompletableDeferred<Unit>()
@@ -77,7 +98,7 @@ class StandardBootstrapControllerTest {
     fun sourceConstructionFailureIsAlsoOnlyAnAiFailure() = runBlocking<Unit> {
         val bootstrap = StandardBootstrapController(
             { snapshot }, StandardAiPreparationController { error("unavailable storage") },
-            Dispatchers.Unconfined,
+            { OpponentPackSnapshot(emptyList()) }, Dispatchers.Unconfined,
         )
         bootstrap.prepare()
         assertIs<StandardBootstrapState.Ready>(bootstrap.state.value)
@@ -100,7 +121,7 @@ class StandardBootstrapControllerTest {
         val ai = StandardAiPreparationController(source)
         var contentCalls = 0
         repeat(2) {
-            val entry = StandardBootstrapController({ contentCalls++; snapshot }, ai, Dispatchers.Unconfined)
+            val entry = StandardBootstrapController({ contentCalls++; snapshot }, ai, { OpponentPackSnapshot(emptyList()) }, Dispatchers.Unconfined)
             entry.prepare()
             assertIs<StandardBootstrapState.Ready>(entry.state.value)
         }
@@ -154,7 +175,7 @@ class StandardBootstrapControllerTest {
     private fun bootstrap(
         source: FakeEvaluationSource,
         content: suspend () -> StandardContentSnapshot = { snapshot },
-    ) = StandardBootstrapController(content, StandardAiPreparationController(source), Dispatchers.Unconfined)
+    ) = StandardBootstrapController(content, StandardAiPreparationController(source), { OpponentPackSnapshot(emptyList()) }, Dispatchers.Unconfined)
 
     private class FakeEvaluationSource : StandardEvaluationDataSource {
         override var nativeAvailable = true

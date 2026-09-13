@@ -14,61 +14,12 @@ import kotlin.test.assertTrue
 
 class StandardAiTest {
     @Test
-    fun displayLevelsAreOneThroughEightAndUseFixedPackStrengths() {
-        assertEquals((1..8).toList(), StandardAiLevel.entries.map { it.value })
-        assertEquals(listOf(1, 1, 1, 1, 2, 2, 2, 2), StandardAiLevel.entries.map { it.edaxLevel })
-        assertEquals(StandardAiLevel.LV5, StandardAiLevel.LV4.next())
-        assertNull(StandardAiLevel.LV8.next())
-    }
-
-    @Test
-    fun campaignPresetKeepsDisplayLevelStrengthAndPersonalitySeparate() {
-        StandardAiLevel.entries.forEach { level ->
-            val config = standardCampaignAiConfig(level)
-            assertEquals(level.edaxLevel, config.edaxLevel)
-            assertEquals(StandardAiPersonalityId.NATURAL, config.personality.id)
-            assertIs<StandardNaturalPlayPolicy>(config.personality.moveSelectionPolicy)
-            assertIs<StandardAdaptiveThinkTimePolicy>(config.personality.thinkTimePolicy)
-            assertIs<StandardAdaptiveTensionPolicy>(config.personality.tensionPolicy)
-        }
-    }
-
-    @Test
-    fun campaignMoveProfilesMatchBeginnerTargets() {
-        val expected = listOf(
-            ExpectedMoveProfile(StandardAiLevel.LV1, 8, 0.05, 0.10, 0.20, 30, 18),
-            ExpectedMoveProfile(StandardAiLevel.LV2, 7, 0.10, 0.18, 0.30, 24, 14),
-            ExpectedMoveProfile(StandardAiLevel.LV3, 6, 0.13, 0.24, 0.40, 18, 10),
-            ExpectedMoveProfile(StandardAiLevel.LV4, 5, 0.20, 0.35, 0.55, 13, 7),
-            ExpectedMoveProfile(StandardAiLevel.LV5, 8, 0.05, 0.10, 0.20, 8, 4),
-            ExpectedMoveProfile(StandardAiLevel.LV6, 7, 0.10, 0.18, 0.30, 6, 3),
-            ExpectedMoveProfile(StandardAiLevel.LV7, 6, 0.13, 0.24, 0.40, 4, 2),
-            ExpectedMoveProfile(StandardAiLevel.LV8, 5, 0.20, 0.35, 0.55, 3, 1),
-        )
-
-        expected.forEach { target ->
-            val profile = standardCampaignMoveProfile(target.level)
-            assertEquals(target.candidateLimit, profile.openingWeights.size)
-            assertEquals(target.candidateLimit, profile.midgameWeights.size)
-            assertEquals(target.candidateLimit, profile.endgameWeights.size)
-            assertEquals(target.openingBestMoveProbability, profile.openingWeights.first())
-            assertEquals(target.midgameBestMoveProbability, profile.midgameWeights.first())
-            assertEquals(target.endgameBestMoveProbability, profile.endgameWeights.first())
-            assertEquals(target.openingMaxScoreLoss, profile.openingMaxScoreLoss)
-            assertEquals(target.endgameMaxScoreLoss, profile.endgameMaxScoreLoss)
-            assertEquals(1.0, profile.openingWeights.sum(), absoluteTolerance = 1e-9)
-            assertEquals(1.0, profile.midgameWeights.sum(), absoluteTolerance = 1e-9)
-            assertEquals(1.0, profile.endgameWeights.sum(), absoluteTolerance = 1e-9)
-        }
-    }
-
-    @Test
     fun naturalPolicyCanVaryAmongCloseTopMovesEarly() {
         val candidates = initialCandidates()
         val context = StandardDecisionContext(GameState(ply = 0), candidates)
 
-        val third = StandardNaturalPlayPolicy(StandardAiLevel.LV1) { 0.50 }.select(context)
-        val fourth = StandardNaturalPlayPolicy(StandardAiLevel.LV1) { 0.90 }.select(context)
+        val third = StandardWeightedMoveSelectionPolicy(profile()) { 0.50 }.select(context)
+        val fourth = StandardWeightedMoveSelectionPolicy(profile()) { 0.90 }.select(context)
 
         assertEquals(candidates[2].move, third)
         assertEquals(candidates[3].move, fourth)
@@ -77,7 +28,7 @@ class StandardAiTest {
     @Test
     fun naturalPolicyGraduallyFavorsBestMoveLateInGame() {
         val candidates = initialCandidates()
-        val policy = StandardNaturalPlayPolicy(StandardAiLevel.LV1) { 0.15 }
+        val policy = StandardWeightedMoveSelectionPolicy(profile()) { 0.15 }
 
         assertEquals(candidates[1].move, policy.select(StandardDecisionContext(GameState(ply = 0), candidates)))
         assertEquals(candidates[0].move, policy.select(StandardDecisionContext(GameState(ply = 50), candidates)))
@@ -94,14 +45,14 @@ class StandardAiTest {
             StandardMoveCandidate(legalMoves[3], -30),
         )
 
-        val selected = StandardNaturalPlayPolicy(StandardAiLevel.LV1) { 0.99 }
+        val selected = StandardWeightedMoveSelectionPolicy(profile()) { 0.99 }
             .select(StandardDecisionContext(state, candidates))
 
         assertEquals(candidates[0].move, selected)
     }
 
     @Test
-    fun wildLevelKeepsNonBestCharacterButFiltersCatastrophicMoves() {
+    fun lowScoreLossProfileFiltersCatastrophicMoves() {
         val state = GameState()
         val legalMoves = state.legalMoves.toList()
         val candidates = listOf(
@@ -111,20 +62,20 @@ class StandardAiTest {
             StandardMoveCandidate(legalMoves[3], 0),
         )
 
-        val selected = StandardNaturalPlayPolicy(StandardAiLevel.LV5) { 0.99 }
+        val selected = StandardWeightedMoveSelectionPolicy(profile().copy(openingMaxScoreLoss = 8, endgameMaxScoreLoss = 4)) { 0.99 }
             .select(StandardDecisionContext(state, candidates))
 
         assertEquals(candidates[1].move, selected)
     }
 
     @Test
-    fun levelsOneThroughEightEvaluateCandidatesWithMappedStrength() = runBlocking {
+    fun allAllowedStrengthsEvaluateCandidates() = runBlocking {
         val provider = RecordingProvider()
         val engine = StandardAiEngine(provider)
 
-        StandardAiLevel.entries.forEach { level ->
-            val personality = StandardAiPersonalities.natural(level) { 0.50 }
-            val config = StandardAiConfig(edaxLevel = level.edaxLevel, personality = personality)
+        (1..4).forEach { strength ->
+            val personality = personality()
+            val config = StandardAiConfig(edaxLevel = strength, personality = personality)
             val result = engine.chooseMove(GameState(), config, asset())
             assertEquals(true, result.move in GameState().legalMoves)
             assertEquals(StandardAiPersonalityId.NATURAL, result.personalityId)
@@ -132,7 +83,7 @@ class StandardAiTest {
             assertTrue(result.targetThinkTimeMs > 0L)
         }
 
-        assertEquals(listOf(1, 1, 1, 1, 2, 2, 2, 2), provider.edaxLevels)
+        assertEquals(listOf(1, 2, 3, 4), provider.edaxLevels)
     }
 
     @Test
@@ -145,7 +96,7 @@ class StandardAiTest {
 
         val result = StandardAiEngine(provider).chooseMove(
             state,
-            standardCampaignAiConfig(StandardAiLevel.LV8),
+            StandardAiConfig(2, personality()),
             asset(),
         )
 
@@ -227,7 +178,7 @@ class StandardAiTest {
 
     @Test
     fun allNegativePositionAddsMoreHesitation() {
-        val policy = StandardAiPersonalities.natural(StandardAiLevel.LV1) { 0.0 }.thinkTimePolicy
+        val policy = personality().thinkTimePolicy
         val state = GameState()
         val moves = state.legalMoves.toList()
         val candidates = listOf(
@@ -280,11 +231,6 @@ class StandardAiTest {
         assertFalse(runCatching { StandardAiConfig(8, StandardAiPersonalities.serious()) }.isSuccess)
     }
 
-    @Test
-    fun naturalPolicySupportsAllCampaignLevels() {
-        assertTrue(StandardAiLevel.entries.all { runCatching { StandardNaturalPlayPolicy(it) }.isSuccess })
-    }
-
     private fun initialCandidates(): List<StandardMoveCandidate> = rankedCandidates(GameState())
 
     private fun rankedCandidates(position: GameState): List<StandardMoveCandidate> =
@@ -292,14 +238,16 @@ class StandardAiTest {
 
     private fun asset() = StandardEvaluationAsset("standard/eval.dat", "a".repeat(64))
 
-    private data class ExpectedMoveProfile(
-        val level: StandardAiLevel,
-        val candidateLimit: Int,
-        val openingBestMoveProbability: Double,
-        val midgameBestMoveProbability: Double,
-        val endgameBestMoveProbability: Double,
-        val openingMaxScoreLoss: Int,
-        val endgameMaxScoreLoss: Int,
+    private fun profile() = StandardWeightedMoveProfile(
+        listOf(0.05) + List(7) { 0.95 / 7 }, listOf(0.10) + List(7) { 0.90 / 7 },
+        listOf(0.20) + List(7) { 0.80 / 7 }, 30, 18,
+    )
+
+    private fun personality() = StandardAiPersonality(
+        StandardAiPersonalityId.NATURAL, StandardWeightedMoveSelectionPolicy(profile()) { 0.5 },
+        StandardAdaptiveThinkTimePolicy(StandardAdaptiveThinkTimeProfile(
+            520, 160, 2, 180, 3, 220, 360, 8, 100, 120, 44, 80, maxMs = 1300,
+        )), StandardAdaptiveTensionPolicy(),
     )
 
     private inner class RecordingProvider : StandardCandidateProvider {

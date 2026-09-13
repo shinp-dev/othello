@@ -38,9 +38,9 @@ class StandardModeUiContractTest {
 
     @Test
     fun standardHomeShowsAnimalPackThenGachaCollectionWinningTipsAndRealEvent() {
-        val home = source.substringAfter("private fun StandardHomeScreen(")
+        val home = source.substringAfter("internal fun StandardHomeScreen(")
             .substringBefore("private fun StandardOpponentPackPreviewCard")
-        val packIndex = home.indexOf("StandardOpponentPackPreviewCard(")
+        val packIndex = home.indexOf("OpponentHomeSectionCards(")
         val tipsIndex = home.indexOf("R.string.standard_winning_tips_title")
         val gachaIndex = home.indexOf("R.string.standard_gacha_title")
         val collectionIndex = home.indexOf("R.string.standard_collection_title")
@@ -52,7 +52,8 @@ class StandardModeUiContractTest {
         assertTrue(realEventIndex > tipsIndex)
         assertFalse("title = appString(StandardFeature.AI.titleRes)" in home)
         assertFalse("title = appString(StandardFeature.ONLINE.titleRes)" in home)
-        assertTrue("pack = StandardOpponentPacks.animal" in home)
+        assertTrue("OpponentHomeSection.FEATURED" in home)
+        assertTrue("OpponentHomeSection.CHALLENGES" in home)
         assertTrue("onClick = onWinningTips" in home)
         assertTrue("onClick = onGacha" in home)
         assertTrue("onClick = onCollection" in home)
@@ -66,16 +67,16 @@ class StandardModeUiContractTest {
 
     @Test
     fun standardHomeUsesOneScreenHierarchyWithTwoMiniCards() {
-        val home = source.substringAfter("private fun StandardHomeScreen(")
+        val home = source.substringAfter("internal fun StandardHomeScreen(")
             .substringBefore("private fun StandardOpponentPackPreviewCard")
 
         assertTrue("BoxWithConstraints(" in home)
-        assertFalse("verticalScroll(" in home)
+        assertTrue("verticalScroll(" in home)
         assertTrue("StandardHomeWideFeatureCard(" in home)
         assertEquals(2, home.split("StandardHomeMiniFeatureCard(").size - 1)
         assertTrue("horizontalArrangement = Arrangement.spacedBy(itemSpacing)" in home)
         assertTrue("modifier = Modifier.weight(1f)" in home)
-        assertTrue("Spacer(Modifier.weight(1f))" in home)
+        assertTrue("Spacer(Modifier.height(itemSpacing))" in home)
     }
 
     @Test
@@ -83,7 +84,7 @@ class StandardModeUiContractTest {
         val card = source.substringAfter("private fun StandardOpponentPackPreviewCard(")
             .substringBefore("private fun StandardHomeWideFeatureCard")
 
-        assertTrue("painterResource(pack.bannerDrawableRes)" in card)
+        assertTrue("installedPack.image(pack.banner)" in card)
         assertTrue(".height(artworkHeight)" in card)
         assertTrue(".align(Alignment.BottomCenter)" in card)
         assertTrue("contentScale = ContentScale.Fit" in card)
@@ -124,7 +125,7 @@ class StandardModeUiContractTest {
         assertEquals(1, source.split("private fun StandardComingSoonScreen(").size - 1)
         assertTrue("R.string.feature_coming_soon" in source)
         assertTrue("R.string.back_to_standard_home" in source)
-        assertTrue("AuthenticatedModeDestination.STANDARD_AI -> StandardAiRoute(" in source)
+        assertTrue("AuthenticatedModeDestination.STANDARD_AI -> StandardAiPackRoute(" in source)
         assertTrue("AuthenticatedModeDestination.STANDARD_WINNING_TIPS -> StandardWinningTipsRoute(" in source)
         assertTrue("AuthenticatedModeDestination.STANDARD_GACHA -> StandardGachaRoute(" in source)
         assertTrue("AuthenticatedModeDestination.STANDARD_COLLECTION -> StandardCollectionRoute(" in source)

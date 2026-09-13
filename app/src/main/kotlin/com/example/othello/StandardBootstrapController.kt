@@ -11,7 +11,7 @@ import kotlinx.coroutines.withContext
 
 internal sealed interface StandardBootstrapState {
     data object Preparing : StandardBootstrapState
-    data class Ready(val content: StandardContentSnapshot) : StandardBootstrapState
+    data class Ready(val content: StandardContentSnapshot, val opponents: OpponentPackSnapshot) : StandardBootstrapState
     data class Failed(val cause: Throwable) : StandardBootstrapState
 }
 
@@ -19,6 +19,7 @@ internal sealed interface StandardBootstrapState {
 internal class StandardBootstrapController(
     private val prepareContent: suspend () -> StandardContentSnapshot,
     private val aiPreparation: StandardAiPreparationController,
+    private val prepareOpponents: suspend () -> OpponentPackSnapshot,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val mutex = Mutex()
@@ -30,12 +31,13 @@ internal class StandardBootstrapController(
         if (mutableState.value is StandardBootstrapState.Ready) return@withLock
         mutableState.value = StandardBootstrapState.Preparing
         try {
-            val content = withContext(dispatcher) {
+            val ready = withContext(dispatcher) {
                 val snapshot = prepareContent()
+                val opponents = prepareOpponents()
                 aiPreparation.prepare()
-                snapshot
+                StandardBootstrapState.Ready(snapshot, opponents)
             }
-            mutableState.value = StandardBootstrapState.Ready(content)
+            mutableState.value = ready
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {

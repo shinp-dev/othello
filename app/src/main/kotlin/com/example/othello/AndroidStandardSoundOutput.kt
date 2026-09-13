@@ -201,7 +201,7 @@ internal class AndroidStandardSoundOutput(
         StandardSoundCue.HUMAN_LOSS -> OneShotSpec(AudioAsset.HUMAN_LOSS, volume = 0.64f)
         StandardSoundCue.DRAW -> OneShotSpec(AudioAsset.DRAW, volume = 0.60f)
         StandardSoundCue.LEVEL_CLEAR -> OneShotSpec(AudioAsset.LEVEL_CLEAR, volume = 0.82f)
-        StandardSoundCue.WILD_STAGE_AWAKENED -> OneShotSpec(
+        StandardSoundCue.MILESTONE_UNLOCKED -> OneShotSpec(
             AudioAsset.CAMPAIGN_CONQUERED,
             volume = 0.86f,
             rate = 0.78f,
@@ -220,7 +220,7 @@ internal class AndroidStandardSoundOutput(
         StandardSoundCue.HUMAN_LOSS,
         StandardSoundCue.DRAW,
         StandardSoundCue.LEVEL_CLEAR,
-        StandardSoundCue.WILD_STAGE_AWAKENED,
+        StandardSoundCue.MILESTONE_UNLOCKED,
         StandardSoundCue.CAMPAIGN_CONQUERED,
         -> true
         else -> false

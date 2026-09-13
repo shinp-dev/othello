@@ -1,108 +1,72 @@
 package com.example.othello
 
-import com.example.othello.analysis.api.StandardAiLevel
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
+import kotlin.test.*
 import org.junit.Test
 
 class StandardAiProgressStoreTest {
-    @Test
-    fun onlyLevelOneIsInitiallyUnlocked() {
-        val progress = store().progress("user-a")
+    private val pack = animalPack()
+    private val chick = pack.players.first()
+    private val rabbit = pack.players[1]
 
-        assertTrue(progress.isUnlocked(StandardAiLevel.LV1))
-        StandardAiLevel.entries.drop(1).forEach { assertFalse(progress.isUnlocked(it)) }
-        assertEquals(StandardAiLevel.LV1, progress.nextChallenge())
+    @Test fun cleanStartAndNoUndoWinUnlockTheNextPlayer() {
+        val store = StandardAiProgressStore(MemoryPreferences())
+        assertEquals(chick, store.progress("user", pack).nextChallenge())
+        assertFalse(store.progress("user", pack).isUnlocked(rabbit))
+        val won = store.recordResult("user", pack, chick, true, false)
+        assertTrue(won.isCleared(chick))
+        assertTrue(won.isUnlocked(rabbit))
+        assertEquals(rabbit.id, store.progress("user", pack).nextChallenge().id)
     }
 
-    @Test
-    fun noUndoWinUnlocksTheNextLevelAndUnlockedLevelsRemainSelectable() {
-        val store = store()
-
-        val afterLevelOne = store.recordResult("user", StandardAiLevel.LV1, humanWon = true, undoUsed = false)
-        val reloaded = store.progress("user")
-
-        assertTrue(afterLevelOne.isCleared(StandardAiLevel.LV1))
-        assertTrue(reloaded.isUnlocked(StandardAiLevel.LV1))
-        assertTrue(reloaded.isUnlocked(StandardAiLevel.LV2))
-        assertEquals(StandardAiLevel.LV2, reloaded.nextChallenge())
+    @Test fun undoLossAndLockedOpponentNeverGrantProgress() {
+        val store = StandardAiProgressStore(MemoryPreferences())
+        assertFalse(store.recordResult("user", pack, chick, true, true).isCleared(chick))
+        assertFalse(store.recordResult("user", pack, chick, false, false).isCleared(chick))
+        assertFalse(store.recordResult("user", pack, rabbit, true, false).isCleared(rabbit))
     }
 
-    @Test
-    fun undoWinAndLossDoNotUnlockTheNextLevel() {
-        val undoWin = store().recordResult("user", StandardAiLevel.LV1, humanWon = true, undoUsed = true)
-        val loss = store().recordResult("other", StandardAiLevel.LV1, humanWon = false, undoUsed = false)
-
-        assertEquals(StandardAiLevel.LV1, undoWin.highestUnlockedLevel)
-        assertEquals(StandardAiLevel.LV1, loss.highestUnlockedLevel)
-        assertFalse(undoWin.isCleared(StandardAiLevel.LV1))
+    @Test fun migratesLegacyOnceAndKeepsOriginalPreferences() {
+        val prefs = MemoryPreferences().apply { values["user.cleared"] = "1,2,3,4"; values["user.highest_unlocked"] = 4 }
+        val store = StandardAiProgressStore(prefs)
+        assertEquals("wild-chick", store.progress("user", pack).nextChallenge().id)
+        prefs.values["user.cleared"] = "1,2,3,4,5,6,7,8"
+        assertFalse(store.progress("user", pack).conquered)
+        assertEquals(4, prefs.values["user.highest_unlocked"])
     }
 
-    @Test
-    fun levelFourWinUnlocksLevelFiveAndLevelSevenWinUnlocksLevelEight() {
-        val store = store()
-        StandardAiLevel.entries.take(3).forEach { level ->
-            store.recordResult("winner", level, humanWon = true, undoUsed = false)
-        }
-
-        val afterLevelFour = store.recordResult(
-            "winner",
-            StandardAiLevel.LV4,
-            humanWon = true,
-            undoUsed = false,
-        )
-        StandardAiLevel.entries.slice(4..5).forEach { level ->
-            store.recordResult("winner", level, humanWon = true, undoUsed = false)
-        }
-        val afterLevelSeven = store.recordResult(
-            "winner",
-            StandardAiLevel.LV7,
-            humanWon = true,
-            undoUsed = false,
-        )
-
-        assertTrue(afterLevelFour.isUnlocked(StandardAiLevel.LV5))
-        assertTrue(afterLevelSeven.isUnlocked(StandardAiLevel.LV8))
-        assertFalse(afterLevelSeven.conquered)
+    @Test fun userAndPackNamespacesAreIndependentEvenWithSamePlayerIds() {
+        val store = StandardAiProgressStore(MemoryPreferences())
+        val other = pack.copy(id = "beginner")
+        store.recordResult("user", pack, chick, true, false)
+        assertFalse(store.progress("user", other).isCleared(chick))
+        assertFalse(store.progress("other", pack).isCleared(chick))
     }
 
-    @Test
-    fun legacyLevelFourCompletionMigratesToUnlockedLevelFive() {
-        val preferences = MemoryPreferences().apply {
-            putInt("user.highest_unlocked", 4)
-            putString("user.cleared", "1,2,3,4")
-        }
-
-        val progress = StandardAiProgressStore(preferences).progress("user")
-
-        assertEquals(StandardAiLevel.LV5, progress.highestUnlockedLevel)
-        assertEquals(StandardAiLevel.LV5, progress.nextChallenge())
+    @Test fun updatingReorderingRemovingAndRestoringPlayersKeepsProgress() {
+        val store = StandardAiProgressStore(MemoryPreferences())
+        store.recordResult("user", pack, chick, true, false)
+        val changed = pack.copy(version = 2, players = pack.players.reversed().filterNot { it.id == chick.id })
+        val progress = store.progress("user", changed)
+        assertTrue(chick.id in progress.clearedPlayerIds)
+        assertTrue(progress.isUnlocked(rabbit))
+        assertTrue(store.progress("user", pack.copy(version = 3)).isCleared(chick))
     }
 
-    @Test
-    fun progressionStopsAtLevelEightAndIsNamespacedByUser() {
-        val store = store()
-        StandardAiLevel.entries.forEach { level ->
-            store.recordResult("winner", level, humanWon = true, undoUsed = false)
-        }
-
-        val winner = store.progress("winner")
-        val other = store.progress("other")
-
-        assertEquals(StandardAiLevel.LV8, winner.highestUnlockedLevel)
-        assertTrue(winner.conquered)
-        assertEquals(StandardAiLevel.LV1, other.highestUnlockedLevel)
-        assertFalse(other.conquered)
+    @Test fun branchesAndAllPrerequisitesAreSupportedAndConquestIsPackLocal() {
+        val final = pack.players[2].copy(requires = setOf(chick.id, rabbit.id))
+        val branched = pack.copy(id = "branches", players = listOf(chick, rabbit.copy(requires = emptySet()), final))
+        val store = StandardAiProgressStore(MemoryPreferences())
+        assertTrue(store.progress("u", branched).isUnlocked(rabbit))
+        assertFalse(store.recordResult("u", branched, chick, true, false).isUnlocked(final))
+        assertTrue(store.recordResult("u", branched, rabbit, true, false).isUnlocked(final))
+        assertTrue(store.recordResult("u", branched, final, true, false).conquered)
+        assertFalse(store.progress("u", pack).conquered)
     }
-
-    private fun store() = StandardAiProgressStore(MemoryPreferences())
 
     private class MemoryPreferences : StandardAiProgressPreferences {
-        private val values = mutableMapOf<String, Any>()
-        override fun getInt(key: String, defaultValue: Int): Int = values[key] as? Int ?: defaultValue
-        override fun getString(key: String, defaultValue: String): String? = values[key] as? String ?: defaultValue
-        override fun putInt(key: String, value: Int) { values[key] = value }
+        val values = mutableMapOf<String, Any>()
+        override fun getInt(key: String, defaultValue: Int) = values[key] as? Int ?: defaultValue
+        override fun getString(key: String, defaultValue: String) = values[key] as? String ?: defaultValue
         override fun putString(key: String, value: String) { values[key] = value }
     }
 }
