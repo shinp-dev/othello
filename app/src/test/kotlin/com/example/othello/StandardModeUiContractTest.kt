@@ -18,7 +18,7 @@ class StandardModeUiContractTest {
     }
 
     @Test
-    fun standardHomeShowsAnimalPackThenWinningTipsGachaCollectionAndRealEvent() {
+    fun standardHomeShowsAnimalPackThenGachaCollectionWinningTipsAndRealEvent() {
         val home = source.substringAfter("private fun StandardHomeScreen(")
             .substringBefore("private fun StandardOpponentPackPreviewCard")
         val packIndex = home.indexOf("StandardOpponentPackPreviewCard(")
@@ -27,10 +27,10 @@ class StandardModeUiContractTest {
         val collectionIndex = home.indexOf("R.string.standard_collection_title")
         val realEventIndex = home.indexOf("title = appString(StandardFeature.REAL_EVENT.titleRes)")
         assertTrue(packIndex >= 0)
-        assertTrue(tipsIndex > packIndex)
-        assertTrue(gachaIndex > tipsIndex)
+        assertTrue(gachaIndex > packIndex)
         assertTrue(collectionIndex > gachaIndex)
-        assertTrue(realEventIndex > collectionIndex)
+        assertTrue(tipsIndex > collectionIndex)
+        assertTrue(realEventIndex > tipsIndex)
         assertFalse("title = appString(StandardFeature.AI.titleRes)" in home)
         assertFalse("title = appString(StandardFeature.ONLINE.titleRes)" in home)
         assertTrue("pack = StandardOpponentPacks.animal" in home)
@@ -80,6 +80,24 @@ class StandardModeUiContractTest {
         assertTrue("contentScale = ContentScale.Crop" in card)
         assertTrue("Brush.horizontalGradient" in card)
         assertTrue("ChanrivaColors.surfaceElevated.copy" in card)
+    }
+
+    @Test
+    fun standardHomeCardsUseSubtleBordersAndElevation() {
+        val packCard = source.substringAfter("private fun StandardOpponentPackPreviewCard(")
+            .substringBefore("private fun StandardHomeWideFeatureCard")
+        val wideCard = source.substringAfter("private fun StandardHomeWideFeatureCard(")
+            .substringBefore("private fun StandardHomeMiniFeatureCard")
+        val miniCard = source.substringAfter("private fun StandardHomeMiniFeatureCard(")
+            .substringBefore("private fun standardHomeCardBorder")
+
+        listOf(packCard, wideCard, miniCard).forEach { card ->
+            assertTrue("border = standardHomeCardBorder()" in card)
+            assertTrue("elevation = standardHomeCardElevation()" in card)
+        }
+        assertTrue("MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)" in source)
+        assertTrue("defaultElevation = 1.dp" in source)
+        assertTrue("pressedElevation = 0.dp" in source)
     }
 
     @Test
