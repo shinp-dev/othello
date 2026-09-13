@@ -8,14 +8,14 @@
 - Android namespace / Kotlin パッケージ: 既存の `com.example.othello` 系を維持
 - label: `ちゃんりば`
 - 正式アイコン: `landing-page/public/images/app-icon.png`（今回の作業では変更しない）
-- versionCode: `4`
-- versionName: `0.2.0`
+- versionCode: `5`
+- versionName: `0.2.1`
 - minSdk: `26`
 - targetSdk: `36`（Android 16 / API 36）
 
 現在のversionCodeは[`app/build.gradle.kts`](../../../app/build.gradle.kts)を正本とする。Play提出前にこの値とAABのversionCodeを照合し、資料だけを先行更新しない。
 
-## 現行デバッグ版（2026年9月6日）
+## 実機確認済みデバッグ版（2026年9月6日）
 
 - `versionCode = 4`、`versionName = 0.2.0`
 - GitHub `main` のcommit `bb2aa8c`を基にビルドし、バージョン更新commit `440e606`を適用

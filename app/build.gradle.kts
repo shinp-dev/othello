@@ -53,8 +53,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 4
-        versionName = "0.2.0"
+        versionCode = 5
+        versionName = "0.2.1"
         buildConfigField("String", "CHANRIVA_GIT_SHA", "\"${chanrivaGitShortSha ?: "unknown"}\"")
         buildConfigField("boolean", "CHANRIVA_GIT_DIRTY", (chanrivaGitDirty == true).toString())
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
