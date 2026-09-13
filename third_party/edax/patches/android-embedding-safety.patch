@@ -135,6 +135,14 @@ index 6f21b0e..9a95e98 100644
  
  	// File header
  	r = fread(&edax_header, sizeof (int), 1, f);
+diff --git a/src/root.c b/src/root.c
+index 7346357..07e09a1 100644
+--- a/src/root.c
++++ b/src/root.c
+@@ -362 +362,2 @@ int PVS_root(Search *search, const int alpha, const int beta, const int depth)
+-		move = movelist->move->next = movelist->move + 1;
++		move = movelist->move->next = movelist->move + 1;
++		move->next = NULL;
 diff --git a/src/util.c b/src/util.c
 index d72d8e4..89b6eb9 100644
 --- a/src/util.c
