@@ -1,5 +1,6 @@
 package com.example.othello
 
+import android.graphics.BitmapFactory
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -38,9 +39,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -297,6 +300,16 @@ private fun StandardGachaMachine(
             .repeatCount(0)
             .build()
     }
+    val idleCapsulePainter = remember(context) {
+        runCatching {
+            BitmapFactory.decodeResource(
+                context.resources,
+                R.drawable.standard_gacha_capsule_reveal,
+            )?.asImageBitmap()
+        }.getOrNull()
+            ?.let(::BitmapPainter)
+            ?: ColorPainter(Color.Transparent)
+    }
     val glowAlpha by animateFloatAsState(
         targetValue = when (revealPhase) {
             STANDARD_GACHA_PHASE_PRESS -> 0.10f * glowStrength
@@ -355,13 +368,13 @@ private fun StandardGachaMachine(
                     AsyncImage(
                         model = revealRequest,
                         contentDescription = appString(R.string.standard_gacha_capsule_description),
-                        placeholder = painterResource(R.drawable.standard_gacha_capsule_reveal),
-                        error = painterResource(R.drawable.standard_gacha_capsule_reveal),
+                        placeholder = idleCapsulePainter,
+                        error = idleCapsulePainter,
                         modifier = Modifier.size(228.dp),
                     )
                 } else {
                     Image(
-                        painter = painterResource(R.drawable.standard_gacha_capsule_reveal),
+                        painter = idleCapsulePainter,
                         contentDescription = appString(R.string.standard_gacha_capsule_description),
                         modifier = Modifier.size(228.dp),
                     )

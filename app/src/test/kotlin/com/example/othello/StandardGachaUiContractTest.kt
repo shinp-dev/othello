@@ -2,6 +2,7 @@ package com.example.othello
 
 import java.io.File
 import javax.imageio.ImageIO
+import javax.imageio.metadata.IIOMetadataNode
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.junit.Test
@@ -41,11 +42,13 @@ class StandardGachaUiContractTest {
         assertTrue("AsyncImage(" in source)
         assertTrue(".repeatCount(0)" in source)
         assertTrue("CachePolicy.DISABLED" in source)
+        assertTrue("BitmapFactory.decodeResource(" in source)
+        assertTrue("BitmapPainter" in source)
+        assertFalse("painterResource(R.drawable.standard_gacha_capsule_reveal)" in source)
         assertFalse("standard_gacha_capsule_base_art" in source)
         assertFalse("standard_gacha_capsule_cracks_art" in source)
         assertFalse("standard_gacha_capsule_left_shell_art" in source)
         assertFalse("standard_gacha_capsule_right_shell_art" in source)
-        assertFalse("BitmapFactory.decodeResource(" in source)
         assertFalse(".clipToBounds()" in source)
         assertTrue("standardGachaGlowColor" in source)
         assertTrue("StandardContentRarity.COMMON -> Color(0xFFDCEBFF)" in source)
@@ -117,6 +120,28 @@ class StandardGachaUiContractTest {
             assertTrue(reader.getNumImages(true) >= 28, "Reveal GIF should have smooth motion")
             assertTrue(reader.getWidth(0) == 320 && reader.getHeight(0) == 320)
             assertTrue(reader.read(0).colorModel.hasAlpha())
+
+            repeat(reader.getNumImages(true)) { frameIndex ->
+                val frame = reader.read(frameIndex)
+                val metadata = reader.getImageMetadata(frameIndex)
+                    .getAsTree("javax_imageio_gif_image_1.0")
+                val descriptor = (metadata as IIOMetadataNode)
+                    .getElementsByTagName("ImageDescriptor")
+                    .item(0) as IIOMetadataNode
+                val left = descriptor.getAttribute("imageLeftPosition").toInt()
+                val margin = 3
+                val touchesHorizontalEdge = (0 until frame.height).any { y ->
+                    (0 until frame.width).any { x ->
+                        val canvasX = left + x
+                        frame.getRGB(x, y).ushr(24) != 0 &&
+                            (canvasX < margin || canvasX >= 320 - margin)
+                    }
+                }
+                assertFalse(
+                    touchesHorizontalEdge,
+                    "Reveal GIF frame $frameIndex must keep transparent horizontal padding",
+                )
+            }
         }
         reader.dispose()
     }
