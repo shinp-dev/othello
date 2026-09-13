@@ -31,10 +31,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.example.othello.analysis.api.StandardAiEngine
-import com.example.othello.analysis.api.StandardAiLevel
 import com.example.othello.analysis.api.StandardEvaluationAsset
 import com.example.othello.analysis.api.StandardEvaluationPreparationPhase
-import com.example.othello.analysis.api.standardCampaignAiConfig
 import com.example.othello.analysis.edax.ProductionStandardCandidateProvider
 import com.example.othello.designsystem.ChanrivaDangerButton
 import com.example.othello.designsystem.ChanrivaScreenHeader
@@ -49,21 +47,46 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 @Composable
+internal fun StandardAiPackRoute(
+    opponents: OpponentPackSnapshot,
+    selectedPackId: String?,
+    userId: String,
+    preparationState: StandardAiPreparationState,
+    onRetryPreparation: () -> Unit,
+    onBack: () -> Unit,
+) {
+    val installed = selectedPackId?.let(opponents::pack)
+        ?.takeIf { it.definition.isVisible(java.time.Instant.now()) }
+    if (installed == null) {
+        StandardAiSurface {
+            ChanrivaScreenHeader(title = appString(R.string.standard_ai_match), onBack = onBack, backLabel = appString(R.string.back))
+            Text(appString(R.string.opponent_pack_unavailable))
+        }
+    } else {
+        androidx.compose.runtime.key(installed.definition.id) {
+            StandardAiRoute(userId, installed, preparationState, onRetryPreparation, onBack)
+        }
+    }
+}
+
+@Composable
 internal fun StandardAiRoute(
     userId: String,
+    installedPack: InstalledOpponentPack,
     preparationState: StandardAiPreparationState,
     onRetryPreparation: () -> Unit,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
     val application = context.applicationContext as OthelloApplication
+    val pack = installedPack.definition
     val progressStore = remember { StandardAiProgressStore(context) }
-    var progress by remember(userId) { mutableStateOf(progressStore.progress(userId)) }
-    var selectedLevelValue by rememberSaveable(userId) {
-        mutableStateOf(progress.nextChallenge().value)
+    var progress by remember(userId, pack) { mutableStateOf(progressStore.progress(userId, pack)) }
+    var selectedPlayerId by rememberSaveable(userId, pack.id) {
+        mutableStateOf(progress.nextChallenge().id)
     }
-    var activeLevelValue by rememberSaveable(userId) { mutableStateOf<Int?>(null) }
-    val activeLevel = activeLevelValue?.let(StandardAiLevel::fromValue)
+    var activePlayerId by rememberSaveable(userId, pack.id) { mutableStateOf<String?>(null) }
+    val activePlayer = activePlayerId?.let(pack::player)?.takeIf(progress::isUnlocked)
 
     when (val state = preparationState) {
         StandardAiPreparationState.NotPrepared -> StandardAiPreparingScreen(
@@ -78,27 +101,29 @@ internal fun StandardAiRoute(
             onBack = onBack,
             onRetry = onRetryPreparation,
         )
-        is StandardAiPreparationState.Ready -> if (activeLevel == null) {
-            val selectedLevel = StandardAiLevel.fromValue(selectedLevelValue)
-                .takeIf(progress::isUnlocked) ?: progress.nextChallenge()
-            StandardAiLevelSelectionContent(
+        is StandardAiPreparationState.Ready -> if (activePlayer == null) {
+            val selectedPlayer = pack.player(selectedPlayerId)
+                ?: progress.nextChallenge()
+            StandardAiPlayerSelectionContent(
+                installedPack = installedPack,
                 progress = progress,
-                selectedLevel = selectedLevel,
-                onLevelSelected = { selectedLevelValue = it.value },
-                onStart = { activeLevelValue = selectedLevel.value },
+                selectedPlayer = selectedPlayer,
+                onPlayerSelected = { selectedPlayerId = it.id },
+                onStart = { if (progress.isUnlocked(selectedPlayer)) activePlayerId = selectedPlayer.id },
                 onBack = onBack,
             )
         } else {
             StandardAiMatchScreen(
                 userId = userId,
-                level = activeLevel,
+                installedPack = installedPack,
+                player = activePlayer,
                 evaluationData = state.asset,
                 persistence = application.localGameRecordPersistence.coordinator,
                 progressStore = progressStore,
                 onProgressChanged = { progress = it },
-                onReturnToSelection = { selectedLevel ->
-                    selectedLevelValue = selectedLevel.value
-                    activeLevelValue = null
+                onReturnToSelection = { player ->
+                    selectedPlayerId = player.id
+                    activePlayerId = null
                 },
             )
         }
@@ -156,10 +181,11 @@ private fun StandardAiPreparationFailedScreen(
 }
 
 @Composable
-internal fun StandardAiLevelSelectionContent(
+internal fun StandardAiPlayerSelectionContent(
+    installedPack: InstalledOpponentPack,
     progress: StandardAiProgress,
-    selectedLevel: StandardAiLevel,
-    onLevelSelected: (StandardAiLevel) -> Unit,
+    selectedPlayer: Player,
+    onPlayerSelected: (Player) -> Unit,
     onStart: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -181,9 +207,10 @@ internal fun StandardAiLevelSelectionContent(
                 contentAlignment = Alignment.Center,
             ) {
                 StandardOpponentSelectionPanel(
+                    installedPack = installedPack,
                     progress = progress,
-                    selectedLevel = selectedLevel,
-                    onLevelSelected = onLevelSelected,
+                    selectedPlayer = selectedPlayer,
+                    onPlayerSelected = onPlayerSelected,
                     onStart = onStart,
                 )
             }
@@ -194,25 +221,28 @@ internal fun StandardAiLevelSelectionContent(
 @Composable
 private fun StandardAiMatchScreen(
     userId: String,
-    level: StandardAiLevel,
+    installedPack: InstalledOpponentPack,
+    player: Player,
     evaluationData: StandardEvaluationAsset,
     persistence: LocalGameRecordPersistenceCoordinator,
     progressStore: StandardAiProgressStore,
     onProgressChanged: (StandardAiProgress) -> Unit,
-    onReturnToSelection: (StandardAiLevel) -> Unit,
+    onReturnToSelection: (Player) -> Unit,
 ) {
     val context = LocalContext.current
+    val pack = installedPack.definition
+    val playerKey = PlayerKey(pack.id, player.id)
     val introStore = remember { StandardAiIntroStore(context) }
-    val controller = remember(level) { LocalMatchController(LocalMatchMode.AI, Disc.BLACK) }
-    val engine = remember(level) { StandardAiEngine(ProductionStandardCandidateProvider()) }
-    val presentationEngine = rememberStandardPresentationEngine(level)
+    val controller = remember(player) { LocalMatchController(LocalMatchMode.AI, Disc.BLACK) }
+    val engine = remember(player) { StandardAiEngine(ProductionStandardCandidateProvider()) }
+    val presentationEngine = rememberStandardPresentationEngine(playerKey)
     val presentationState by presentationEngine.state.collectAsState()
-    val rewardTracker = remember(level) { StandardMatchRewardTracker() }
-    val coordinator = remember(controller, engine, level, evaluationData, presentationEngine, rewardTracker) {
+    val rewardTracker = remember(player) { StandardMatchRewardTracker() }
+    val coordinator = remember(controller, engine, player, evaluationData, presentationEngine, rewardTracker) {
         StandardLocalAiCoordinator(
             match = controller,
             engine = engine,
-            config = standardCampaignAiConfig(level),
+            config = player.ai,
             evaluationData = evaluationData,
             onDecisionReady = { tension, opponentBestScore ->
                 rewardTracker.recordDecision(tension, opponentBestScore)
@@ -226,8 +256,8 @@ private fun StandardAiMatchScreen(
     var confirmResign by remember { mutableStateOf(false) }
     var confirmExit by remember { mutableStateOf(false) }
     var handledRecordId by remember { mutableStateOf<String?>(null) }
-    var showIntro by remember(userId, level) { mutableStateOf(!introStore.hasSeen(userId, level)) }
-    var resultPresentation by remember(level) { mutableStateOf<StandardAiResultPresentation?>(null) }
+    var showIntro by remember(userId, player) { mutableStateOf(!introStore.hasSeen(userId, playerKey)) }
+    var resultPresentation by remember(player) { mutableStateOf<StandardAiResultPresentation?>(null) }
     val saveStates by persistence.saveStates.collectAsState()
 
     DisposableEffect(controller, persistence) {
@@ -272,37 +302,38 @@ private fun StandardAiMatchScreen(
         handledRecordId = record.localId
 
         val outcome = record.humanOutcome()
-        val before = progressStore.progress(userId)
-        val wasCleared = before.isCleared(level)
+        val before = progressStore.progress(userId, pack)
+        val wasCleared = before.isCleared(player)
         val updated = progressStore.recordResult(
             userId = userId,
-            level = level,
+            pack = pack,
+            player = player,
             humanWon = outcome == StandardAiHumanOutcome.WIN,
             undoUsed = viewState.undoUsed,
         )
         val firstClear = outcome == StandardAiHumanOutcome.WIN &&
             !viewState.undoUsed &&
             !wasCleared &&
-            updated.isCleared(level)
-        val unlockedLevel = if (firstClear) {
-            level.next()?.takeIf { !before.isUnlocked(it) && updated.isUnlocked(it) }
+            updated.isCleared(player)
+        val unlockedPlayer = if (firstClear) {
+            pack.players.firstOrNull { !before.isUnlocked(it) && updated.isUnlocked(it) }
         } else {
             null
         }
-        val conquered = firstClear && level == StandardAiLevel.LV8 && updated.conquered
+        val conquered = firstClear && !before.conquered && updated.conquered
         val winReward = rewardTracker.classify(
             humanWon = outcome == StandardAiHumanOutcome.WIN,
             undoUsed = viewState.undoUsed,
         )
-        val wildStageAwakened = firstClear && unlockedLevel == StandardAiLevel.LV5
+        val milestoneUnlocked = firstClear && unlockedPlayer?.unlockCelebration == OpponentUnlockCelebration.MILESTONE
         onProgressChanged(updated)
         resultPresentation = StandardAiResultPresentation(
             outcome = outcome,
             firstClear = firstClear,
-            unlockedLevel = unlockedLevel,
+            unlockedPlayer = unlockedPlayer,
             conquered = conquered,
             winReward = winReward,
-            wildStageAwakened = wildStageAwakened,
+            milestoneUnlocked = milestoneUnlocked,
         )
         presentationEngine.accept(
             StandardPresentationEvent.MatchFinished(
@@ -310,13 +341,13 @@ private fun StandardAiMatchScreen(
                 firstClear = firstClear,
                 conquered = conquered,
                 winReward = winReward,
-                wildStageAwakened = wildStageAwakened,
+                milestoneUnlocked = milestoneUnlocked,
             ),
         )
     }
 
     fun dismissIntro() {
-        introStore.markSeen(userId, level)
+        introStore.markSeen(userId, playerKey)
         showIntro = false
     }
     fun undoMove() {
@@ -341,7 +372,7 @@ private fun StandardAiMatchScreen(
         if (viewState.completedRecord == null) {
             confirmExit = true
         } else {
-            onReturnToSelection(level)
+            onReturnToSelection(player)
         }
     }
 
@@ -349,7 +380,7 @@ private fun StandardAiMatchScreen(
 
     StandardAiSurface {
         ChanrivaScreenHeader(
-            title = appString(R.string.standard_ai_level, level.value),
+            title = opponentText(player.name),
             onBack = ::requestExit,
             backLabel = appString(R.string.back),
         )
@@ -382,11 +413,12 @@ private fun StandardAiMatchScreen(
         }
     }
     if (showIntro) {
-        StandardAiIntroDialog(level = level, onStart = ::dismissIntro)
+        StandardAiIntroDialog(installedPack = installedPack, player = player, onStart = ::dismissIntro)
     }
     resultPresentation?.let { presentation ->
         StandardAiResultDialog(
-            level = level,
+            installedPack = installedPack,
+            player = player,
             presentation = presentation,
             onRetry = ::resetMatch,
             onChooseOpponent = onReturnToSelection,
@@ -408,7 +440,7 @@ private fun StandardAiMatchScreen(
                     onClick = {
                         confirmExit = false
                         coordinator.cancel()
-                        onReturnToSelection(level)
+                        onReturnToSelection(player)
                     },
                 ) { Text(appString(R.string.standard_ai_exit_action)) }
             },

@@ -1,12 +1,10 @@
 package com.example.othello
 
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.example.othello.analysis.api.StandardAiLevel
 import com.example.othello.designsystem.OthelloTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -15,18 +13,21 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
-class StandardAiLevelSelectionUiTest {
+class StandardAiPlayerSelectionUiTest {
     @get:Rule
     val composeRule = createComposeRule()
+
+    private val pack = opponentUiFixture()
 
     @Test
     fun initialProgressShowsFirstOpponentAndNextLockedState() {
         composeRule.setContent {
             OthelloTheme {
-                StandardAiLevelSelectionContent(
-                    progress = StandardAiProgress(),
-                    selectedLevel = StandardAiLevel.LV1,
-                    onLevelSelected = {},
+                StandardAiPlayerSelectionContent(
+                    installedPack = pack,
+                    progress = StandardAiProgress(pack.definition),
+                    selectedPlayer = pack.definition.players.first(),
+                    onPlayerSelected = {},
                     onStart = {},
                     onBack = {},
                 )
@@ -35,23 +36,25 @@ class StandardAiLevelSelectionUiTest {
 
         composeRule.onNodeWithTag("standard-ai-opponent-carousel").assertExists()
         composeRule.onNodeWithTag("standard-ai-strength-guide").assertExists()
-        composeRule.onNodeWithTag("standard-ai-level-1").assertExists()
-        composeRule.onNodeWithTag("standard-ai-state-2").assertExists()
+        composeRule.onNodeWithTag("standard-ai-player-animal-chick").assertExists()
+        composeRule.onNodeWithTag("standard-ai-state-animal-rabbit").assertExists()
     }
 
     @Test
     fun centeredUnlockedOpponentStartsWithOneTap() {
-        var selected = mutableStateOf(StandardAiLevel.LV5)
-        var started: StandardAiLevel? = null
+        var selected = mutableStateOf(pack.definition.players[4])
+        var started: Player? = null
         composeRule.setContent {
             OthelloTheme {
-                StandardAiLevelSelectionContent(
+                StandardAiPlayerSelectionContent(
+                    installedPack = pack,
                     progress = StandardAiProgress(
-                        highestUnlockedLevel = StandardAiLevel.LV8,
-                        clearedLevels = StandardAiLevel.entries.take(4).toSet(),
+                        pack = pack.definition,
+                        unlockedPlayerIds = pack.definition.players.map { it.id }.toSet(),
+                        clearedPlayerIds = pack.definition.players.take(4).map { it.id }.toSet(),
                     ),
-                    selectedLevel = selected.value,
-                    onLevelSelected = { selected.value = it },
+                    selectedPlayer = selected.value,
+                    onPlayerSelected = { selected.value = it },
                     onStart = { started = selected.value },
                     onBack = {},
                 )
@@ -59,7 +62,7 @@ class StandardAiLevelSelectionUiTest {
         }
 
         composeRule.runOnIdle { assertNull(started) }
-        composeRule.onNodeWithTag("standard-ai-level-5").performClick()
-        composeRule.runOnIdle { assertEquals(StandardAiLevel.LV5, started) }
+        composeRule.onNodeWithTag("standard-ai-player-animal-wild-chick").performClick()
+        composeRule.runOnIdle { assertEquals(pack.definition.players[4], started) }
     }
 }

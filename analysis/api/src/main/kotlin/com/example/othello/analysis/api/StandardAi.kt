@@ -3,27 +3,6 @@ package com.example.othello.analysis.api
 import com.example.othello.game.GameState
 import com.example.othello.game.Position
 
-enum class StandardAiLevel(
-    val value: Int,
-    val edaxLevel: Int,
-) {
-    LV1(1, 1),
-    LV2(2, 1),
-    LV3(3, 1),
-    LV4(4, 1),
-    LV5(5, 2),
-    LV6(6, 2),
-    LV7(7, 2),
-    LV8(8, 2),
-    ;
-
-    fun next(): StandardAiLevel? = entries.getOrNull(ordinal + 1)
-
-    companion object {
-        fun fromValue(value: Int): StandardAiLevel = entries.single { it.value == value }
-    }
-}
-
 data class StandardEvaluationAsset(
     val appPrivatePath: String,
     val identitySha256: String,
@@ -69,12 +48,6 @@ data class StandardAiConfig(
         require(edaxLevel in 1..4) { "Standard Edax level must be in 1..4" }
     }
 }
-
-/** Current campaign preset. Display level, Edax strength, and personality remain distinct concepts. */
-fun standardCampaignAiConfig(level: StandardAiLevel): StandardAiConfig = StandardAiConfig(
-    edaxLevel = level.edaxLevel,
-    personality = StandardAiPersonalities.natural(level),
-)
 
 data class StandardAiMoveResult(
     val move: Position?,

@@ -27,6 +27,8 @@ jobs:
       - run: ./gradlew :data:supabase:testReleaseSupabaseConfig
       - run: ./gradlew lint
       - run: ./gradlew assembleDebug
+      - run: ./gradlew :app:compileDebugAndroidTestKotlin
+      - run: python tools/check_opponent_baseline.py
       - run: pwsh ./scripts/check-boundaries.ps1
       - run: pwsh ./scripts/check-sql-security.ps1
       - name: Build release artifacts when production configuration is enabled

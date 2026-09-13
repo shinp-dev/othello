@@ -1,13 +1,11 @@
 package com.example.othello
 
 import com.example.othello.analysis.api.StandardAiEngine
-import com.example.othello.analysis.api.StandardAiLevel
 import com.example.othello.analysis.api.StandardCandidateProvider
 import com.example.othello.analysis.api.StandardCandidateResult
 import com.example.othello.analysis.api.StandardEvaluationAsset
 import com.example.othello.analysis.api.StandardMoveCandidate
 import com.example.othello.analysis.api.StandardTensionLevel
-import com.example.othello.analysis.api.standardCampaignAiConfig
 import com.example.othello.game.Disc
 import com.example.othello.game.GameState
 import com.example.othello.game.Position
@@ -37,7 +35,7 @@ class StandardLocalAiCoordinatorTest {
         val coordinator = StandardLocalAiCoordinator(
             match = match,
             engine = StandardAiEngine(provider),
-            config = standardCampaignAiConfig(StandardAiLevel.LV3),
+            config = animalPack().player("koala")!!.ai,
             evaluationData = evaluation,
             monotonicMillis = { times.removeFirst() },
             waitMillis = { waits += it },
@@ -67,7 +65,7 @@ class StandardLocalAiCoordinatorTest {
         val coordinator = StandardLocalAiCoordinator(
             match = match,
             engine = StandardAiEngine(RecordingProvider()),
-            config = standardCampaignAiConfig(StandardAiLevel.LV3),
+            config = animalPack().player("koala")!!.ai,
             evaluationData = evaluation,
             monotonicMillis = { times.removeFirst() },
             waitMillis = { waits += it },
@@ -88,7 +86,7 @@ class StandardLocalAiCoordinatorTest {
         val coordinator = StandardLocalAiCoordinator(
             match = match,
             engine = StandardAiEngine(provider),
-            config = standardCampaignAiConfig(StandardAiLevel.LV1),
+            config = animalPack().player("chick")!!.ai,
             evaluationData = evaluation,
             monotonicMillis = { 0L },
             waitMillis = {},

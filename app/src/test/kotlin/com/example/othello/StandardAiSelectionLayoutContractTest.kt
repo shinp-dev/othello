@@ -10,7 +10,7 @@ class StandardAiSelectionLayoutContractTest {
 
     @Test
     fun levelSelectionCentersChallengeContentBelowFixedHeader() {
-        val selectionStart = source.indexOf("internal fun StandardAiLevelSelectionContent")
+        val selectionStart = source.indexOf("internal fun StandardAiPlayerSelectionContent")
         val selectionEnd = source.indexOf("private fun StandardAiMatchScreen", selectionStart)
         val selection = source.substring(selectionStart, selectionEnd)
 

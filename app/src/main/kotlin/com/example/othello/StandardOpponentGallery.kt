@@ -1,7 +1,7 @@
 package com.example.othello
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
+import coil3.compose.AsyncImage
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,31 +32,30 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.othello.analysis.api.StandardAiLevel
 import com.example.othello.designsystem.ChanrivaSpacing
 
 @Composable
 internal fun StandardOpponentSelectionPanel(
+    installedPack: InstalledOpponentPack,
     progress: StandardAiProgress,
-    selectedLevel: StandardAiLevel,
-    onLevelSelected: (StandardAiLevel) -> Unit,
+    selectedPlayer: Player,
+    onPlayerSelected: (Player) -> Unit,
     onStart: () -> Unit,
 ) {
-    val pack = StandardOpponentPacks.animal
-    val selectedIndex = pack.opponents.indexOfFirst { it.level == selectedLevel }.coerceAtLeast(0)
-    val previous = pack.opponents.getOrNull(selectedIndex - 1)
-    val current = pack.opponents[selectedIndex]
-    val next = pack.opponents.getOrNull(selectedIndex + 1)
-    var dragDistance = remember(selectedLevel) { 0f }
+    val pack = installedPack.definition
+    val selectedIndex = pack.players.indexOfFirst { it.id == selectedPlayer.id }.coerceAtLeast(0)
+    val previous = pack.players.getOrNull(selectedIndex - 1)
+    val current = pack.players[selectedIndex]
+    val next = pack.players.getOrNull(selectedIndex + 1)
+    var dragDistance = remember(selectedPlayer) { 0f }
 
-    fun selectIfUnlocked(opponent: StandardOpponentUi?) {
-        if (opponent != null && progress.isUnlocked(opponent.level)) {
-            onLevelSelected(opponent.level)
+    fun selectOpponent(opponent: Player?) {
+        if (opponent != null) {
+            onPlayerSelected(opponent)
         }
     }
 
@@ -66,7 +65,7 @@ internal fun StandardOpponentSelectionPanel(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = appString(pack.titleRes),
+            text = opponentText(pack.title),
             modifier = Modifier.fillMaxWidth(),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
@@ -78,7 +77,7 @@ internal fun StandardOpponentSelectionPanel(
                 .fillMaxWidth()
                 .height(360.dp)
                 .testTag("standard-ai-opponent-carousel")
-                .pointerInput(selectedLevel, progress.highestUnlockedLevel) {
+                .pointerInput(selectedPlayer, progress.unlockedPlayerIds) {
                     detectHorizontalDragGestures(
                         onDragStart = { dragDistance = 0f },
                         onHorizontalDrag = { change, dragAmount ->
@@ -87,8 +86,8 @@ internal fun StandardOpponentSelectionPanel(
                         },
                         onDragEnd = {
                             when {
-                                dragDistance <= -SWIPE_THRESHOLD_PX -> selectIfUnlocked(next)
-                                dragDistance >= SWIPE_THRESHOLD_PX -> selectIfUnlocked(previous)
+                                dragDistance <= -SWIPE_THRESHOLD_PX -> selectOpponent(next)
+                                dragDistance >= SWIPE_THRESHOLD_PX -> selectOpponent(previous)
                             }
                             dragDistance = 0f
                         },
@@ -100,10 +99,11 @@ internal fun StandardOpponentSelectionPanel(
         ) {
             if (previous != null) {
                 StandardOpponentCard(
+                    installedPack = installedPack,
                     opponent = previous,
                     progress = progress,
                     centered = false,
-                    onClick = { selectIfUnlocked(previous) },
+                    onClick = { selectOpponent(previous) },
                     modifier = Modifier
                         .weight(SIDE_WEIGHT)
                         .height(270.dp),
@@ -113,6 +113,7 @@ internal fun StandardOpponentSelectionPanel(
             }
 
             StandardOpponentCard(
+                installedPack = installedPack,
                 opponent = current,
                 progress = progress,
                 centered = true,
@@ -124,10 +125,11 @@ internal fun StandardOpponentSelectionPanel(
 
             if (next != null) {
                 StandardOpponentCard(
+                    installedPack = installedPack,
                     opponent = next,
                     progress = progress,
                     centered = false,
-                    onClick = { selectIfUnlocked(next) },
+                    onClick = { selectOpponent(next) },
                     modifier = Modifier
                         .weight(SIDE_WEIGHT)
                         .height(270.dp),
@@ -145,12 +147,12 @@ internal fun StandardOpponentSelectionPanel(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                text = appString(R.string.standard_ai_strength_weaker),
+                text = appString(R.string.opponent_previous),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = appString(R.string.standard_ai_strength_stronger),
+                text = appString(R.string.opponent_next),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -160,14 +162,15 @@ internal fun StandardOpponentSelectionPanel(
 
 @Composable
 private fun StandardOpponentCard(
-    opponent: StandardOpponentUi,
+    installedPack: InstalledOpponentPack,
+    opponent: Player,
     progress: StandardAiProgress,
     centered: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val unlocked = progress.isUnlocked(opponent.level)
-    val cleared = progress.isCleared(opponent.level)
+    val unlocked = progress.isUnlocked(opponent)
+    val cleared = progress.isCleared(opponent)
     val cardColor = if (centered) CENTER_CARD_COLOR else SIDE_CARD_COLOR
     val labelColor = if (centered) CENTER_LABEL_COLOR else SIDE_LABEL_COLOR
 
@@ -175,7 +178,7 @@ private fun StandardOpponentCard(
         onClick = onClick,
         enabled = unlocked,
         modifier = modifier
-            .testTag("standard-ai-level-${opponent.level.value}")
+            .testTag("standard-ai-player-${installedPack.definition.id}-${opponent.id}")
             .graphicsLayer {
                 alpha = if (centered) 1f else 0.72f
             },
@@ -193,16 +196,16 @@ private fun StandardOpponentCard(
         Box(
             modifier = Modifier.fillMaxSize(),
         ) {
-            Image(
-                painter = painterResource(opponent.winDrawableRes),
+            AsyncImage(
+                model = installedPack.image(opponent.portrait),
                 contentDescription = if (unlocked) {
                     appString(
                         R.string.standard_ai_opponent_named_description,
-                        appString(opponent.nameRes),
-                        opponent.level.value,
+                        opponentText(opponent.name),
+                        packOrder(installedPack, opponent),
                     )
                 } else {
-                    appString(R.string.standard_ai_locked_opponent_description, opponent.level.value)
+                    appString(R.string.standard_ai_locked_opponent_description, packOrder(installedPack, opponent))
                 },
                 colorFilter = if (unlocked) {
                     null
@@ -219,7 +222,7 @@ private fun StandardOpponentCard(
             )
 
             Text(
-                text = "Lv${opponent.level.value}",
+                text = "${packOrder(installedPack, opponent)}",
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(if (centered) 14.dp else 9.dp),
@@ -245,7 +248,7 @@ private fun StandardOpponentCard(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            text = appString(opponent.nameRes),
+                            text = opponentText(opponent.name),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center,
@@ -263,7 +266,7 @@ private fun StandardOpponentCard(
                             .align(Alignment.TopEnd)
                             .padding(if (centered) 12.dp else 8.dp)
                             .size(if (centered) 36.dp else 28.dp)
-                            .testTag("standard-ai-state-${opponent.level.value}"),
+                            .testTag("standard-ai-state-${installedPack.definition.id}-${opponent.id}"),
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.surfaceVariant,
                     ) {
@@ -271,7 +274,7 @@ private fun StandardOpponentCard(
                             imageVector = Icons.Filled.Lock,
                             contentDescription = appString(
                                 R.string.standard_ai_locked_opponent_description,
-                                opponent.level.value,
+                                packOrder(installedPack, opponent),
                             ),
                             modifier = Modifier.padding(if (centered) 8.dp else 6.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -285,7 +288,7 @@ private fun StandardOpponentCard(
                             .align(Alignment.TopEnd)
                             .padding(if (centered) 12.dp else 8.dp)
                             .size(if (centered) 36.dp else 28.dp)
-                            .testTag("standard-ai-state-${opponent.level.value}"),
+                            .testTag("standard-ai-state-${opponent.id}"),
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.primaryContainer,
                     ) {
@@ -310,3 +313,5 @@ private val SIDE_CARD_BORDER = Color(0xFF27313C)
 private const val SIDE_WEIGHT = 0.22f
 private const val CENTER_WEIGHT = 0.56f
 private const val SWIPE_THRESHOLD_PX = 72f
+
+private fun packOrder(pack: InstalledOpponentPack, player: Player): Int = pack.definition.players.indexOfFirst { it.id == player.id } + 1

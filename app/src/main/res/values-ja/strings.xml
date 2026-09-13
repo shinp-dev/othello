@@ -22,10 +22,10 @@
     <string name="standard_ai_level_selected">Lv%1$d ●</string>
     <string name="standard_ai_level_locked">Lv%1$d 🔒</string>
     <string name="standard_ai_unlock_guidance">待ったを使わずに勝つと次のレベルが解放されます。</string>
-    <string name="standard_ai_conquered">Standard AIを制覇しました！</string>
+    <string name="standard_ai_conquered">対戦パックを制覇しました！</string>
     <string name="standard_ai_start_level">Lv%1$dと対局する</string>
-    <string name="standard_bootstrap_preparing">Standardモードを準備しています。カードpackを確認し、未導入の場合はAIデータを取得します…</string>
-    <string name="standard_bootstrap_failed">カードpackを読み込めませんでした。再試行してください。</string>
+    <string name="standard_bootstrap_preparing">StandardのコンテンツとAIを準備しています…</string>
+    <string name="standard_bootstrap_failed">Standardのコンテンツを読み込めませんでした。再試行してください。</string>
     <string name="standard_ai_preparing">AIを準備しています…</string>
     <string name="standard_ai_preparing_download">公式評価データを取得しています…</string>
     <string name="standard_ai_preparing_extract">評価データを展開しています…</string>

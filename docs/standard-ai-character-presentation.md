@@ -1,16 +1,16 @@
-# Standard AI character presentation
+# Standard opponent presentation
 
-Standard Mode now presents each AI level as a character opponent.
+The current domain and distribution contract is documented in [Opponent Packs](opponent-packs.md).
+Characters are Players inside an OpponentPack; neither UI nor progress uses a global level enum.
 
-- Lv1: chick
-- Lv2: rabbit
-- Lv3: koala
-- Lv4: elephant
-- Lv5: wild chick
-- Lv6: wild rabbit
-- Lv7: wild koala
-- Lv8: wild elephant
+The packaged Animal Challenge retains its eight opponents and original AI tuning. Other packs use the
+same selection, match, and result screens. Player IDs and explicit prerequisites control progression;
+display order does not imply strength or unlock order.
 
-The first challenge against each level shows the opponent introduction once per signed-in user on the device. Every completed match shows the opponent result artwork: the crying `*_lose.webp` asset when the human wins, and the confident `*_win.webp` asset when the opponent wins or the game is drawn. A first clear without Undo also shows the next-level unlock or campaign completion message.
+Introductions are remembered per user, pack, and player. Result artwork uses the player's
+`loseImage` when the human wins and `winImage` when the opponent wins or the match is drawn.
+First clears display the newly unlocked player; an explicit MILESTONE unlock receives stronger
+presentation. Completion means all current players in that pack have been defeated without Undo.
 
-The presentation state is intentionally separate from Standard AI strength/progression state so replaying or resetting a match does not alter campaign progression.
+Presentation remains separate from persisted progression. Replay resets transient match effects,
+not clear/unlock records. Downloaded image paths are validated pack-local files passed to Coil.

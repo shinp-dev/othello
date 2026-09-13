@@ -61,6 +61,9 @@ active packが同梱版より新しい場合、同梱版では上書きしない
 
 ## Standard入場Bootstrap
 
+対戦相手の配信は[Opponent Packs](opponent-packs.md)を参照。カードとは別schema/storageで、
+同じBootstrapから準備する。
+
 - モード選択からStandardへ入るたびにpack更新を確認する。同じStandard内の
   Home・図鑑・ガチャ・AI間の移動では再確認しない。
 - 画面復元時もBootstrapを通し、保存済みの遷移先へ準備前に入らない。

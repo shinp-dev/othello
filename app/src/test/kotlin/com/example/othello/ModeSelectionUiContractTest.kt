@@ -16,7 +16,7 @@ class ModeSelectionUiContractTest {
         assertTrue("R.string.mode_selection_title" in screen)
         assertTrue("R.string.mode_selection_recommended" in screen)
         assertTrue("R.string.mode_selection_advanced_badge" in screen)
-        assertTrue("StandardOpponentPacks.animal.bannerDrawableRes" in screen)
+        assertTrue("R.drawable.standard_ai_animal_pack_banner" in screen)
         assertTrue("AdvancedModePreview()" in screen)
         assertTrue("R.string.mode_selection_switch_note" in screen)
         assertFalse("ModeCard(" in screen)

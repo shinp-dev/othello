@@ -1,6 +1,5 @@
 package com.example.othello
 
-import com.example.othello.analysis.api.StandardAiLevel
 import kotlin.test.assertEquals
 import org.junit.Test
 
@@ -11,7 +10,7 @@ class StandardAiResultActionsTest {
             StandardAiResultPresentation(
                 outcome = StandardAiHumanOutcome.WIN,
                 firstClear = true,
-                unlockedLevel = StandardAiLevel.LV2,
+                unlockedPlayer = animalPack().player("rabbit"),
             ),
         )
 

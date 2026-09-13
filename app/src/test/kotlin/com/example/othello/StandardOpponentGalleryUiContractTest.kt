@@ -10,9 +10,9 @@ class StandardOpponentGalleryUiContractTest {
 
     @Test
     fun opponentGalleryShowsCurrentOpponentWithOnlyItsNeighbors() {
-        assertTrue("val previous = pack.opponents.getOrNull(selectedIndex - 1)" in source)
-        assertTrue("val current = pack.opponents[selectedIndex]" in source)
-        assertTrue("val next = pack.opponents.getOrNull(selectedIndex + 1)" in source)
+        assertTrue("val previous = pack.players.getOrNull(selectedIndex - 1)" in source)
+        assertTrue("val current = pack.players[selectedIndex]" in source)
+        assertTrue("val next = pack.players.getOrNull(selectedIndex + 1)" in source)
         assertTrue("standard-ai-opponent-carousel" in source)
         assertTrue("SIDE_WEIGHT" in source)
         assertTrue("CENTER_WEIGHT" in source)
@@ -24,10 +24,10 @@ class StandardOpponentGalleryUiContractTest {
     @Test
     fun opponentGalleryUsesSwipeAndTapInsteadOfASeparateStartButton() {
         assertTrue("detectHorizontalDragGestures(" in source)
-        assertTrue("selectIfUnlocked(next)" in source)
-        assertTrue("selectIfUnlocked(previous)" in source)
+        assertTrue("selectOpponent(next)" in source)
+        assertTrue("selectOpponent(previous)" in source)
         assertTrue("onClick = onStart" in source)
-        assertTrue("standard-ai-level-" in source)
+        assertTrue("standard-ai-player-" in source)
     }
 
     @Test
@@ -41,16 +41,16 @@ class StandardOpponentGalleryUiContractTest {
         assertTrue("RoundedCornerShape" in source)
         assertTrue("maxLines = 1" in source)
         assertTrue("TextOverflow.Ellipsis" in source)
-        assertTrue("\"Lv\${opponent.level.value}\"" in source)
-        assertTrue("text = appString(opponent.nameRes)" in source)
+        assertTrue("packOrder(installedPack, opponent)" in source)
+        assertTrue("text = opponentText(opponent.name)" in source)
         assertFalse("R.string.standard_ai_opponent_level_name" in source)
     }
 
     @Test
     fun strengthDirectionIsShownBelowTheCards() {
         assertTrue("standard-ai-strength-guide" in source)
-        assertTrue("R.string.standard_ai_strength_weaker" in source)
-        assertTrue("R.string.standard_ai_strength_stronger" in source)
+        assertTrue("R.string.opponent_previous" in source)
+        assertTrue("R.string.opponent_next" in source)
         assertTrue("Arrangement.SpaceBetween" in source)
     }
 
@@ -58,8 +58,8 @@ class StandardOpponentGalleryUiContractTest {
     fun opponentGalleryKeepsAllLevelsInOneSequenceWithoutGroupHeadings() {
         assertFalse("standard_ai_group_basic" in source)
         assertFalse("standard_ai_group_serious" in source)
-        assertFalse("pack.opponents.take(4)" in source)
-        assertFalse("pack.opponents.drop(4)" in source)
+        assertFalse("pack.players.take(4)" in source)
+        assertFalse("pack.players.drop(4)" in source)
     }
 
     @Test
