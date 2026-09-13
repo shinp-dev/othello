@@ -15,15 +15,18 @@ git clone https://github.com/abulmo/edax-reversi.git
 git -C edax-reversi checkout 14f048c05ddfa385b6bf954a9c2905bbe677e9d3
 copy edax-reversi/src -> third_party/edax/upstream/src
 copy edax-reversi/LICENSE and README.md -> third_party/edax/upstream
+verify SHA256SUMS against the pristine copied source and the patch file
 apply patches/android-embedding-safety.patch
 ```
 
 `problem/`, binaries, evaluation data, opening books, and upstream Git metadata
 are intentionally excluded.
 
-`SHA256SUMS` records every vendored upstream file and the applied patch. Verify
-it from this directory with `sha256sum --check SHA256SUMS` (or the equivalent
-PowerShell `Get-FileHash` comparison) before a release.
+`SHA256SUMS` records every pristine imported upstream file and the Android
+patch. Verify it from this directory with `sha256sum --check SHA256SUMS` (or
+the equivalent PowerShell `Get-FileHash` comparison) before applying the patch
+during a re-import. The modified source in this repository intentionally no
+longer matches the pristine-file entries after the patch is applied.
 
 ## Modified upstream files
 
@@ -34,6 +37,8 @@ PowerShell `Get-FileHash` comparison) before a release.
   NDK does not expose C17 `aligned_alloc` at the app's minimum API level.
 - `src/eval.c`: route a missing evaluation file through recoverable fatal-error
   handling instead of terminating the Android process with `exit`.
+- `src/root.c`: terminate the synthetic pass/game-over move list explicitly so
+  root move ordering never follows an uninitialized `Move.next` pointer.
 - `src/book.h`, `src/book.c`: return the actual opening-book load result and
   close files on validation failures so the app can reject unsupported or
   malformed user files.

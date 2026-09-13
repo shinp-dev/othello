@@ -360,6 +360,7 @@ int PVS_root(Search *search, const int alpha, const int beta, const int depth)
 	// special cases: pass or game over
 	if (movelist_is_empty(movelist)) {
 		move = movelist->move->next = movelist->move + 1;
+		move->next = NULL;
 		move->flipped = 0;
 		if (can_move(board->opponent, board->player)) {
 			search_update_pass_midgame(search);
