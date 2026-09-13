@@ -3,12 +3,9 @@ package com.example.othello
 import android.content.Context
 import java.io.ByteArrayOutputStream
 import java.io.IOException
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 internal data class StandardBundledContentPack(
     val manifestJson: String,
@@ -83,61 +80,45 @@ internal class AndroidStandardBundledContentSource(
     }
 }
 
-internal class StandardContentRemoteRefreshGate(
-    private val refresh: suspend () -> Unit,
-) {
-    private val attempted = AtomicBoolean(false)
-
-    suspend fun runOnceBestEffort() {
-        if (!attempted.compareAndSet(false, true)) return
-        try {
-            refresh()
-        } catch (cancelled: CancellationException) {
-            attempted.set(false)
-            throw cancelled
-        } catch (_: Exception) {
-            // Keep the bundled/current active packs. A new process will try again next launch.
-        }
-    }
-}
-
 /**
- * Lazy process owner used by Standard collection/gacha UI.
- *
- * Accessing a snapshot first promotes bundled baseline packs into the same private storage
- * used by remote packs. The first snapshot also starts one best-effort background refresh
- * from the public GitHub catalog. Advanced never touches this owner.
+ * Standard Bootstrap is the only caller. Prepare a stable snapshot before opening Home;
+ * feature screens never install packs or start background refreshes. Advanced does not use this owner.
  */
-internal class StandardContentProcessOwner(
-    context: Context,
-    source: StandardBundledContentSource = AndroidStandardBundledContentSource(context),
-    indexFetcher: StandardContentIndexFetcher = RemoteStandardContentIndexFetcher(
-        transport = UrlConnectionStandardContentIndexTransport(),
-        endpoint = REMOTE_STANDARD_CONTENT_INDEX_URL,
-    ),
+internal class StandardContentProcessOwner internal constructor(
+    private val packManager: StandardContentPackManager,
+    private val bundledSource: StandardBundledContentSource,
+    private val indexFetcher: StandardContentIndexFetcher,
 ) {
-    private val packManager = StandardContentPackManager(context)
-    private val repository = StandardContentRepository(packManager)
-    private val bundledSource = source
-    private val remoteScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val remoteRefresh = StandardContentRemoteRefreshGate {
-        packManager.refresh(indexFetcher.fetch())
-    }
+    constructor(context: Context) : this(
+        StandardContentPackManager(context),
+        AndroidStandardBundledContentSource(context),
+        RemoteStandardContentIndexFetcher(
+            transport = UrlConnectionStandardContentIndexTransport(),
+            endpoint = REMOTE_STANDARD_CONTENT_INDEX_URL,
+        ),
+    )
 
-    @Volatile
+    private val repository = StandardContentRepository(packManager)
+    private val mutex = Mutex()
     private var bootstrapped = false
 
-    @Synchronized
-    fun ensureBundledBaseline() {
+    private fun ensureBundledBaseline() {
         if (bootstrapped) return
         bundledSource.load().forEach(packManager::installBundledBaseline)
         bootstrapped = true
     }
 
-    fun snapshot(): StandardContentSnapshot {
+    suspend fun prepareForEntry(): StandardContentSnapshot = mutex.withLock {
         ensureBundledBaseline()
-        remoteScope.launch { remoteRefresh.runOnceBestEffort() }
-        return repository.snapshot()
+        try {
+            packManager.refresh(indexFetcher.fetch())
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Offline/invalid updates retain installed packs and all user-owned collection data.
+            // The next Standard entry checks again, including within the same process.
+        }
+        repository.snapshot()
     }
 
     private companion object {

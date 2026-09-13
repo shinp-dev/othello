@@ -50,13 +50,31 @@ bootstrap/
 - `books v1`: 出版社情報を出典にした書籍2枚
 - 書籍表紙画像は権利確認前なので同梱しない
 
-`StandardContentProcessOwner` は遅延初期化で、将来Standardの図鑑/ガチャが
-snapshotを要求した時にだけbaselineをprivate storageへ導入する。
-アプリ起動時やAdvanced表示だけではI/Oを発生させない。
+`StandardContentProcessOwner` は遅延初期化で、Standard入場時のBootstrapだけが
+`prepareForEntry()` を呼ぶ。baseline導入とremote indexの更新確認を完了した後、
+同じsnapshotを図鑑・ガチャへ渡す。画面側ではpackの初期化・更新を行わない。
+アプリ起動時やAdvanced表示だけではStandard用のI/Oを発生させない。
 
 active packが同梱版より新しい場合、同梱版では上書きしない。
 したがってWeb配信で `trivia v2` を取得した端末が、次回起動時に
 同梱 `trivia v1` へ戻ることはない。
+
+## Standard入場Bootstrap
+
+- モード選択からStandardへ入るたびにpack更新を確認する。同じStandard内の
+  Home・図鑑・ガチャ・AI間の移動では再確認しない。
+- 画面復元時もBootstrapを通し、保存済みの遷移先へ準備前に入らない。
+  準備結果は保存状態へシリアライズせず、再生成時はローカルデータを確認し直す。
+- remote取得に失敗しても同梱/導入済みpackを使う。ローカルpack自体を
+  読めない場合だけBootstrapに再試行とモード選択へ戻る操作を表示する。
+- Standard専用evalは導入済みなら再利用し、未導入（有効な導入記録がない）時だけ取得する。
+  eval準備失敗はAIだけを未準備にし、Homeと他のStandard機能への入場を妨げない。
+- AI画面は準備状態を表示するだけで自動初期化しない。ユーザーの再試行操作は
+  Bootstrapへ委譲し、pack更新をやり直さずAIのみ再準備する。
+- Bootstrapの処理はI/O dispatcherで実行し、モードを離れるとキャンセルする。
+  キャンセルは準備完了として扱わず、次の入場で再試行できる。
+- 取得済みカードID、無料ガチャ回数、AI進行状況、棋譜は変更・初期化しない。
+  Advancedのeval・book・設定は引き続き独立し、Bootstrapから触らない。
 
 ## 配信構造
 

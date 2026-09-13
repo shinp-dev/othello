@@ -36,7 +36,6 @@ import com.example.othello.analysis.api.StandardEvaluationAsset
 import com.example.othello.analysis.api.StandardEvaluationPreparationPhase
 import com.example.othello.analysis.api.standardCampaignAiConfig
 import com.example.othello.analysis.edax.ProductionStandardCandidateProvider
-import com.example.othello.analysis.edax.StandardEvaluationDataManager
 import com.example.othello.designsystem.ChanrivaDangerButton
 import com.example.othello.designsystem.ChanrivaScreenHeader
 import com.example.othello.designsystem.ChanrivaSpacing
@@ -52,14 +51,12 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun StandardAiRoute(
     userId: String,
+    preparationState: StandardAiPreparationState,
+    onRetryPreparation: () -> Unit,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
     val application = context.applicationContext as OthelloApplication
-    val scope = rememberCoroutineScope()
-    val dataManager = remember { StandardEvaluationDataManager(context) }
-    val preparation = remember(dataManager) { StandardAiPreparationController(dataManager) }
-    val preparationState by preparation.state.collectAsState()
     val progressStore = remember { StandardAiProgressStore(context) }
     var progress by remember(userId) { mutableStateOf(progressStore.progress(userId)) }
     var selectedLevelValue by rememberSaveable(userId) {
@@ -67,10 +64,6 @@ internal fun StandardAiRoute(
     }
     var activeLevelValue by rememberSaveable(userId) { mutableStateOf<Int?>(null) }
     val activeLevel = activeLevelValue?.let(StandardAiLevel::fromValue)
-
-    LaunchedEffect(preparation) {
-        if (preparation.state.value is StandardAiPreparationState.NotPrepared) preparation.prepare()
-    }
 
     when (val state = preparationState) {
         StandardAiPreparationState.NotPrepared -> StandardAiPreparingScreen(
@@ -83,7 +76,7 @@ internal fun StandardAiRoute(
         )
         is StandardAiPreparationState.Failed -> StandardAiPreparationFailedScreen(
             onBack = onBack,
-            onRetry = { scope.launch { preparation.prepare() } },
+            onRetry = onRetryPreparation,
         )
         is StandardAiPreparationState.Ready -> if (activeLevel == null) {
             val selectedLevel = StandardAiLevel.fromValue(selectedLevelValue)

@@ -24,6 +24,15 @@ class StandardAiArchitectureContractTest {
     ).readText()
 
     @Test
+    fun aiScreenOnlyConsumesBootstrapReadinessAndDelegatesExplicitRetry() {
+        assertTrue("preparationState: StandardAiPreparationState" in standardScreens)
+        assertTrue("onRetry = onRetryPreparation" in standardScreens)
+        assertFalse("StandardEvaluationDataManager" in standardScreens)
+        assertFalse("StandardAiPreparationController" in standardScreens)
+        assertFalse("preparation.prepare()" in standardScreens)
+    }
+
+    @Test
     fun standardNeverReadsAdvancedSettingsEvalOrBook() {
         listOf("EdaxDataManager", "EdaxSettingsStore", "AiMoveSettings", "BookSource").forEach {
             assertFalse(it in standardScreens)

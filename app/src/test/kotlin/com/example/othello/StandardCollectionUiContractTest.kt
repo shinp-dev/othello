@@ -10,9 +10,11 @@ class StandardCollectionUiContractTest {
         File("src/main/kotlin/com/example/othello/StandardCollectionScreen.kt").readText()
 
     @Test
-    fun collectionLoadsBundledContentOffTheMainThreadAndUsesLocalObtainedIds() {
+    fun collectionConsumesBootstrapContentAndReadsLocalObtainedIdsOffTheMainThread() {
         assertTrue("withContext(Dispatchers.IO)" in source)
-        assertTrue("application.standardContent.snapshot()" in source)
+        assertTrue("content: StandardContentSnapshot" in source)
+        assertTrue("snapshot = content" in source)
+        assertFalse("application.standardContent" in source)
         assertTrue("collectionStore.obtainedCardIds(userId)" in source)
         assertFalse("StandardContentIndexFetcher" in source)
         assertFalse("refresh(" in source)

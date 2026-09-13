@@ -81,24 +81,24 @@ private sealed interface StandardGachaLoadState {
 @Composable
 internal fun StandardGachaRoute(
     userId: String,
+    content: StandardContentSnapshot,
     onBack: () -> Unit,
     onCollection: () -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val application = context.applicationContext as OthelloApplication
     val collectionStore = remember(context) { StandardCollectionStore(context) }
     val dailyStore = remember(context) { StandardGachaDailyStore(context) }
     var retryGeneration by rememberSaveable(userId) { mutableIntStateOf(0) }
-    var loadState by remember(userId) {
+    var loadState by remember(userId, content) {
         mutableStateOf<StandardGachaLoadState>(StandardGachaLoadState.Loading)
     }
 
-    LaunchedEffect(userId, retryGeneration) {
+    LaunchedEffect(userId, content, retryGeneration) {
         loadState = StandardGachaLoadState.Loading
         loadState = withContext(Dispatchers.IO) {
             runCatching {
                 StandardGachaLoadState.Ready(
-                    snapshot = application.standardContent.snapshot(),
+                    snapshot = content,
                     obtainedCardIds = collectionStore.obtainedCardIds(userId),
                     dailyState = dailyStore.state(userId),
                 )

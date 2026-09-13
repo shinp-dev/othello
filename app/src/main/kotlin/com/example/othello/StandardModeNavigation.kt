@@ -122,38 +122,50 @@ internal fun AuthenticatedModeRoute(
         AuthenticatedModeDestination.MODE_SELECTION -> ModeSelectionScreen(
             onSelect = { destination = destinationFor(it) },
         )
-        AuthenticatedModeDestination.STANDARD_HOME -> StandardHomeScreen(
-            onFeature = { destination = destinationFor(it) },
-            onWinningTips = { destination = AuthenticatedModeDestination.STANDARD_WINNING_TIPS },
-            onGacha = { destination = AuthenticatedModeDestination.STANDARD_GACHA },
-            onCollection = { destination = AuthenticatedModeDestination.STANDARD_COLLECTION },
-            onSwitchMode = { destination = AuthenticatedModeDestination.MODE_SELECTION },
-        )
-        AuthenticatedModeDestination.STANDARD_AI -> StandardAiRoute(
-            userId = userId,
-            onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
-        )
-        AuthenticatedModeDestination.STANDARD_WINNING_TIPS -> StandardWinningTipsRoute(
-            onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
-        )
-        AuthenticatedModeDestination.STANDARD_GACHA -> StandardGachaRoute(
-            userId = userId,
-            onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
-            onCollection = { destination = AuthenticatedModeDestination.STANDARD_COLLECTION },
-        )
-        AuthenticatedModeDestination.STANDARD_COLLECTION -> StandardCollectionRoute(
-            userId = userId,
-            onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
-        )
-        AuthenticatedModeDestination.STANDARD_ONLINE_COMING_SOON -> StandardComingSoonScreen(
-            feature = StandardFeature.ONLINE,
-            onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
-        )
-        AuthenticatedModeDestination.STANDARD_REAL_EVENT -> StandardRealEventRoute(
-            onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
-        )
         AuthenticatedModeDestination.ADVANCED -> advancedContent {
             destination = AuthenticatedModeDestination.MODE_SELECTION
+        }
+        else -> StandardBootstrapRoute(
+            userId = userId,
+            onBack = { destination = AuthenticatedModeDestination.MODE_SELECTION },
+        ) { content, aiState, onRetryAi ->
+            when (destination) {
+                AuthenticatedModeDestination.STANDARD_HOME -> StandardHomeScreen(
+                    onFeature = { destination = destinationFor(it) },
+                    onWinningTips = { destination = AuthenticatedModeDestination.STANDARD_WINNING_TIPS },
+                    onGacha = { destination = AuthenticatedModeDestination.STANDARD_GACHA },
+                    onCollection = { destination = AuthenticatedModeDestination.STANDARD_COLLECTION },
+                    onSwitchMode = { destination = AuthenticatedModeDestination.MODE_SELECTION },
+                )
+                AuthenticatedModeDestination.STANDARD_AI -> StandardAiRoute(
+                    userId = userId,
+                    preparationState = aiState,
+                    onRetryPreparation = onRetryAi,
+                    onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
+                )
+                AuthenticatedModeDestination.STANDARD_WINNING_TIPS -> StandardWinningTipsRoute(
+                    onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
+                )
+                AuthenticatedModeDestination.STANDARD_GACHA -> StandardGachaRoute(
+                    userId = userId,
+                    content = content,
+                    onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
+                    onCollection = { destination = AuthenticatedModeDestination.STANDARD_COLLECTION },
+                )
+                AuthenticatedModeDestination.STANDARD_COLLECTION -> StandardCollectionRoute(
+                    userId = userId,
+                    content = content,
+                    onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
+                )
+                AuthenticatedModeDestination.STANDARD_ONLINE_COMING_SOON -> StandardComingSoonScreen(
+                    feature = StandardFeature.ONLINE,
+                    onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
+                )
+                AuthenticatedModeDestination.STANDARD_REAL_EVENT -> StandardRealEventRoute(
+                    onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
+                )
+                else -> error("Not a Standard destination: $destination")
+            }
         }
     }
 }

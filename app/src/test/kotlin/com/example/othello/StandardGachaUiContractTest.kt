@@ -21,7 +21,9 @@ class StandardGachaUiContractTest {
 
     @Test
     fun gachaUsesLocalSnapshotAndCollectionStoreWithoutRemoteRpc() {
-        assertTrue("application.standardContent.snapshot()" in source)
+        assertTrue("content: StandardContentSnapshot" in source)
+        assertTrue("snapshot = content" in source)
+        assertFalse("application.standardContent" in source)
         assertTrue("withContext(Dispatchers.IO)" in source)
         assertTrue("collectionStore.markObtained(userId, entry.card.id)" in source)
         assertTrue("StandardGachaDailyStore(context)" in source)
