@@ -11,19 +11,31 @@ class StandardWinningTipsUiContractTest {
     private val japaneseStrings = File("src/main/res/values-ja/standard_winning_tips.xml").readText()
 
     @Test
-    fun indexKeepsExpertTipsUnlockedButClearlySeparated() {
+    fun indexKeepsExpertTipsUnlockedAndGroupsEachTier() {
         assertTrue("StandardWinningTipTier.entries.forEach" in route)
         assertTrue("R.string.standard_winning_tips_expert_supporting" in route)
         assertTrue("if (tier == StandardWinningTipTier.EXPERT)" in route)
+        assertTrue("verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.control)" in route)
         assertFalse("enabled = false" in route.substringBefore("private fun StandardWinningTipDetailScreen"))
     }
 
     @Test
-    fun indexUsesColorCodedTierHeaders() {
+    fun tierHeadersAndBadgesUseOneConsistentColor() {
         assertTrue("StandardTipTierSectionHeader(tier)" in route)
-        assertTrue("StandardWinningTipTier.BASIC -> MaterialTheme.colorScheme.primaryContainer" in route)
-        assertTrue("StandardWinningTipTier.STEP_UP -> MaterialTheme.colorScheme.tertiaryContainer" in route)
-        assertTrue("StandardWinningTipTier.EXPERT -> MaterialTheme.colorScheme.secondaryContainer" in route)
+        assertTrue("color = MaterialTheme.colorScheme.primaryContainer" in route)
+        assertTrue("color = MaterialTheme.colorScheme.onPrimaryContainer" in route)
+        assertFalse("MaterialTheme.colorScheme.tertiaryContainer" in route)
+        assertFalse("MaterialTheme.colorScheme.secondaryContainer" in route)
+    }
+
+    @Test
+    fun everyTierTitleIsAnExplicitHeading() {
+        val header = route.substringAfter("private fun StandardTipTierSectionHeader(")
+            .substringBefore("private fun StandardTipTierBadge")
+
+        assertTrue(".semantics { heading() }" in header)
+        assertTrue("style = MaterialTheme.typography.titleLarge" in header)
+        assertTrue("standard_winning_tips_expert_supporting" in header)
     }
 
     @Test

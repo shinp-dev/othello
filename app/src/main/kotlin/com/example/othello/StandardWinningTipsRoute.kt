@@ -25,6 +25,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -77,42 +79,31 @@ private fun StandardWinningTipsIndexScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         StandardWinningTipTier.entries.forEach { tier ->
-            StandardTipTierSectionHeader(tier)
-            if (tier == StandardWinningTipTier.EXPERT) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = MaterialTheme.shapes.medium,
-                ) {
-                    Text(
-                        text = appString(R.string.standard_winning_tips_expert_supporting),
-                        modifier = Modifier.padding(ChanrivaSpacing.control),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            standardWinningTips.filter { it.tier == tier }.forEach { tip ->
-                Card(
-                    onClick = { onOpenTip(tip) },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = ChanrivaColors.surfaceElevated),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(ChanrivaSpacing.section),
-                        verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.control),
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.control),
+            ) {
+                StandardTipTierSectionHeader(tier)
+                standardWinningTips.filter { it.tier == tier }.forEach { tip ->
+                    Card(
+                        onClick = { onOpenTip(tip) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = ChanrivaColors.surfaceElevated),
                     ) {
-                        if (tier == StandardWinningTipTier.EXPERT) {
-                            StandardTipTierBadge(tier)
+                        Column(
+                            modifier = Modifier.padding(ChanrivaSpacing.section),
+                            verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.control),
+                        ) {
+                            Text(
+                                text = appString(tip.titleRes),
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                text = appString(tip.leadRes),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
-                        Text(
-                            text = appString(tip.titleRes),
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        Text(
-                            text = appString(tip.leadRes),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                     }
                 }
             }
@@ -207,52 +198,45 @@ private fun StandardWinningTipDetailScreen(
 
 @Composable
 private fun StandardTipTierSectionHeader(tier: StandardWinningTipTier) {
-    val containerColor = when (tier) {
-        StandardWinningTipTier.BASIC -> MaterialTheme.colorScheme.primaryContainer
-        StandardWinningTipTier.STEP_UP -> MaterialTheme.colorScheme.tertiaryContainer
-        StandardWinningTipTier.EXPERT -> MaterialTheme.colorScheme.secondaryContainer
-    }
-    val contentColor = when (tier) {
-        StandardWinningTipTier.BASIC -> MaterialTheme.colorScheme.onPrimaryContainer
-        StandardWinningTipTier.STEP_UP -> MaterialTheme.colorScheme.onTertiaryContainer
-        StandardWinningTipTier.EXPERT -> MaterialTheme.colorScheme.onSecondaryContainer
-    }
     Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = containerColor,
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { heading() },
+        color = MaterialTheme.colorScheme.primaryContainer,
         shape = MaterialTheme.shapes.medium,
     ) {
-        Text(
-            text = appString(tier.titleRes),
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = contentColor,
-        )
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = appString(tier.titleRes),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+            if (tier == StandardWinningTipTier.EXPERT) {
+                Text(
+                    text = appString(R.string.standard_winning_tips_expert_supporting),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+                )
+            }
+        }
     }
 }
 
 @Composable
 private fun StandardTipTierBadge(tier: StandardWinningTipTier) {
-    val containerColor = when (tier) {
-        StandardWinningTipTier.BASIC -> MaterialTheme.colorScheme.primaryContainer
-        StandardWinningTipTier.STEP_UP -> MaterialTheme.colorScheme.tertiaryContainer
-        StandardWinningTipTier.EXPERT -> MaterialTheme.colorScheme.secondaryContainer
-    }
-    val contentColor = when (tier) {
-        StandardWinningTipTier.BASIC -> MaterialTheme.colorScheme.onPrimaryContainer
-        StandardWinningTipTier.STEP_UP -> MaterialTheme.colorScheme.onTertiaryContainer
-        StandardWinningTipTier.EXPERT -> MaterialTheme.colorScheme.onSecondaryContainer
-    }
     Surface(
-        color = containerColor,
+        color = MaterialTheme.colorScheme.primaryContainer,
         shape = RoundedCornerShape(999.dp),
     ) {
         Text(
             text = appString(tier.titleRes),
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
             style = MaterialTheme.typography.labelMedium,
-            color = contentColor,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
         )
     }
 }
