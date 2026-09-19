@@ -401,6 +401,7 @@
     <string name="black_count">Black %1$d</string>
     <string name="white_count">White %1$d</string>
     <string name="ply_count">Moves %1$d</string>
+    <string name="game_score_summary">Move %1$d:  Black %2$d  White %3$d</string>
     <string name="black_stone">Black disc</string>
     <string name="white_stone">White disc</string>
     <string name="legal_move">Legal move</string>
