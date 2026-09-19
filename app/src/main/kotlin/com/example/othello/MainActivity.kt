@@ -1099,9 +1099,9 @@ private fun ScoreHeader(viewState: LocalMatchViewState) = ScoreHeader(viewState.
 @Composable
 internal fun ScoreHeader(game: com.example.othello.game.GameState, status: String? = null) {
     Card(Modifier.fillMaxWidth()) {
-        Row(
+        Column(
             Modifier.fillMaxWidth().padding(ChanrivaSpacing.card),
-            verticalAlignment = Alignment.CenterVertically,
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
                 appString(
@@ -1110,13 +1110,13 @@ internal fun ScoreHeader(game: com.example.othello.game.GameState, status: Strin
                     game.board.count(Disc.BLACK),
                     game.board.count(Disc.WHITE),
                 ),
-                modifier = Modifier.weight(if (status == null) 1f else 3f),
+                modifier = Modifier.fillMaxWidth(),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
             status?.let {
                 Text(
                     it,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
             }
