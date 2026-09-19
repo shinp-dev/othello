@@ -403,6 +403,7 @@
     <string name="black_count">黒 %1$d</string>
     <string name="white_count">白 %1$d</string>
     <string name="ply_count">手数 %1$d</string>
+    <string name="game_score_summary">%1$d手目：　黒%2$d石　白%3$d石</string>
     <string name="black_stone">黒石</string>
     <string name="white_stone">白石</string>
     <string name="legal_move">合法手</string>
