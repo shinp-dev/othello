@@ -19,11 +19,12 @@ class GuiInformationArchitectureContractTest {
     @Test
     fun playAndScoreHeaderKeepModeOutOfTheFourthColumn() {
         val play = main.substringAfter("private fun PlayScreen(").substringBefore("internal fun opponentRatingLabel")
-        val score = main.substringAfter("private fun ScoreHeader(game:")
+        val score = main.substringAfter("internal fun ScoreHeader(game:")
             .substringBefore("private fun OthelloBoard")
         assertFalse("ちゃんと残る、ちゃんと振り返れるリバーシ" in play)
         assertTrue("ScoreHeader(viewState.game)" in main)
-        assertTrue("status.orEmpty()" in score)
+        assertTrue("R.string.game_score_summary" in score)
+        assertTrue("status?.let" in score)
         assertFalse("AI対局" in score)
         assertFalse("ローカル" in score)
     }
