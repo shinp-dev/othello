@@ -1099,11 +1099,27 @@ private fun ScoreHeader(viewState: LocalMatchViewState) = ScoreHeader(viewState.
 @Composable
 internal fun ScoreHeader(game: com.example.othello.game.GameState, status: String? = null) {
     Card(Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth().padding(ChanrivaSpacing.card)) {
-            Text(appString(R.string.black_count, game.board.count(Disc.BLACK)), modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            Text(appString(R.string.white_count, game.board.count(Disc.WHITE)), modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            Text(appString(R.string.ply_count, game.ply), modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            Text(status.orEmpty(), modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Row(
+            Modifier.fillMaxWidth().padding(ChanrivaSpacing.card),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                appString(
+                    R.string.game_score_summary,
+                    game.ply,
+                    game.board.count(Disc.BLACK),
+                    game.board.count(Disc.WHITE),
+                ),
+                modifier = Modifier.weight(if (status == null) 1f else 3f),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+            status?.let {
+                Text(
+                    it,
+                    modifier = Modifier.weight(1f),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+            }
         }
     }
 }
