@@ -10,15 +10,16 @@ class StandardModeUiContractTest {
     private val source = File("src/main/kotlin/com/example/othello/StandardModeNavigation.kt").readText()
 
     @Test
-    fun bootstrapGatesAllStandardDestinationsButNotModeSelectionOrAdvanced() {
+    fun bootstrapGatesStandardHomeFeaturesButNotTheIndependentRealEvent() {
         val route = source.substringAfter("internal fun AuthenticatedModeRoute(")
             .substringBefore("@Composable\ninternal fun StandardHomeScreen(")
         val bootstrapIndex = route.indexOf("else -> StandardBootstrapRoute(")
         assertTrue(bootstrapIndex > route.indexOf("AuthenticatedModeDestination.ADVANCED -> advancedContent"))
         assertTrue(bootstrapIndex > route.indexOf("AuthenticatedModeDestination.MODE_SELECTION -> ModeSelectionScreen"))
-        AuthenticatedModeDestination.entries.filter { it.name.startsWith("STANDARD_") }.forEach {
+        AuthenticatedModeDestination.entries.filter { it.name.startsWith("STANDARD_") && it != AuthenticatedModeDestination.STANDARD_REAL_EVENT }.forEach {
             assertTrue(route.indexOf("AuthenticatedModeDestination.$it ->") > bootstrapIndex)
         }
+        assertTrue(route.indexOf("AuthenticatedModeDestination.STANDARD_REAL_EVENT -> StandardRealEventRoute(") < bootstrapIndex)
         assertTrue("preparationState = aiState" in route)
         assertEquals(2, route.split("content = content").size - 1)
         val gate = File("src/main/kotlin/com/example/othello/StandardBootstrapScreen.kt").readText()
