@@ -10,5 +10,6 @@ for spec in 360x760 390x844; do
   ./gradlew :app:connectedDebugAndroidTest \
     -Pandroid.testInstrumentationRunnerArguments.class=com.example.othello.ModeSelectionScreenshotTest \
     -Pandroid.testInstrumentationRunnerArguments.captureWidth="$width"
-  adb pull "/sdcard/Download/ChanrivaPreviews/mode-${width}dp.png" screenshots/
+  adb pull "/sdcard/Download/ChanrivaPreviews/mode-${width}dp-top.png" screenshots/
+  adb pull "/sdcard/Download/ChanrivaPreviews/mode-${width}dp-bottom.png" screenshots/
 done
