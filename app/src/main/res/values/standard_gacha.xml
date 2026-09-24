@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="en">
     <string name="standard_gacha_title">CHANRIVA Gacha</string>
     <string name="standard_gacha_home_supporting">Draw up to 100 free cards each day and grow your Reversi collection</string>
     <string name="standard_gacha_supporting">Collect Reversi facts, history, books and more.</string>

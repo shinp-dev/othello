@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="en">
     <string name="standard_ai_intro_title">Lv%1$d challenge</string>
     <string name="standard_ai_new_opponent">A new opponent appears!</string>
     <string name="standard_ai_intro_start">Start match</string>

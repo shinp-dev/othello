@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="en">
     <string name="standard_winning_tips_title">Winning tips</string>
     <string name="standard_winning_tips_home_supporting">Quick ideas you can use in your very next game</string>
     <string name="standard_winning_tips_intro">Each tip takes about 30 seconds. Pick one idea, try it in your next game, and come back when it starts to feel natural.</string>
