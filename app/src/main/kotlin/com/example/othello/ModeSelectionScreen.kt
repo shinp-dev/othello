@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -45,7 +46,7 @@ internal fun ModeSelectionScreen(
     onRealEvent: () -> Unit,
 ) {
     // The cloud is decorative. Its inset rectangular action contains all text and the arrow.
-    Box(Modifier.fillMaxSize().background(Night).statusBarsPadding()) {
+    Box(Modifier.fillMaxSize().background(Night).statusBarsPadding().navigationBarsPadding()) {
         Column(
             Modifier.fillMaxSize()
                 .verticalScroll(rememberScrollState())
