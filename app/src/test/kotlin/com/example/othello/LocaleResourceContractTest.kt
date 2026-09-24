@@ -2,14 +2,13 @@ package com.example.othello
 
 import java.io.File
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.junit.Test
 
 class LocaleResourceContractTest {
     private val defaultFile = File("src/main/res/values/strings.xml")
     private val japaneseFile = File("src/main/res/values-ja/strings.xml")
-    private val legacyEnglishDirectory = File("src/main/res/values-en")
+    private val englishChoiceCopyFile = File("src/main/res/values-en/strings.xml")
     private val localeConfig = File("src/main/res/xml/locales_config.xml")
 
     @Test
@@ -33,7 +32,19 @@ class LocaleResourceContractTest {
         assertTrue("<string name=\"saving_variation\">保存中…</string>" in japaneseText)
         assertTrue("<string name=\"variation_saved\">Saved</string>" in defaultText)
         assertTrue("<string name=\"variation_saved\">保存済み</string>" in japaneseText)
-        assertFalse(legacyEnglishDirectory.exists())
+        assertTrue(englishChoiceCopyFile.isFile)
+        val englishChoiceCopy = readStrings(englishChoiceCopyFile)
+        assertEquals(
+            setOf(
+                "enjoy_casually", "enjoy_casually_detail", "enjoy_casually_accessibility",
+                "enjoy_together", "enjoy_together_detail", "enjoy_together_accessibility",
+                "enjoy_deeply", "enjoy_deeply_detail", "enjoy_deeply_accessibility",
+            ),
+            englishChoiceCopy.keys,
+        )
+        englishChoiceCopy.forEach { (id, value) ->
+            assertEquals(readStrings(defaultFile).getValue(id), value, id)
+        }
     }
 
     @Test

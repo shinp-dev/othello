@@ -25,7 +25,7 @@ class StandardModeNavigationTest {
     }
 
     @Test
-    fun standardHomeRoutesAiOnlineAndRealEventsToTheirDestinations() {
+    fun standardFeatureDestinationsRemainMapped() {
         assertEquals(
             AuthenticatedModeDestination.STANDARD_AI,
             destinationFor(StandardFeature.AI),
@@ -48,13 +48,20 @@ class StandardModeNavigationTest {
             AuthenticatedModeDestination.STANDARD_GACHA,
             AuthenticatedModeDestination.STANDARD_COLLECTION,
             AuthenticatedModeDestination.STANDARD_ONLINE_COMING_SOON,
-            AuthenticatedModeDestination.STANDARD_REAL_EVENT,
         ).forEach { destination ->
             assertEquals(
                 AuthenticatedModeDestination.STANDARD_HOME,
                 authenticatedModeBackDestination(destination),
             )
         }
+    }
+
+    @Test
+    fun realEventReturnsDirectlyToSelection() {
+        assertEquals(
+            AuthenticatedModeDestination.MODE_SELECTION,
+            authenticatedModeBackDestination(AuthenticatedModeDestination.STANDARD_REAL_EVENT),
+        )
     }
 
     @Test

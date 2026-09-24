@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="en">
     <string name="standard_real_event_loading">Loading event information…</string>
     <string name="standard_real_event_empty">No upcoming events are listed right now.</string>
     <string name="standard_real_event_load_failed">Couldn’t load event information.</string>

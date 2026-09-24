@@ -21,7 +21,7 @@ class OpponentPackHomeUiTest {
         var selected: String? = null
         composeRule.setContent {
             OthelloTheme {
-                StandardHomeScreen(OpponentPackSnapshot(listOf(first, second)), { selected = it }, {}, {}, {}, {}, {})
+                StandardHomeScreen(OpponentPackSnapshot(listOf(first, second)), { selected = it }, {}, {}, {}, {})
             }
         }
         composeRule.onNodeWithText("Beginner pack").performScrollTo().performClick()

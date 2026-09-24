@@ -100,8 +100,8 @@ internal fun authenticatedModeBackDestination(
     AuthenticatedModeDestination.STANDARD_WINNING_TIPS,
     AuthenticatedModeDestination.STANDARD_GACHA,
     AuthenticatedModeDestination.STANDARD_COLLECTION,
-    AuthenticatedModeDestination.STANDARD_ONLINE_COMING_SOON,
-    AuthenticatedModeDestination.STANDARD_REAL_EVENT -> AuthenticatedModeDestination.STANDARD_HOME
+    AuthenticatedModeDestination.STANDARD_ONLINE_COMING_SOON -> AuthenticatedModeDestination.STANDARD_HOME
+    AuthenticatedModeDestination.STANDARD_REAL_EVENT -> AuthenticatedModeDestination.MODE_SELECTION
     AuthenticatedModeDestination.MODE_SELECTION -> null
     AuthenticatedModeDestination.ADVANCED -> AuthenticatedModeDestination.MODE_SELECTION
 }
@@ -117,16 +117,20 @@ internal fun AuthenticatedModeRoute(
     var selectedPackId by rememberSaveable(userId) { mutableStateOf<String?>(null) }
     val backDestination = authenticatedModeBackDestination(destination)
     BackHandler(enabled = backDestination != null) {
-        destination = requireNotNull(authenticatedModeBackDestination(destination))
+        destination = requireNotNull(backDestination)
     }
 
     when (destination) {
         AuthenticatedModeDestination.MODE_SELECTION -> ModeSelectionScreen(
             onSelect = { destination = destinationFor(it) },
+            onRealEvent = { destination = AuthenticatedModeDestination.STANDARD_REAL_EVENT },
         )
         AuthenticatedModeDestination.ADVANCED -> advancedContent {
             destination = AuthenticatedModeDestination.MODE_SELECTION
         }
+        AuthenticatedModeDestination.STANDARD_REAL_EVENT -> StandardRealEventRoute(
+            onBack = { destination = AuthenticatedModeDestination.MODE_SELECTION },
+        )
         else -> StandardBootstrapRoute(
             userId = userId,
             onBack = { destination = AuthenticatedModeDestination.MODE_SELECTION },
@@ -135,7 +139,6 @@ internal fun AuthenticatedModeRoute(
                 AuthenticatedModeDestination.STANDARD_HOME -> StandardHomeScreen(
                     opponents = opponents,
                     onPackSelected = { selectedPackId = it; destination = AuthenticatedModeDestination.STANDARD_AI },
-                    onFeature = { destination = destinationFor(it) },
                     onWinningTips = { destination = AuthenticatedModeDestination.STANDARD_WINNING_TIPS },
                     onGacha = { destination = AuthenticatedModeDestination.STANDARD_GACHA },
                     onCollection = { destination = AuthenticatedModeDestination.STANDARD_COLLECTION },
@@ -167,222 +170,7 @@ internal fun AuthenticatedModeRoute(
                     feature = StandardFeature.ONLINE,
                     onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
                 )
-                AuthenticatedModeDestination.STANDARD_REAL_EVENT -> StandardRealEventRoute(
-                    onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
-                )
                 else -> error("Not a Standard destination: $destination")
-            }
-        }
-    }
-}
-
-@Composable
-private fun ModeSelectionScreen(onSelect: (AppMode) -> Unit) {
-    StandardSurface {
-        ChanrivaScreenHeader(title = appString(R.string.mode_selection_title))
-        Text(
-            text = appString(R.string.mode_selection_supporting),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        ModeChoiceCard(
-            title = appString(R.string.standard_mode),
-            badge = appString(R.string.mode_selection_recommended),
-            supportingText = appString(R.string.mode_selection_standard_supporting),
-            features = appString(R.string.mode_selection_standard_features),
-            highlighted = true,
-            onClick = { onSelect(AppMode.STANDARD) },
-        ) {
-            Image(
-                painter = painterResource(R.drawable.standard_ai_animal_pack_banner),
-                contentDescription = appString(R.string.standard_ai_pack_preview_description),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(3f),
-                contentScale = ContentScale.Fit,
-            )
-        }
-        ModeChoiceCard(
-            title = appString(R.string.advanced_mode),
-            badge = appString(R.string.mode_selection_advanced_badge),
-            supportingText = appString(R.string.mode_selection_advanced_supporting),
-            features = appString(R.string.mode_selection_advanced_features),
-            highlighted = false,
-            onClick = { onSelect(AppMode.ADVANCED) },
-        ) {
-            AdvancedModePreview()
-        }
-        Text(
-            text = appString(R.string.mode_selection_switch_note),
-            modifier = Modifier.fillMaxWidth(),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-    }
-}
-
-@Composable
-private fun ModeChoiceCard(
-    title: String,
-    badge: String,
-    supportingText: String,
-    features: String,
-    highlighted: Boolean,
-    onClick: () -> Unit,
-    visual: @Composable () -> Unit,
-) {
-    val containerColor = if (highlighted) {
-        MaterialTheme.colorScheme.secondaryContainer
-    } else {
-        ChanrivaColors.surfaceElevated
-    }
-    val contentColor = if (highlighted) {
-        MaterialTheme.colorScheme.onSecondaryContainer
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
-    val borderModifier = if (highlighted) {
-        Modifier.border(
-            width = 1.dp,
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
-            shape = MaterialTheme.shapes.extraLarge,
-        )
-    } else {
-        Modifier
-    }
-
-    Card(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(borderModifier),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(containerColor = containerColor),
-    ) {
-        Column(
-            modifier = Modifier.padding(ChanrivaSpacing.section),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Surface(
-                shape = RoundedCornerShape(999.dp),
-                color = if (highlighted) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant
-                },
-            ) {
-                Text(
-                    text = badge,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (highlighted) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = contentColor,
-            )
-            Text(
-                text = supportingText,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (highlighted) contentColor else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = features,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            visual()
-        }
-    }
-}
-
-@Composable
-private fun AdvancedModePreview() {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            MiniAnalysisBoard()
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    text = appString(R.string.mode_selection_analysis_preview),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = "+3.2",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.weight(1f))
-                Text(
-                    text = appString(R.string.mode_selection_study_preview),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun MiniAnalysisBoard() {
-    val blackDiscs = setOf(3 to 3, 4 to 4, 2 to 3, 5 to 4, 2 to 5)
-    val whiteDiscs = setOf(3 to 4, 4 to 3, 2 to 4, 5 to 3, 4 to 5)
-
-    Column(
-        modifier = Modifier
-            .size(104.dp)
-            .background(ChanrivaColors.board)
-            .padding(2.dp),
-    ) {
-        repeat(8) { row ->
-            Row(Modifier.fillMaxWidth().weight(1f)) {
-                repeat(8) { column ->
-                    val coordinate = row to column
-                    val discColor: Color? = when (coordinate) {
-                        in blackDiscs -> ChanrivaColors.blackDisc
-                        in whiteDiscs -> ChanrivaColors.whiteDisc
-                        else -> null
-                    }
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .border(0.35.dp, ChanrivaColors.boardGrid),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (discColor != null) {
-                            Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .padding(2.dp)
-                                    .background(discColor, CircleShape)
-                                    .border(0.5.dp, ChanrivaColors.discOutline, CircleShape),
-                            )
-                        }
-                    }
-                }
             }
         }
     }
@@ -392,7 +180,6 @@ private fun MiniAnalysisBoard() {
 internal fun StandardHomeScreen(
     opponents: OpponentPackSnapshot,
     onPackSelected: (String) -> Unit,
-    onFeature: (StandardFeature) -> Unit,
     onWinningTips: () -> Unit,
     onGacha: () -> Unit,
     onCollection: () -> Unit,
@@ -408,7 +195,6 @@ internal fun StandardHomeScreen(
             val itemSpacing = if (compact) 8.dp else ChanrivaSpacing.compact
             val wideCardHeight = if (compact) 82.dp else 96.dp
             val miniCardHeight = if (compact) 68.dp else 78.dp
-            val eventCardHeight = if (compact) 88.dp else 104.dp
             val miniArtworkSize = if (compact) 44.dp else 52.dp
 
             Column(
@@ -445,13 +231,6 @@ internal fun StandardHomeScreen(
                     artworkDrawableRes = R.drawable.standard_home_winning_tips_art,
                     onClick = onWinningTips,
                     modifier = Modifier.height(wideCardHeight),
-                )
-                StandardHomeWideFeatureCard(
-                    title = appString(StandardFeature.REAL_EVENT.titleRes),
-                    supportingText = appString(StandardFeature.REAL_EVENT.supportingTextRes),
-                    artworkDrawableRes = R.drawable.standard_home_real_event_photo,
-                    onClick = { onFeature(StandardFeature.REAL_EVENT) },
-                    modifier = Modifier.height(eventCardHeight),
                 )
                 Spacer(Modifier.height(itemSpacing))
                 TextButton(

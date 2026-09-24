@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="en">
     <string name="mode_selection_title">Choose how to play</string>
     <string name="mode_selection_supporting">Choose the side of CHANRIVA that fits you today.</string>
     <string name="mode_selection_recommended">Recommended</string>

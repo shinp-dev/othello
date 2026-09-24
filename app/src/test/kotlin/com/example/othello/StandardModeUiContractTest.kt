@@ -10,15 +10,16 @@ class StandardModeUiContractTest {
     private val source = File("src/main/kotlin/com/example/othello/StandardModeNavigation.kt").readText()
 
     @Test
-    fun bootstrapGatesAllStandardDestinationsButNotModeSelectionOrAdvanced() {
+    fun bootstrapGatesStandardHomeFeaturesButNotTheIndependentRealEvent() {
         val route = source.substringAfter("internal fun AuthenticatedModeRoute(")
-            .substringBefore("private fun ModeSelectionScreen(")
+            .substringBefore("@Composable\ninternal fun StandardHomeScreen(")
         val bootstrapIndex = route.indexOf("else -> StandardBootstrapRoute(")
         assertTrue(bootstrapIndex > route.indexOf("AuthenticatedModeDestination.ADVANCED -> advancedContent"))
         assertTrue(bootstrapIndex > route.indexOf("AuthenticatedModeDestination.MODE_SELECTION -> ModeSelectionScreen"))
-        AuthenticatedModeDestination.entries.filter { it.name.startsWith("STANDARD_") }.forEach {
+        AuthenticatedModeDestination.entries.filter { it.name.startsWith("STANDARD_") && it != AuthenticatedModeDestination.STANDARD_REAL_EVENT }.forEach {
             assertTrue(route.indexOf("AuthenticatedModeDestination.$it ->") > bootstrapIndex)
         }
+        assertTrue(route.indexOf("AuthenticatedModeDestination.STANDARD_REAL_EVENT -> StandardRealEventRoute(") < bootstrapIndex)
         assertTrue("preparationState = aiState" in route)
         assertEquals(2, route.split("content = content").size - 1)
         val gate = File("src/main/kotlin/com/example/othello/StandardBootstrapScreen.kt").readText()
@@ -37,19 +38,17 @@ class StandardModeUiContractTest {
     }
 
     @Test
-    fun standardHomeShowsAnimalPackThenGachaCollectionWinningTipsAndRealEvent() {
+    fun standardHomeShowsPacksGachaCollectionAndTipsWhileRealEventsLiveOnSelection() {
         val home = source.substringAfter("internal fun StandardHomeScreen(")
             .substringBefore("private fun StandardOpponentPackPreviewCard")
         val packIndex = home.indexOf("OpponentHomeSectionCards(")
         val tipsIndex = home.indexOf("R.string.standard_winning_tips_title")
         val gachaIndex = home.indexOf("R.string.standard_gacha_title")
         val collectionIndex = home.indexOf("R.string.standard_collection_title")
-        val realEventIndex = home.indexOf("title = appString(StandardFeature.REAL_EVENT.titleRes)")
         assertTrue(packIndex >= 0)
         assertTrue(gachaIndex > packIndex)
         assertTrue(collectionIndex > gachaIndex)
         assertTrue(tipsIndex > collectionIndex)
-        assertTrue(realEventIndex > tipsIndex)
         assertFalse("title = appString(StandardFeature.AI.titleRes)" in home)
         assertFalse("title = appString(StandardFeature.ONLINE.titleRes)" in home)
         assertTrue("OpponentHomeSection.FEATURED" in home)
@@ -60,7 +59,7 @@ class StandardModeUiContractTest {
         assertTrue("R.drawable.standard_home_winning_tips_art" in home)
         assertTrue("R.drawable.standard_home_gacha_icon" in home)
         assertTrue("R.drawable.standard_home_collection_icon" in home)
-        assertTrue("R.drawable.standard_home_real_event_photo" in home)
+        assertFalse("StandardFeature.REAL_EVENT" in home)
         assertTrue("TextButton(" in home)
         assertTrue("R.string.switch_to_advanced_mode" in home)
     }

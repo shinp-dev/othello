@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="en">
     <string name="opponent_first_clear">%1$s cleared!</string>
     <string name="opponent_milestone_title">A new challenge!</string>
     <string name="opponent_milestone_unlocked">A milestone opponent is now available</string>

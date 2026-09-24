@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="en">
     <string name="standard_ai_pack_label">Opponent pack</string>
     <string name="standard_ai_animal_pack_name">Animal Challenge</string>
     <string name="standard_ai_animal_pack_supporting">Take on 8 animal opponents, from friendly to wild</string>
