@@ -58,6 +58,21 @@ class StandardModeNavigationTest {
     }
 
     @Test
+    fun directRealEventReturnsToSelectionWhileStandardEventReturnsHome() {
+        assertEquals(
+            AuthenticatedModeDestination.MODE_SELECTION,
+            authenticatedModeBackDestination(
+                AuthenticatedModeDestination.STANDARD_REAL_EVENT,
+                AuthenticatedModeDestination.MODE_SELECTION,
+            ),
+        )
+        assertEquals(
+            AuthenticatedModeDestination.STANDARD_HOME,
+            authenticatedModeBackDestination(AuthenticatedModeDestination.STANDARD_REAL_EVENT),
+        )
+    }
+
+    @Test
     fun bothModeHomesReturnToModeSelection() {
         assertEquals(
             AuthenticatedModeDestination.MODE_SELECTION,
