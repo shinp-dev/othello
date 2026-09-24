@@ -48,8 +48,7 @@ internal fun ModeSelectionScreen(
     Box(Modifier.fillMaxSize().background(Night).statusBarsPadding()) {
         Column(
             Modifier.fillMaxSize()
-                
-                .verticalScroll(rememberScrollState())
+.verticalScroll(rememberScrollState())
                 .padding(horizontal = 12.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
@@ -90,7 +89,7 @@ private fun ChoiceCloud(
     variant: Int,
     onClick: () -> Unit,
 ) {
-    Box(Modifier.fillMaxWidth().height(if (variant == 0) 234.dp else 222.dp)) {
+    Box(Modifier.fillMaxWidth().height(if (variant == 0) 240.dp else 236.dp)) {
         Canvas(Modifier.fillMaxSize()) {
             val w = size.width
             val h = size.height
@@ -115,7 +114,7 @@ private fun ChoiceCloud(
         if (variant == 0) ReversiGuide(Modifier.align(Alignment.CenterStart).offset(y = 12.dp))
         Box(
             Modifier.fillMaxSize()
-                .padding(start = if (variant == 0) 116.dp else 44.dp, end = 44.dp, top = 48.dp, bottom = 46.dp)
+                .padding(start = if (variant == 0) 116.dp else 50.dp, end = 50.dp, top = 62.dp, bottom = 54.dp)
                 .semantics { contentDescription = "$title。$detail" }
                 .clickable(role = Role.Button, onClickLabel = title, onClick = onClick),
         ) {
