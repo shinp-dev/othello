@@ -43,9 +43,12 @@ class ModeSelectionScreenshotTest {
         composeRule.onNodeWithText("気軽に遊ぶ").assertExists()
         composeRule.onNodeWithText("人と楽しむ").assertExists()
         composeRule.onNodeWithText("深く楽しむ").assertExists()
+        composeRule.waitForIdle()
+        saveScreenshot("mode-${width}dp-top.png")
+
         composeRule.onNodeWithText("深く楽しむ").performScrollTo()
         composeRule.waitForIdle()
-        saveScreenshot("mode-${width}dp.png")
+        saveScreenshot("mode-${width}dp-bottom.png")
     }
 
     private fun saveScreenshot(name: String) {
