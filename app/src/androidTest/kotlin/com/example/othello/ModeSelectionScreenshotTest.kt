@@ -53,7 +53,17 @@ class ModeSelectionScreenshotTest {
 
     private fun saveScreenshot(name: String) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        var bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        // Compose semantics may be ready a frame before the emulator display buffer updates.
+        repeat(20) {
+            if (bitmap.getPixel(5, bitmap.height / 2) != android.graphics.Color.WHITE) return@repeat
+            bitmap.recycle()
+            Thread.sleep(100)
+            bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        }
+        check(bitmap.getPixel(5, bitmap.height / 2) != android.graphics.Color.WHITE) {
+            "Emulator screenshot is still blank"
+        }
         val context = instrumentation.targetContext
         val uri = checkNotNull(context.contentResolver.insert(
             MediaStore.Downloads.EXTERNAL_CONTENT_URI,
