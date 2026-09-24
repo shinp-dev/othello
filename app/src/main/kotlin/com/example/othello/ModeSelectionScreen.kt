@@ -48,7 +48,7 @@ internal fun ModeSelectionScreen(
     Box(Modifier.fillMaxSize().background(Night).statusBarsPadding()) {
         Column(
             Modifier.fillMaxSize()
-.verticalScroll(rememberScrollState())
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 12.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
