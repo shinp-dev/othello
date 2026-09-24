@@ -1,204 +1,183 @@
 package com.example.othello
 
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.geometry.Offset
 import com.example.othello.designsystem.OthelloTheme
+import kotlin.math.min
 
-private val Night = Color(0xFF14253A)
-private val Ink = Color(0xFF203248)
+private val StageDark = Color(0xFF0C1930)
+private val Ink = Color(0xFF1A2838)
+private val SoftWhite = Color(0xFFFFF8E9)
+private val TitleShadow = Shadow(Color.White.copy(alpha = 0.85f), Offset(0f, 1f), 5f)
+private val DeepShadow = Shadow(Color(0xFF082548), Offset(1f, 2f), 5f)
 
 @Composable
 internal fun ModeSelectionScreen(
     onSelect: (AppMode) -> Unit,
     onRealEvent: () -> Unit,
 ) {
-    // The cloud is decorative. Its inset rectangular action contains all text and the arrow.
-    Box(Modifier.fillMaxSize().background(Night).statusBarsPadding().navigationBarsPadding()) {
-        Column(
-            Modifier.fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            ChoiceCloud(
-                title = appString(R.string.enjoy_casually),
-                detail = appString(R.string.enjoy_casually_detail),
-                palette = listOf(Color(0xFFFFF9DF), Color(0xFFFFE6A0)),
-                ink = Ink,
-                variant = 0,
-                onClick = { onSelect(AppMode.STANDARD) },
+    // Fit the whole 390 x 844 design in the available area, including both touch regions
+    // and artwork. No child image or individual choice is independently scaled or cropped.
+    BoxWithConstraints(
+        Modifier.fillMaxSize().background(StageDark).statusBarsPadding().navigationBarsPadding(),
+        contentAlignment = Alignment.Center,
+    ) {
+        val scale = min(maxWidth.value / 390f, maxHeight.value / 844f)
+        Layout(
+            content = {
+                Box(Modifier.size(390.dp, 844.dp)) {
+                    Image(
+                        painter = painterResource(R.drawable.enjoy_background),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.FillBounds,
+                    )
+                    EnjoymentChoice(
+                        image = R.drawable.enjoy_casual,
+                        title = appString(R.string.enjoy_casually),
+                        detail = appString(R.string.enjoy_casually_detail),
+                        x = 4, y = 62, actionX = 122, actionY = 44,
+                        actionWidth = 248, actionHeight = 139,
+                        titleColor = Ink, detailColor = Ink, dark = false,
+                        onClick = { onSelect(AppMode.STANDARD) },
+                    )
+                    EnjoymentChoice(
+                        image = R.drawable.enjoy_together_art,
+                        title = appString(R.string.enjoy_together),
+                        detail = appString(R.string.enjoy_together_detail),
+                        x = 4, y = 305, actionX = 147, actionY = 44,
+                        actionWidth = 223, actionHeight = 139,
+                        titleColor = Ink, detailColor = Ink, dark = false,
+                        onClick = onRealEvent,
+                    )
+                    EnjoymentChoice(
+                        image = R.drawable.enjoy_deep,
+                        title = appString(R.string.enjoy_deeply),
+                        detail = appString(R.string.enjoy_deeply_detail),
+                        x = 4, y = 548, actionX = 128, actionY = 45,
+                        actionWidth = 242, actionHeight = 146,
+                        titleColor = Color.White, detailColor = SoftWhite, dark = true,
+                        onClick = { onSelect(AppMode.ADVANCED) },
+                    )
+                    Image(
+                        painter = painterResource(R.drawable.enjoy_guide),
+                        contentDescription = null,
+                        modifier = Modifier.offset(x = (-12).dp, y = 170.dp).size(171.dp, 228.dp),
+                        contentScale = ContentScale.Fit,
+                    )
+                }
+            },
+            modifier = Modifier.size(390.dp * scale, 844.dp * scale),
+        ) { measurables, constraints ->
+            val stage = measurables.single().measure(
+                androidx.compose.ui.unit.Constraints.fixed(390.dp.roundToPx(), 844.dp.roundToPx())
             )
-            ChoiceCloud(
-                title = appString(R.string.enjoy_together),
-                detail = appString(R.string.enjoy_together_detail),
-                palette = listOf(Color(0xFFE8F3FF), Color(0xFFBBD8F6)),
-                ink = Ink,
-                variant = 1,
-                onClick = onRealEvent,
-            )
-            ChoiceCloud(
-                title = appString(R.string.enjoy_deeply),
-                detail = appString(R.string.enjoy_deeply_detail),
-                palette = listOf(Color(0xFF32649B), Color(0xFF1D3E71)),
-                ink = Color.White,
-                variant = 2,
-                onClick = { onSelect(AppMode.ADVANCED) },
-            )
+            layout(constraints.maxWidth, constraints.maxHeight) {
+                stage.placeWithLayer(0, 0) {
+                    scaleX = scale
+                    scaleY = scale
+                    transformOrigin = TransformOrigin(0f, 0f)
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun ChoiceCloud(
+private fun EnjoymentChoice(
+    image: Int,
     title: String,
     detail: String,
-    palette: List<Color>,
-    ink: Color,
-    variant: Int,
+    x: Int,
+    y: Int,
+    actionX: Int,
+    actionY: Int,
+    actionWidth: Int,
+    actionHeight: Int,
+    titleColor: Color,
+    detailColor: Color,
+    dark: Boolean,
     onClick: () -> Unit,
 ) {
-    Box(Modifier.fillMaxWidth().height(if (variant == 0) 240.dp else 236.dp)) {
-        Canvas(Modifier.fillMaxSize()) {
-            val w = size.width
-            val h = size.height
-            val shift = when (variant) { 1 -> 0.02f; 2 -> -0.02f; else -> 0f }
-            val cloud = Path().apply {
-                moveTo(w * .09f, h * .39f)
-                cubicTo(w * .02f, h * .34f, w * .06f, h * .21f, w * .19f, h * .21f)
-                cubicTo(w * .19f, h * .09f, w * .37f, h * .07f, w * .43f, h * .16f)
-                cubicTo(w * (.52f + shift), h * .02f, w * .65f, h * .08f, w * .71f, h * .17f)
-                cubicTo(w * .85f, h * .08f, w * .95f, h * .19f, w * .91f, h * .33f)
-                cubicTo(w * 1.02f, h * .39f, w * 1.01f, h * .56f, w * .95f, h * .62f)
-                cubicTo(w * 1.01f, h * .77f, w * .89f, h * .88f, w * .78f, h * .83f)
-                cubicTo(w * .72f, h * .95f, w * .56f, h * .94f, w * .49f, h * .86f)
-                cubicTo(w * .37f, h * .97f, w * .21f, h * .91f, w * .18f, h * .82f)
-                cubicTo(w * .04f, h * .83f, w * .01f, h * .70f, w * .08f, h * .62f)
-                cubicTo(w * -.01f, h * .55f, w * .01f, h * .43f, w * .09f, h * .39f)
-                close()
-            }
-            drawPath(cloud, Brush.verticalGradient(palette))
-            drawPath(cloud, palette.last().copy(alpha = .75f), style = Stroke(width = 1.5.dp.toPx()))
-        }
-        if (variant == 0) ReversiGuide(Modifier.align(Alignment.CenterStart).offset(y = 12.dp))
+    Box(Modifier.offset(x.dp, y.dp).size(382.dp, 212.dp)) {
+        Image(
+            painter = painterResource(image),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Fit,
+        )
         Box(
-            Modifier.fillMaxSize()
-                .padding(start = if (variant == 0) 116.dp else 50.dp, end = 50.dp, top = 62.dp, bottom = 54.dp)
-                .semantics { contentDescription = "$title。$detail" }
+            Modifier.offset(actionX.dp, actionY.dp)
+                .size(actionWidth.dp, actionHeight.dp)
+                .semantics(mergeDescendants = true) {
+                    contentDescription = "$title。${detail.replace("\n", "")}" 
+                }
                 .clickable(role = Role.Button, onClickLabel = title, onClick = onClick),
         ) {
-            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        title,
-                        modifier = Modifier.weight(1f),
-                        color = ink,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleLarge,
-                    )
-                    Box(
-                        Modifier.size(36.dp).background(
-                            if (variant == 2) Color(0xFFDBEDFF) else Ink, CircleShape
-                        ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text("›", color = if (variant == 2) Ink else Color.White, style = MaterialTheme.typography.headlineMedium)
-                    }
-                }
+            Column(Modifier.offset(x = 10.dp, y = 5.dp).width((actionWidth - 54).dp)) {
                 Text(
-                    detail,
-                    color = ink,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
+                    text = title,
+                    color = titleColor,
+                    fontSize = 25.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 0.sp,
+                    style = TextStyle(shadow = if (dark) DeepShadow else TitleShadow),
+                    maxLines = 1,
                 )
-                ChoiceMotif(variant, ink)
+                Text(
+                    text = detail,
+                    color = detailColor,
+                    modifier = Modifier.offset(y = 8.dp),
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    style = TextStyle(shadow = if (dark) DeepShadow else TitleShadow),
+                    maxLines = 3,
+                    overflow = TextOverflow.Clip,
+                )
             }
-        }
-    }
-}
-
-/** A black and white disc guide wearing a tiny green board hat and pointing to the first choice. */
-@Composable
-private fun ReversiGuide(modifier: Modifier = Modifier) {
-    Canvas(modifier.size(width = 112.dp, height = 160.dp)) {
-        val u = size.width / 112f
-        fun p(x: Float, y: Float) = Offset(x * u, y * u)
-        drawCircle(Color(0xFF0E1720), 47 * u, p(52f, 94f))
-        drawCircle(Color(0xFFF9F6EC), 39 * u, p(56f, 91f))
-        drawCircle(Color(0xFF0E1720), 6 * u, p(41f, 87f))
-        drawCircle(Color(0xFF0E1720), 6 * u, p(72f, 87f))
-        drawCircle(Color.White, 2 * u, p(43f, 85f))
-        drawCircle(Color.White, 2 * u, p(74f, 85f))
-        drawCircle(Color(0xFFB85856), 5 * u, p(56f, 110f))
-        drawLine(Color(0xFF0E1720), p(77f, 115f), p(102f, 55f), strokeWidth = 13 * u)
-        drawCircle(Color(0xFFF9F6EC), 9 * u, p(103f, 53f))
-        drawLine(Color(0xFF0E1720), p(32f, 128f), p(15f, 144f), strokeWidth = 12 * u)
-        drawRoundRect(Color(0xFF174B3D), topLeft = p(17f, 29f), size = Size(75 * u, 28 * u),
-            cornerRadius = androidx.compose.ui.geometry.CornerRadius(4 * u))
-        drawLine(Color(0xFF90BA79), p(35f, 30f), p(35f, 55f), strokeWidth = 2 * u)
-        drawLine(Color(0xFF90BA79), p(56f, 30f), p(56f, 55f), strokeWidth = 2 * u)
-        drawLine(Color(0xFF90BA79), p(75f, 30f), p(75f, 55f), strokeWidth = 2 * u)
-        drawCircle(Color.White, 10 * u, p(44f, 41f))
-        drawCircle(Color(0xFF101820), 10 * u, p(68f, 41f))
-        drawLine(Color(0xFFE3BE64), p(12f, 58f), p(98f, 58f), strokeWidth = 6 * u)
-    }
-}
-
-@Composable
-private fun ChoiceMotif(variant: Int, ink: Color) {
-    Canvas(Modifier.size(width = 72.dp, height = 30.dp)) {
-        val u = size.width / 72f
-        fun p(x: Float, y: Float) = Offset(x * u, y * u)
-        if (variant == 0) {
-            drawRoundRect(Color(0xFF2F7456), p(1f, 1f), Size(67 * u, 28 * u),
-                androidx.compose.ui.geometry.CornerRadius(3 * u))
-            for (i in 1..3) drawLine(Color.White.copy(alpha = .5f), p(1f + i * 16f, 2f), p(1f + i * 16f, 28f), u)
-            drawCircle(Color.White, 8 * u, p(23f, 15f))
-            drawCircle(Color(0xFF12191E), 8 * u, p(43f, 15f))
-        } else if (variant == 1) {
-            drawCircle(Color(0xFF315F97), 8 * u, p(15f, 8f))
-            drawCircle(Color(0xFFB65F73), 8 * u, p(55f, 8f))
-            drawLine(ink, p(15f, 21f), p(55f, 21f), 2 * u)
-            drawCircle(Color(0xFF111B23), 6 * u, p(28f, 21f))
-            drawCircle(Color.White, 6 * u, p(43f, 21f))
-        } else {
-            drawCircle(Color(0xFFB9DBFF), 7 * u, p(10f, 15f))
-            drawCircle(Color(0xFFB9DBFF), 7 * u, p(60f, 15f))
-            drawLine(Color(0xFFB9DBFF), p(19f, 15f), p(49f, 15f), 2 * u)
-            drawCircle(Color(0xFF1A2632), 6 * u, p(29f, 15f))
-            drawCircle(Color.White, 6 * u, p(41f, 15f))
+            Box(
+                Modifier.align(Alignment.TopEnd).offset(y = 2.dp)
+                    .size(39.dp)
+                    .shadow(3.dp, CircleShape)
+                    .background(if (dark) Color(0xFF163863) else Color(0xFF153C3A), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("›", color = Color.White, fontSize = 33.sp, lineHeight = 37.sp)
+            }
         }
     }
 }

@@ -9,8 +9,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.othello.designsystem.OthelloTheme
 import java.util.Locale
@@ -40,15 +40,11 @@ class ModeSelectionScreenshotTest {
                 }
             }
         }
-        composeRule.onNodeWithText("気軽に遊ぶ").assertExists()
-        composeRule.onNodeWithText("人と楽しむ").assertExists()
-        composeRule.onNodeWithText("深く楽しむ").assertExists()
+        composeRule.onNodeWithContentDescription("気軽に遊ぶ。対戦パック・ガチャ・リバーシ図鑑").assertHasClickAction()
+        composeRule.onNodeWithContentDescription("人と楽しむ。大会やオセロイベントを探す").assertHasClickAction()
+        composeRule.onNodeWithContentDescription("深く楽しむ。オンライン対戦・AI対戦・解析・棋譜レビュー").assertHasClickAction()
         composeRule.waitForIdle()
-        saveScreenshot("mode-${width}dp-top.png")
-
-        composeRule.onNodeWithText("深く楽しむ").performScrollTo()
-        composeRule.waitForIdle()
-        saveScreenshot("mode-${width}dp-bottom.png")
+        saveScreenshot("mode-${width}dp.png")
     }
 
     private fun saveScreenshot(name: String) {

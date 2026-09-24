@@ -15,7 +15,12 @@ class ModeSelectionUiContractTest {
         assertTrue("R.string.enjoy_deeply" in screen)
         assertTrue("onRealEvent" in screen)
         assertTrue(".clickable(role = Role.Button" in screen)
-        assertTrue(".verticalScroll(rememberScrollState())" in screen)
+        assertTrue("390.dp * scale" in screen)
+        assertTrue("R.drawable.enjoy_background" in screen)
+        assertTrue("R.drawable.enjoy_guide" in screen)
+        assertTrue("R.drawable.enjoy_casual" in screen)
+        assertTrue("R.drawable.enjoy_together_art" in screen)
+        assertTrue("R.drawable.enjoy_deep" in screen)
         assertFalse("R.string.standard_mode" in screen)
         assertFalse("R.string.advanced_mode" in screen)
     }
