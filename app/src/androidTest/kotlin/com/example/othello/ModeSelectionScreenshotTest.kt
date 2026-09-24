@@ -11,9 +11,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.othello.designsystem.OthelloTheme
 import java.util.Locale
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 
@@ -29,6 +31,8 @@ class ModeSelectionScreenshotTest {
         }
         val japaneseContext = context.createConfigurationContext(configuration)
         val width = checkNotNull(InstrumentationRegistry.getArguments().getString("captureWidth"))
+        val selectedModes = mutableListOf<AppMode>()
+        var realEventClicks = 0
 
         composeRule.setContent {
             CompositionLocalProvider(
@@ -36,7 +40,10 @@ class ModeSelectionScreenshotTest {
                 LocalConfiguration provides configuration,
             ) {
                 OthelloTheme {
-                    ModeSelectionScreen(onSelect = {}, onRealEvent = {})
+                    ModeSelectionScreen(
+                        onSelect = { selectedModes += it },
+                        onRealEvent = { realEventClicks++ },
+                    )
                 }
             }
         }
@@ -45,6 +52,13 @@ class ModeSelectionScreenshotTest {
         composeRule.onNodeWithContentDescription("深く楽しむ。オンライン対戦・AI対戦・解析・棋譜レビュー").assertHasClickAction()
         composeRule.waitForIdle()
         saveScreenshot("mode-${width}dp.png")
+        composeRule.onNodeWithContentDescription("気軽に遊ぶ。対戦パック・ガチャ・リバーシ図鑑").performClick()
+        composeRule.onNodeWithContentDescription("人と楽しむ。大会やオセロイベントを探す").performClick()
+        composeRule.onNodeWithContentDescription("深く楽しむ。オンライン対戦・AI対戦・解析・棋譜レビュー").performClick()
+        composeRule.runOnIdle {
+            assertEquals(listOf(AppMode.STANDARD, AppMode.ADVANCED), selectedModes)
+            assertEquals(1, realEventClicks)
+        }
     }
 
     private fun saveScreenshot(name: String) {
