@@ -480,4 +480,10 @@ Update to the latest version and launch the app again.</string>
     <string name="offline_record">Offline Game Record</string>
     <string name="evaluation_note">The Evaluation is the predicted final disc difference from the perspective of the player to move. “exact” is a full solve, “book” is an imported book value, and other values are depth-dependent estimates.</string>
     <string name="evaluation_value">, Evaluation %1$s</string>
+    <string name="enjoy_casually">Play casually</string>
+    <string name="enjoy_casually_detail">Opponent packs · Gacha · Reversi collection</string>
+    <string name="enjoy_together">Play together</string>
+    <string name="enjoy_together_detail">Find tournaments and Othello events</string>
+    <string name="enjoy_deeply">Go deeper</string>
+    <string name="enjoy_deeply_detail">Online matches · AI · Analysis · Game reviews</string>
 </resources>
