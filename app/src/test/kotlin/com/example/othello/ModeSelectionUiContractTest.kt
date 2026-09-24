@@ -6,32 +6,23 @@ import kotlin.test.assertTrue
 import org.junit.Test
 
 class ModeSelectionUiContractTest {
-    private val source = File("src/main/kotlin/com/example/othello/StandardModeNavigation.kt").readText()
+    private val screen = File("src/main/kotlin/com/example/othello/ModeSelectionScreen.kt").readText()
 
     @Test
-    fun modeSelectionUsesVisualChoiceCardsInsteadOfPlainTextCards() {
-        val screen = source.substringAfter("private fun ModeSelectionScreen(")
-            .substringBefore("@Composable\nprivate fun ModeChoiceCard")
-
-        assertTrue("R.string.mode_selection_title" in screen)
-        assertTrue("R.string.mode_selection_recommended" in screen)
-        assertTrue("R.string.mode_selection_advanced_badge" in screen)
-        assertTrue("R.drawable.standard_ai_animal_pack_banner" in screen)
-        assertTrue("AdvancedModePreview()" in screen)
-        assertTrue("R.string.mode_selection_switch_note" in screen)
-        assertFalse("ModeCard(" in screen)
+    fun choicesHavePurposeLedLabelsAndSeparateRectangularActions() {
+        assertTrue("R.string.enjoy_casually" in screen)
+        assertTrue("R.string.enjoy_together" in screen)
+        assertTrue("R.string.enjoy_deeply" in screen)
+        assertTrue("onRealEvent" in screen)
+        assertTrue(".clickable(role = Role.Button" in screen)
+        assertTrue(".verticalScroll(rememberScrollState())" in screen)
+        assertFalse("R.string.standard_mode" in screen)
+        assertFalse("R.string.advanced_mode" in screen)
     }
 
     @Test
-    fun standardIsHighlightedWhileAdvancedKeepsAResearchPreview() {
-        val cards = source.substringAfter("private fun ModeChoiceCard(")
-            .substringBefore("@Composable\nprivate fun StandardHomeScreen")
-
-        assertTrue("MaterialTheme.colorScheme.secondaryContainer" in cards)
-        assertTrue("MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)" in cards)
-        assertTrue("private fun AdvancedModePreview()" in cards)
-        assertTrue("private fun MiniAnalysisBoard()" in cards)
-        assertTrue("ChanrivaColors.board" in cards)
-        assertTrue("\"+3.2\"" in cards)
+    fun previewCoversBothRequestedWidths() {
+        assertTrue("widthDp = 360" in screen)
+        assertTrue("widthDp = 390" in screen)
     }
 }
