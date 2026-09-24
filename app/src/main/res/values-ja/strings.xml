@@ -483,9 +483,9 @@
     <string name="evaluation_note">値は現在手番から見た予測終局石差です。exactは完全読み、bookはインポートしたBook値、その他は深さ依存の推定値です。</string>
     <string name="evaluation_value">、評価 %1$s</string>
     <string name="enjoy_casually">気軽に遊ぶ</string>
-    <string name="enjoy_casually_detail">対戦パック・ガチャ・リバーシ図鑑</string>
+    <string name="enjoy_casually_detail">対戦パック・ガチャ・図鑑</string>
     <string name="enjoy_together">人と楽しむ</string>
     <string name="enjoy_together_detail">大会やオセロイベントを探す</string>
     <string name="enjoy_deeply">深く楽しむ</string>
-    <string name="enjoy_deeply_detail">オンライン対戦・AI対戦・解析・棋譜レビュー</string>
+    <string name="enjoy_deeply_detail">オンライン対戦・AI対戦・解析\\n棋譜レビュー</string>
 </resources>
