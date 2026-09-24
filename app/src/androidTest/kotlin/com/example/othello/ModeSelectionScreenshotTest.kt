@@ -1,0 +1,65 @@
+package com.example.othello
+
+import android.content.res.Configuration
+import android.graphics.Bitmap
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.test.assertExists
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
+import androidx.test.platform.app.InstrumentationRegistry
+import com.example.othello.designsystem.OthelloTheme
+import java.io.File
+import java.util.Locale
+import org.junit.Rule
+import org.junit.Test
+
+/** Captures the real Compose layout on the emulator, including system bars. */
+class ModeSelectionScreenshotTest {
+    @get:Rule val composeRule = createComposeRule()
+
+    @Test fun captureJapaneseModeSelection() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val configuration = Configuration(context.resources.configuration).apply {
+            setLocale(Locale.JAPAN)
+        }
+        val japaneseContext = context.createConfigurationContext(configuration)
+        val width = checkNotNull(InstrumentationRegistry.getArguments().getString("captureWidth"))
+
+        composeRule.setContent {
+            CompositionLocalProvider(
+                LocalContext provides japaneseContext,
+                LocalConfiguration provides configuration,
+            ) {
+                OthelloTheme {
+                    ModeSelectionScreen(onSelect = {}, onRealEvent = {})
+                }
+            }
+        }
+        composeRule.onNodeWithText("気軽に遊ぶ").assertExists()
+        composeRule.onNodeWithText("人と楽しむ").assertExists()
+        composeRule.onNodeWithText("深く楽しむ").assertExists()
+        composeRule.waitForIdle()
+        saveScreenshot("mode-${width}dp-top.png")
+
+        composeRule.onNodeWithText("深く楽しむ").performScrollTo()
+        composeRule.waitForIdle()
+        saveScreenshot("mode-${width}dp-bottom.png")
+    }
+
+    private fun saveScreenshot(name: String) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val destination = File(
+            checkNotNull(instrumentation.targetContext.getExternalFilesDir(null)),
+            name,
+        )
+        destination.outputStream().use { output ->
+            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
+        }
+        bitmap.recycle()
+    }
+}
