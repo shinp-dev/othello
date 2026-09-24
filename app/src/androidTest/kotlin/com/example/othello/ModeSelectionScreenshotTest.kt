@@ -1,6 +1,9 @@
 package com.example.othello
 
+import android.content.ContentValues
 import android.content.res.Configuration
+import android.os.Environment
+import android.provider.MediaStore
 import android.graphics.Bitmap
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalConfiguration
@@ -10,7 +13,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.othello.designsystem.OthelloTheme
-import java.io.File
 import java.util.Locale
 import org.junit.Rule
 import org.junit.Test
@@ -52,11 +54,16 @@ class ModeSelectionScreenshotTest {
     private fun saveScreenshot(name: String) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
-        val destination = File(
-            checkNotNull(instrumentation.targetContext.getExternalFilesDir(null)),
-            name,
-        )
-        destination.outputStream().use { output ->
+        val context = instrumentation.targetContext
+        val uri = checkNotNull(context.contentResolver.insert(
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/ChanrivaPreviews")
+            },
+        ))
+        checkNotNull(context.contentResolver.openOutputStream(uri)).use { output ->
             check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
         }
         bitmap.recycle()
