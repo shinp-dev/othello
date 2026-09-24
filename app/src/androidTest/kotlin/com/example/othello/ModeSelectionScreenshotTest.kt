@@ -43,25 +43,26 @@ class ModeSelectionScreenshotTest {
         composeRule.onNodeWithText("気軽に遊ぶ").assertExists()
         composeRule.onNodeWithText("人と楽しむ").assertExists()
         composeRule.onNodeWithText("深く楽しむ").assertExists()
-        composeRule.waitForIdle()
-        saveScreenshot("mode-${width}dp-top.png")
-
         composeRule.onNodeWithText("深く楽しむ").performScrollTo()
         composeRule.waitForIdle()
-        saveScreenshot("mode-${width}dp-bottom.png")
+        saveScreenshot("mode-${width}dp.png")
     }
 
     private fun saveScreenshot(name: String) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         var bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         // Compose semantics may be ready a frame before the emulator display buffer updates.
-        repeat(20) {
-            if (bitmap.getPixel(5, bitmap.height / 2) != android.graphics.Color.WHITE) return@repeat
+        for (attempt in 0 until 20) {
+            val pixel = bitmap.getPixel(5, bitmap.height / 2)
+            if (android.graphics.Color.red(pixel) < 100 &&
+                android.graphics.Color.green(pixel) < 100 &&
+                android.graphics.Color.blue(pixel) < 130
+            ) break
             bitmap.recycle()
             Thread.sleep(100)
             bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         }
-        check(bitmap.getPixel(5, bitmap.height / 2) != android.graphics.Color.WHITE) {
+        check(android.graphics.Color.red(bitmap.getPixel(5, bitmap.height / 2)) < 100) {
             "Emulator screenshot is still blank"
         }
         val context = instrumentation.targetContext
