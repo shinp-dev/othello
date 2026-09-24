@@ -14,3 +14,6 @@ for spec in 360x760 390x844; do
     adb pull "/sdcard/Download/ChanrivaPreviews/mode-${language}-${width}dp.png" screenshots/
   done
 done
+
+./gradlew :app:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=com.example.othello.ModeSelectionNavigationAndroidTest
