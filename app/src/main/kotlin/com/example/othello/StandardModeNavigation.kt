@@ -94,7 +94,6 @@ internal fun destinationFor(feature: StandardFeature): AuthenticatedModeDestinat
 
 internal fun authenticatedModeBackDestination(
     current: AuthenticatedModeDestination,
-    realEventParent: AuthenticatedModeDestination = AuthenticatedModeDestination.STANDARD_HOME,
 ): AuthenticatedModeDestination? = when (current) {
     AuthenticatedModeDestination.STANDARD_HOME -> AuthenticatedModeDestination.MODE_SELECTION
     AuthenticatedModeDestination.STANDARD_AI,
@@ -102,7 +101,7 @@ internal fun authenticatedModeBackDestination(
     AuthenticatedModeDestination.STANDARD_GACHA,
     AuthenticatedModeDestination.STANDARD_COLLECTION,
     AuthenticatedModeDestination.STANDARD_ONLINE_COMING_SOON -> AuthenticatedModeDestination.STANDARD_HOME
-    AuthenticatedModeDestination.STANDARD_REAL_EVENT -> realEventParent
+    AuthenticatedModeDestination.STANDARD_REAL_EVENT -> AuthenticatedModeDestination.MODE_SELECTION
     AuthenticatedModeDestination.MODE_SELECTION -> null
     AuthenticatedModeDestination.ADVANCED -> AuthenticatedModeDestination.MODE_SELECTION
 }
@@ -116,8 +115,7 @@ internal fun AuthenticatedModeRoute(
         mutableStateOf(initialAuthenticatedModeDestination())
     }
     var selectedPackId by rememberSaveable(userId) { mutableStateOf<String?>(null) }
-    var realEventParent by rememberSaveable(userId) { mutableStateOf(AuthenticatedModeDestination.STANDARD_HOME) }
-    val backDestination = authenticatedModeBackDestination(destination, realEventParent)
+    val backDestination = authenticatedModeBackDestination(destination)
     BackHandler(enabled = backDestination != null) {
         destination = requireNotNull(backDestination)
     }
@@ -125,14 +123,14 @@ internal fun AuthenticatedModeRoute(
     when (destination) {
         AuthenticatedModeDestination.MODE_SELECTION -> ModeSelectionScreen(
             onSelect = { destination = destinationFor(it) },
-            onRealEvent = {
-                realEventParent = AuthenticatedModeDestination.MODE_SELECTION
-                destination = AuthenticatedModeDestination.STANDARD_REAL_EVENT
-            },
+            onRealEvent = { destination = AuthenticatedModeDestination.STANDARD_REAL_EVENT },
         )
         AuthenticatedModeDestination.ADVANCED -> advancedContent {
             destination = AuthenticatedModeDestination.MODE_SELECTION
         }
+        AuthenticatedModeDestination.STANDARD_REAL_EVENT -> StandardRealEventRoute(
+            onBack = { destination = AuthenticatedModeDestination.MODE_SELECTION },
+        )
         else -> StandardBootstrapRoute(
             userId = userId,
             onBack = { destination = AuthenticatedModeDestination.MODE_SELECTION },
@@ -171,9 +169,6 @@ internal fun AuthenticatedModeRoute(
                 AuthenticatedModeDestination.STANDARD_ONLINE_COMING_SOON -> StandardComingSoonScreen(
                     feature = StandardFeature.ONLINE,
                     onBack = { destination = AuthenticatedModeDestination.STANDARD_HOME },
-                )
-                AuthenticatedModeDestination.STANDARD_REAL_EVENT -> StandardRealEventRoute(
-                    onBack = { destination = realEventParent },
                 )
                 else -> error("Not a Standard destination: $destination")
             }
