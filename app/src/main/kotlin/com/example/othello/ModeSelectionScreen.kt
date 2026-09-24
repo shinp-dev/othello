@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -69,8 +68,10 @@ internal fun ModeSelectionScreen(
                         image = R.drawable.enjoy_casual,
                         title = appString(R.string.enjoy_casually),
                         detail = appString(R.string.enjoy_casually_detail),
-                        x = 4, y = 62, actionX = 122, actionY = 44,
-                        actionWidth = 248, actionHeight = 139,
+                        accessibilityLabel = appString(R.string.enjoy_casually_accessibility),
+                        x = 90, y = 58, width = 300, height = 240,
+                        actionX = 35, actionY = 78,
+                        actionWidth = 247, actionHeight = 132,
                         titleColor = Ink, detailColor = Ink, dark = false,
                         onClick = { onSelect(AppMode.STANDARD) },
                     )
@@ -78,8 +79,10 @@ internal fun ModeSelectionScreen(
                         image = R.drawable.enjoy_together_art,
                         title = appString(R.string.enjoy_together),
                         detail = appString(R.string.enjoy_together_detail),
-                        x = 4, y = 305, actionX = 147, actionY = 44,
-                        actionWidth = 223, actionHeight = 139,
+                        accessibilityLabel = appString(R.string.enjoy_together_accessibility),
+                        x = 112, y = 301, width = 278, height = 223,
+                        actionX = 49, actionY = 49,
+                        actionWidth = 219, actionHeight = 138,
                         titleColor = Ink, detailColor = Ink, dark = false,
                         onClick = onRealEvent,
                     )
@@ -87,15 +90,17 @@ internal fun ModeSelectionScreen(
                         image = R.drawable.enjoy_deep,
                         title = appString(R.string.enjoy_deeply),
                         detail = appString(R.string.enjoy_deeply_detail),
-                        x = 4, y = 548, actionX = 128, actionY = 45,
-                        actionWidth = 242, actionHeight = 146,
+                        accessibilityLabel = appString(R.string.enjoy_deeply_accessibility),
+                        x = 115, y = 525, width = 275, height = 220,
+                        actionX = 42, actionY = 38,
+                        actionWidth = 226, actionHeight = 141,
                         titleColor = Color.White, detailColor = SoftWhite, dark = true,
                         onClick = { onSelect(AppMode.ADVANCED) },
                     )
                     Image(
                         painter = painterResource(R.drawable.enjoy_guide),
                         contentDescription = null,
-                        modifier = Modifier.offset(x = (-12).dp, y = 170.dp).size(171.dp, 228.dp),
+                        modifier = Modifier.offset(x = (-13).dp, y = 278.dp).size(190.dp, 253.dp),
                         contentScale = ContentScale.Fit,
                     )
                 }
@@ -121,8 +126,11 @@ private fun EnjoymentChoice(
     image: Int,
     title: String,
     detail: String,
+    accessibilityLabel: String,
     x: Int,
     y: Int,
+    width: Int,
+    height: Int,
     actionX: Int,
     actionY: Int,
     actionWidth: Int,
@@ -132,7 +140,7 @@ private fun EnjoymentChoice(
     dark: Boolean,
     onClick: () -> Unit,
 ) {
-    Box(Modifier.offset(x.dp, y.dp).size(382.dp, 212.dp)) {
+    Box(Modifier.offset(x.dp, y.dp).size(width.dp, height.dp)) {
         Image(
             painter = painterResource(image),
             contentDescription = null,
@@ -143,15 +151,15 @@ private fun EnjoymentChoice(
             Modifier.offset(actionX.dp, actionY.dp)
                 .size(actionWidth.dp, actionHeight.dp)
                 .semantics(mergeDescendants = true) {
-                    contentDescription = "$title。${detail.replace("\n", "")}" 
+                    contentDescription = accessibilityLabel
                 }
                 .clickable(role = Role.Button, onClickLabel = title, onClick = onClick),
         ) {
-            Column(Modifier.offset(x = 10.dp, y = 5.dp).width((actionWidth - 54).dp)) {
+            Column(Modifier.offset(x = 8.dp, y = 5.dp).width((actionWidth - 50).dp)) {
                 Text(
                     text = title,
                     color = titleColor,
-                    fontSize = 25.sp,
+                    fontSize = 29.sp,
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = 0.sp,
                     style = TextStyle(shadow = if (dark) DeepShadow else TitleShadow),
@@ -160,18 +168,18 @@ private fun EnjoymentChoice(
                 Text(
                     text = detail,
                     color = detailColor,
-                    modifier = Modifier.offset(y = 8.dp),
-                    fontSize = 12.sp,
-                    lineHeight = 18.sp,
+                    modifier = Modifier.offset(y = 9.dp),
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp,
                     fontWeight = FontWeight.Bold,
                     style = TextStyle(shadow = if (dark) DeepShadow else TitleShadow),
-                    maxLines = 3,
+                    maxLines = 2,
                     overflow = TextOverflow.Clip,
                 )
             }
             Box(
-                Modifier.align(Alignment.TopEnd).offset(y = 2.dp)
-                    .size(39.dp)
+                Modifier.align(Alignment.TopEnd).offset(y = 5.dp)
+                    .size(38.dp)
                     .shadow(3.dp, CircleShape)
                     .background(if (dark) Color(0xFF163863) else Color(0xFF153C3A), CircleShape),
                 contentAlignment = Alignment.Center,

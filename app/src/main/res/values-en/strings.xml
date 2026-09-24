@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="enjoy_casually">Play for Fun</string>
+    <string name="enjoy_casually_detail">Opponent Packs · Gacha\nReversi Collection</string>
+    <string name="enjoy_casually_accessibility">Play for Fun. Opponent Packs, Gacha, Reversi Collection</string>
+    <string name="enjoy_together">Meet &amp; Play</string>
+    <string name="enjoy_together_detail">Find tournaments and\nReversi events</string>
+    <string name="enjoy_together_accessibility">Meet &amp; Play. Find tournaments and Reversi events</string>
+    <string name="enjoy_deeply">Go Deeper</string>
+    <string name="enjoy_deeply_detail">Online · AI · Analysis\nGame Reviews</string>
+    <string name="enjoy_deeply_accessibility">Go Deeper. Online, AI, Analysis, Game Reviews</string>
+</resources>

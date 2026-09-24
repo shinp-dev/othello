@@ -23,20 +23,29 @@ import org.junit.Test
 class ModeSelectionScreenshotTest {
     @get:Rule val composeRule = createComposeRule()
 
-    @Test fun captureJapaneseModeSelection() {
+    @Test fun captureJapaneseModeSelection() = captureModeSelection("ja", Locale.JAPAN)
+
+    @Test fun captureEnglishModeSelection() = captureModeSelection("en", Locale.US)
+
+    private fun captureModeSelection(language: String, locale: Locale) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val configuration = Configuration(context.resources.configuration).apply {
-            setLocale(Locale.JAPAN)
+            setLocale(locale)
         }
-        val japaneseContext = context.createConfigurationContext(configuration)
+        val localizedContext = context.createConfigurationContext(configuration)
         val width = checkNotNull(InstrumentationRegistry.getArguments().getString("captureWidth"))
+        val choices = listOf(
+            localizedContext.getString(R.string.enjoy_casually_accessibility),
+            localizedContext.getString(R.string.enjoy_together_accessibility),
+            localizedContext.getString(R.string.enjoy_deeply_accessibility),
+        )
         val selectedModes = mutableListOf<AppMode>()
         var realEventClicks = 0
 
         composeRule.setContent {
             CompositionLocalProvider(
-                LocalContext provides japaneseContext,
+                LocalContext provides localizedContext,
                 LocalConfiguration provides configuration,
             ) {
                 OthelloTheme {
@@ -47,14 +56,10 @@ class ModeSelectionScreenshotTest {
                 }
             }
         }
-        composeRule.onNodeWithContentDescription("気軽に遊ぶ。対戦パック・ガチャ・リバーシ図鑑").assertHasClickAction()
-        composeRule.onNodeWithContentDescription("人と楽しむ。大会やオセロイベントを探す").assertHasClickAction()
-        composeRule.onNodeWithContentDescription("深く楽しむ。オンライン対戦・AI対戦・解析・棋譜レビュー").assertHasClickAction()
+        choices.forEach { composeRule.onNodeWithContentDescription(it).assertHasClickAction() }
         composeRule.waitForIdle()
-        saveScreenshot("mode-${width}dp.png")
-        composeRule.onNodeWithContentDescription("気軽に遊ぶ。対戦パック・ガチャ・リバーシ図鑑").performClick()
-        composeRule.onNodeWithContentDescription("人と楽しむ。大会やオセロイベントを探す").performClick()
-        composeRule.onNodeWithContentDescription("深く楽しむ。オンライン対戦・AI対戦・解析・棋譜レビュー").performClick()
+        saveScreenshot("mode-$language-${width}dp.png")
+        choices.forEach { composeRule.onNodeWithContentDescription(it).performClick() }
         composeRule.runOnIdle {
             assertEquals(listOf(AppMode.STANDARD, AppMode.ADVANCED), selectedModes)
             assertEquals(1, realEventClicks)
