@@ -19,5 +19,5 @@ done
 echo "Verified all animal selection screenshot widths: 320dp, 360dp, 390dp"
 
 ./gradlew :app:connectedDebugAndroidTest \
-  '-Pandroid.testInstrumentationRunnerArguments.class=com.example.othello.StandardAiPlayerSelectionUiTest#singleOpponentPackHasOneCountAndNoAdjacentCards'
-echo "Verified one-opponent pack: 1 / 1, with no adjacent cards"
+  -Pandroid.testInstrumentationRunnerArguments.class=com.example.othello.StandardAiPlayerSelectionUiTest
+echo "Verified opponent selection, one-opponent packs, and non-cycling first/last carousel edges"
