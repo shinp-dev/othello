@@ -27,6 +27,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import coil3.compose.AsyncImage
 import androidx.compose.runtime.Composable
@@ -248,6 +249,7 @@ private fun StandardHomeFeatureCard(
         elevation = standardHomeCardElevation(),
     ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
+            val cardMaxWidth = maxWidth
             Image(
                 painter = painterResource(backgroundDrawableRes),
                 contentDescription = null,
@@ -285,8 +287,8 @@ private fun StandardHomeFeatureCard(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.headlineSmall.copy(
-                        fontSize = if (maxWidth < 320.dp) 21.sp else if (maxWidth < 370.dp) 24.sp else 27.sp,
-                        lineHeight = if (maxWidth < 320.dp) 25.sp else 31.sp,
+                        fontSize = if (cardMaxWidth < 320.dp) 21.sp else if (cardMaxWidth < 370.dp) 24.sp else 27.sp,
+                        lineHeight = if (cardMaxWidth < 320.dp) 25.sp else 31.sp,
                     ),
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
