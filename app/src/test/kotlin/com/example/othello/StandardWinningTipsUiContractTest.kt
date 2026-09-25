@@ -20,9 +20,11 @@ class StandardWinningTipsUiContractTest {
     }
 
     @Test
-    fun tierHeadersAndBadgesUseOneConsistentColor() {
+    fun indexUsesTheSharedFantasyBannersAndKeepsDetailTierBadge() {
         assertTrue("StandardTipTierSectionHeader(tier)" in route)
-        assertTrue("color = MaterialTheme.colorScheme.primaryContainer" in route)
+        assertTrue("R.drawable.standard_winning_tips_tier_banner" in route)
+        assertTrue("R.drawable.standard_winning_tips_card_frame" in route)
+        assertTrue("color = TipsIvory" in route)
         assertTrue("color = MaterialTheme.colorScheme.onPrimaryContainer" in route)
         assertFalse("MaterialTheme.colorScheme.tertiaryContainer" in route)
         assertFalse("MaterialTheme.colorScheme.secondaryContainer" in route)
