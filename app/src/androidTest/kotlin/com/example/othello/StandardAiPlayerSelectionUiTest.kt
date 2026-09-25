@@ -6,9 +6,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.othello.designsystem.OthelloTheme
@@ -79,7 +82,6 @@ class StandardAiPlayerSelectionUiTest {
         composeRule.onNodeWithTag("standard-ai-player-animal-chick", useUnmergedTree = true).assertExists()
         composeRule.onNodeWithTag("standard-ai-state-animal-rabbit", useUnmergedTree = true).assertExists()
         composeRule.onNodeWithTag("standard-ai-player-animal-wild-elephant", useUnmergedTree = true).assertDoesNotExist()
-        composeRule.onNodeWithText("ひよこに勝つと解放").assertExists()
     }
 
     @Test
@@ -126,8 +128,13 @@ class StandardAiPlayerSelectionUiTest {
             }
         }
         composeRule.onNodeWithTag("standard-ai-player-animal-wild-elephant", useUnmergedTree = true).assertDoesNotExist()
-        composeRule.onNodeWithTag("standard-ai-player-animal-rabbit", useUnmergedTree = true).performClick()
+        composeRule
+            .onNodeWithTag("standard-ai-opponent-carousel", useUnmergedTree = true)
+            .performTouchInput { swipeLeft() }
         composeRule.runOnIdle { assertEquals("rabbit", selected.value.id) }
+        composeRule
+            .onNodeWithTag("standard-ai-unlock-condition-rabbit", useUnmergedTree = true)
+            .assertIsDisplayed()
         composeRule.onNodeWithTag("standard-ai-player-animal-chick", useUnmergedTree = true).assertExists()
         composeRule.onNodeWithTag("standard-ai-player-animal-koala", useUnmergedTree = true).assertExists()
         composeRule.runOnIdle { selected.value = pack.definition.players.last() }

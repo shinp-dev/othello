@@ -58,17 +58,12 @@ class StandardAiAnimalSelectionScreenshotTest {
         composeRule.onNodeWithText("8体のどうぶつAIに挑戦").assertIsDisplayed()
         composeRule.onNodeWithText("1 / 8").assertIsDisplayed()
         composeRule.onNodeWithText("この相手と対戦する").assertIsDisplayed()
-        composeRule.onNodeWithText("ひよこに勝つと解放").assertExists()
         composeRule.onNodeWithTag("standard-ai-player-animal-chick").assertExists()
         composeRule.onNodeWithTag("standard-ai-player-animal-rabbit").assertExists()
         composeRule.onNodeWithTag("standard-ai-player-animal-wild-elephant").assertDoesNotExist()
         composeRule
             .onNodeWithTag("standard-ai-state-animal-rabbit", useUnmergedTree = true)
             .assertIsDisplayed()
-        composeRule
-            .onNodeWithTag("standard-ai-unlock-condition-rabbit", useUnmergedTree = true)
-            .assertIsDisplayed()
-
         val chickPortraitSuccessTag = "standard-ai-player-portrait-chick-success"
         composeRule.waitUntil(timeoutMillis = 20_000) {
             composeRule.onAllNodesWithTag(chickPortraitSuccessTag, useUnmergedTree = true)
