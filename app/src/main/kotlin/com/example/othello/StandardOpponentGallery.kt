@@ -230,27 +230,32 @@ internal fun StandardOpponentSelectionScreen(
         )
         Box(Modifier.fillMaxSize().background(Color(0x44001418)))
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .padding(top = ChanrivaSpacing.page)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            ForestBackButton(onClick = onBack)
-            Spacer(Modifier.height(5.dp))
-            StandardOpponentSelectionPanel(
-                installedPack = installedPack,
-                progress = progress,
-                selectedPlayer = selectedPlayer,
-                onPlayerSelected = onPlayerSelected,
-                modifier = Modifier.fillMaxWidth().weight(1f),
-            )
-            ForestStartButton(
-                enabled = progress.isUnlocked(selectedPlayer),
-                onClick = onStart,
-            )
+        BoxWithConstraints(Modifier.fillMaxSize().statusBarsPadding()) {
+            val compact = maxHeight < 700.dp
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = ChanrivaSpacing.page)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                ForestBackButton(onClick = onBack)
+                Spacer(Modifier.height(5.dp))
+                StandardOpponentSelectionPanel(
+                    installedPack = installedPack,
+                    progress = progress,
+                    selectedPlayer = selectedPlayer,
+                    onPlayerSelected = onPlayerSelected,
+                    modifier = Modifier.fillMaxWidth().height(maxHeight * if (compact) 0.58f else 0.60f),
+                )
+                Spacer(Modifier.height(if (compact) 10.dp else 20.dp))
+                ForestStartButton(
+                    enabled = progress.isUnlocked(selectedPlayer),
+                    onClick = onStart,
+                    height = if (compact) 88.dp else 100.dp,
+                )
+                Spacer(Modifier.weight(1f))
+            }
         }
     }
 }
@@ -281,11 +286,11 @@ private fun ColumnScope.ForestBackButton(onClick: () -> Unit) {
 }
 
 @Composable
-private fun ColumnScope.ForestStartButton(enabled: Boolean, onClick: () -> Unit) {
+private fun ColumnScope.ForestStartButton(enabled: Boolean, onClick: () -> Unit, height: androidx.compose.ui.unit.Dp) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(72.dp)
+            .height(height)
             .padding(bottom = 3.dp)
             .clickable(enabled = enabled, onClick = onClick)
             .testTag("standard-ai-start"),
@@ -359,7 +364,7 @@ private fun StandardOpponentCard(
         appString(R.string.standard_ai_unlock_condition, opponentText(it.name))
     }.orEmpty()
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .testTag("standard-ai-player-${installedPack.definition.id}-${opponent.id}")
             .clickable(onClick = onClick)
@@ -403,17 +408,22 @@ private fun StandardOpponentCard(
             )
         }
 
-        Text(
-            text = order.toString(),
+        Box(
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(start = 20.dp, top = 13.dp),
-            color = FOREST_TEXT,
-            fontFamily = FontFamily.Serif,
-            fontSize = if (centered) 19.sp else 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Center,
-        )
+                .offset(x = maxWidth * 0.145f, y = maxHeight * 0.09f)
+                .size(width = maxWidth * 0.15f, height = maxHeight * 0.085f),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = order.toString(),
+                color = FOREST_TEXT,
+                fontFamily = FontFamily.Serif,
+                fontSize = if (centered) 19.sp else 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+            )
+        }
 
         if (unlocked) {
             Text(
@@ -421,7 +431,7 @@ private fun StandardOpponentCard(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth(0.76f)
-                    .padding(bottom = if (centered) 24.dp else 17.dp),
+                    .padding(bottom = maxHeight * 0.15f),
                 color = FOREST_TEXT,
                 fontFamily = FontFamily.Serif,
                 fontSize = if (centered) 19.sp else 12.sp,
@@ -436,7 +446,7 @@ private fun StandardOpponentCard(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth(0.80f)
-                    .padding(bottom = if (centered) 16.dp else 10.dp)
+                    .padding(bottom = maxHeight * 0.12f)
                     .testTag("standard-ai-unlock-condition-${opponent.id}"),
                 color = FOREST_TEXT,
                 fontFamily = FontFamily.Serif,

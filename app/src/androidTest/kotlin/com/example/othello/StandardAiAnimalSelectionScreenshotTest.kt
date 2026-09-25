@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.os.Environment
+import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalConfiguration
@@ -62,10 +63,7 @@ class StandardAiAnimalSelectionScreenshotTest {
         composeRule.onNodeWithTag("standard-ai-player-animal-rabbit").assertExists()
         composeRule.onNodeWithTag("standard-ai-player-animal-wild-elephant").assertDoesNotExist()
 
-        // Wait for Coil to decode the existing transparent chick and rabbit portraits before capture.
-        Thread.sleep(700)
-        composeRule.waitForIdle()
-        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val bitmap = awaitChickPortrait()
         assertEquals("Screenshot pixel width for ${width}dp emulator", width, bitmap.width)
         val name = "standard-animal-selection-${width}dp.png"
         val uri = checkNotNull(context.contentResolver.insert(
@@ -82,5 +80,35 @@ class StandardAiAnimalSelectionScreenshotTest {
         bitmap.recycle()
         instrumentation.sendStatus(0, android.os.Bundle().apply { putString("animalSelectionScreenshot", name) })
         println("Rendered StandardAiPlayerSelectionContent at ${width}dp; saved $name")
+    }
+
+    private fun awaitChickPortrait(): Bitmap {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val deadline = SystemClock.uptimeMillis() + 12_000L
+        do {
+            composeRule.waitForIdle()
+            val frame = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+            if (frame.hasChickPixels()) return frame
+            frame.recycle()
+            Thread.sleep(250)
+        } while (SystemClock.uptimeMillis() < deadline)
+        throw AssertionError("The existing chick portrait did not render before the screenshot deadline")
+    }
+
+    private fun Bitmap.hasChickPixels(): Boolean {
+        var yellowPixels = 0
+        for (y in (height * 0.30f).toInt() until (height * 0.60f).toInt() step 2) {
+            for (x in (width * 0.35f).toInt() until (width * 0.65f).toInt() step 2) {
+                val color = getPixel(x, y)
+                val red = android.graphics.Color.red(color)
+                val green = android.graphics.Color.green(color)
+                val blue = android.graphics.Color.blue(color)
+                if (red > 180 && green > 145 && blue < 140 && red > green * 1.08f) {
+                    yellowPixels++
+                    if (yellowPixels >= 120) return true
+                }
+            }
+        }
+        return false
     }
 }
