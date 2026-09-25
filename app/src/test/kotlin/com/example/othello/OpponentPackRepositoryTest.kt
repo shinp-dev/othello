@@ -41,7 +41,7 @@ class OpponentPackRepositoryTest {
             zip.closeEntry()
         }
         remote.archives = mapOf("animal" to payload.toByteArray())
-        assertEquals(1, repo.prepareForEntry().packs.single().definition.version)
+        assertEquals(1, repo.prepareForEntry().packs.single { it.definition.id == "animal" }.definition.version)
     }
 
     @Test fun corruptPackRecoveryDoesNotAllowRollbackOfTheSavedIndex() = fixture { repo, remote, root ->
@@ -50,7 +50,7 @@ class OpponentPackRepositoryTest {
         val previousIndex = File(root, "active.json").readBytes()
         File(root, "packs").walkTopDown().first { it.name == "manifest.json" }.writeText("broken")
         remote.archives = mapOf("animal" to baseline)
-        assertEquals(1, repository(root, remote).prepareForEntry().packs.single().definition.version)
+        assertEquals(1, repository(root, remote).prepareForEntry().packs.single { it.definition.id == "animal" }.definition.version)
         assertContentEquals(previousIndex, File(root, "active.json").readBytes())
     }
 
@@ -73,12 +73,15 @@ class OpponentPackRepositoryTest {
         java.util.zip.ZipInputStream(remote.archives.getValue("seasonal").inputStream()).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
-                File(directory, entry.name).apply { parentFile.mkdirs(); writeBytes(zip.readBytes()) }
+                File(directory, entry.name).apply { parentFile!!.mkdirs(); writeBytes(zip.readBytes()) }
             }
         }
         File(root, "active.json").writeText(remote.index())
         remote.failure = true
-        assertEquals("animal", repository(root, remote).prepareForEntry().visiblePacks().single().definition.id)
+        assertEquals(
+            listOf("animal", "lione-boss"),
+            repository(root, remote).prepareForEntry().visiblePacks().map { it.definition.id },
+        )
     }
 
     @Test fun supportsMultiplePacksAndSkipsInstalledVersionsAcrossProcessRecreation() = fixture { repo, remote, root ->
@@ -125,7 +128,7 @@ class OpponentPackRepositoryTest {
         )
         invalid.forEach { bytes ->
             remote.archives = mapOf("animal" to bytes)
-            assertEquals(1, repo.prepareForEntry().packs.single().definition.version)
+            assertEquals(1, repo.prepareForEntry().packs.single { it.definition.id == "animal" }.definition.version)
         }
     }
 
