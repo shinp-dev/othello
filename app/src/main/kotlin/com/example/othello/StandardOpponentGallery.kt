@@ -27,7 +27,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -363,6 +366,7 @@ private fun StandardOpponentCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var portraitLoaded by remember(installedPack.definition.id, opponent.id) { mutableStateOf(false) }
     val unlocked = progress.isUnlocked(opponent)
     val order = installedPack.definition.players.indexOfFirst { it.id == opponent.id } + 1
     val requiredPlayer = opponent.requires.firstOrNull()?.let(installedPack.definition::player)
@@ -391,13 +395,21 @@ private fun StandardOpponentCard(
                 appString(R.string.standard_ai_locked_opponent_description, order)
             },
             contentScale = ContentScale.Fit,
+            onSuccess = { portraitLoaded = true },
             colorFilter = if (unlocked) null else ColorFilter.tint(Color(0xFF11191D)),
             modifier = Modifier
                 .align(Alignment.Center)
                 .fillMaxWidth(0.83f)
                 .fillMaxSize(0.72f)
                 .padding(top = 15.dp, bottom = if (centered) 38.dp else 26.dp)
-                .graphicsLayer { alpha = if (unlocked) 1f else 0.92f },
+                .graphicsLayer { alpha = if (unlocked) 1f else 0.92f }
+                .then(
+                    if (portraitLoaded) {
+                        Modifier.testTag("standard-ai-player-portrait-${opponent.id}-success")
+                    } else {
+                        Modifier
+                    },
+                ),
         )
 
         if (!unlocked) {
