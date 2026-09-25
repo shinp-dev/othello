@@ -2,7 +2,10 @@
 <resources xmlns:tools="http://schemas.android.com/tools" tools:locale="en">
     <string name="standard_ai_pack_label">Opponent pack</string>
     <string name="standard_ai_animal_pack_name">Animal Challenge</string>
-    <string name="standard_ai_animal_pack_supporting">Take on 8 animal opponents, from friendly to wild</string>
+    <plurals name="standard_ai_animal_pack_supporting">
+        <item quantity="one">Take on %1$d animal opponent</item>
+        <item quantity="other">Take on %1$d animal opponents, from friendly to wild</item>
+    </plurals>
     <string name="standard_ai_animal_start">Play this opponent</string>
     <string name="standard_ai_unlock_condition">Win against %1$s to unlock</string>
     <string name="standard_ai_group_basic">Friendly</string>

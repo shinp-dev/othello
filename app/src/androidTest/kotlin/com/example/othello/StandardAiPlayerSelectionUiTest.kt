@@ -1,12 +1,18 @@
 package com.example.othello
 
+import android.content.res.Configuration
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.example.othello.designsystem.OthelloTheme
+import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Rule
@@ -19,6 +25,36 @@ class StandardAiPlayerSelectionUiTest {
     val composeRule = createComposeRule()
 
     private val pack = opponentUiFixture()
+
+    @Test
+    fun singleOpponentPackHasOneCountAndNoAdjacentCards() {
+        val oneOpponent = pack.copy(definition = pack.definition.copy(players = pack.definition.players.take(1)))
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val configuration = Configuration(context.resources.configuration).apply { setLocale(Locale.JAPAN) }
+        val localizedContext = context.createConfigurationContext(configuration)
+        composeRule.setContent {
+            CompositionLocalProvider(
+                LocalContext provides localizedContext,
+                LocalConfiguration provides configuration,
+            ) {
+                OthelloTheme {
+                    StandardAiPlayerSelectionContent(
+                        installedPack = oneOpponent,
+                        progress = StandardAiProgress(oneOpponent.definition),
+                        selectedPlayer = oneOpponent.definition.players.single(),
+                        onPlayerSelected = {},
+                        onStart = {},
+                        onBack = {},
+                    )
+                }
+            }
+        }
+
+        composeRule.onNodeWithText("1体のどうぶつAIに挑戦").assertExists()
+        composeRule.onNodeWithText("1 / 1").assertExists()
+        composeRule.onNodeWithTag("standard-ai-player-animal-chick").assertExists()
+        composeRule.onNodeWithTag("standard-ai-player-animal-rabbit").assertDoesNotExist()
+    }
 
     @Test
     fun initialProgressShowsFirstOpponentAndNextLockedState() {

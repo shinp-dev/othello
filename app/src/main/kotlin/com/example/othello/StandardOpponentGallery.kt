@@ -38,6 +38,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -80,7 +81,11 @@ internal fun StandardOpponentSelectionPanel(
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            text = appString(R.string.standard_ai_animal_pack_supporting),
+            text = LocalContext.current.resources.getQuantityString(
+                R.plurals.standard_ai_animal_pack_supporting,
+                pack.players.size,
+                pack.players.size,
+            ),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 2.dp)
