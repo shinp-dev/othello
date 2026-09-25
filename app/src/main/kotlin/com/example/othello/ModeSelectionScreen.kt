@@ -46,7 +46,7 @@ private val DeepShadow = Shadow(Color(0xFF082548), Offset(1f, 2f), 5f)
 @Composable
 internal fun ModeSelectionScreen(
     onSelect: (AppMode) -> Unit,
-    onRealEvent: () -> Unit,
+    onPeopleAndEnjoy: () -> Unit,
 ) {
     // Fit the whole 390 x 844 design in the available area, including both touch regions
     // and artwork. No child image or individual choice is independently scaled or cropped.
@@ -84,7 +84,7 @@ internal fun ModeSelectionScreen(
                         actionX = 49, actionY = 49,
                         actionWidth = 219, actionHeight = 138,
                         titleColor = Ink, detailColor = Ink, dark = false,
-                        onClick = onRealEvent,
+                        onClick = onPeopleAndEnjoy,
                     )
                     EnjoymentChoice(
                         image = R.drawable.enjoy_deep,

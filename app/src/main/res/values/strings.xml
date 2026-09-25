@@ -38,6 +38,13 @@
     <string name="standard_online_match_supporting">Play a game with another player</string>
     <string name="standard_real_event">In-person events</string>
     <string name="standard_real_event_supporting">Find tournaments and Othello events</string>
+    <string name="people_home_title">Meet &amp; Play</string>
+    <string name="people_play_title">Play Together</string>
+    <string name="people_play_supporting">Create a room · Join a room</string>
+    <string name="people_events_title">Explore Events</string>
+    <string name="people_events_supporting">Discover Othello events and activities</string>
+    <string name="people_social_title">Connect</string>
+    <string name="people_social_supporting">Lobby board · Watch · Cheer</string>
     <string name="switch_to_advanced_mode">Switch to Advanced mode</string>
     <string name="feature_coming_soon">This feature is coming soon.</string>
     <string name="back_to_standard_home">Back to Home</string>

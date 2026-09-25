@@ -51,7 +51,7 @@ class ModeSelectionScreenshotTest {
                 OthelloTheme {
                     ModeSelectionScreen(
                         onSelect = { selectedModes += it },
-                        onRealEvent = { realEventClicks++ },
+                        onPeopleAndEnjoy = { realEventClicks++ },
                     )
                 }
             }
