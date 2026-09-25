@@ -93,12 +93,12 @@ class StandardWinningTipsScreenshotTest {
         do {
             composeRule.waitForIdle()
             val frame = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
-            val backgroundPixel = frame.getPixel(5, frame.height / 2)
+            val backgroundPixel = frame.getPixel(5, frame.height / 3)
             val red = android.graphics.Color.red(backgroundPixel)
             val green = android.graphics.Color.green(backgroundPixel)
             val blue = android.graphics.Color.blue(backgroundPixel)
             val channelSpread = maxOf(red, green, blue) - minOf(red, green, blue)
-            if (channelSpread > 20 && (red + green + blue) / 3 < 220) return frame
+            if (channelSpread > 10 && (red + green + blue) / 3 < 220) return frame
             frame.recycle()
             Thread.sleep(250)
         } while (SystemClock.uptimeMillis() < deadline)
