@@ -259,6 +259,10 @@ private fun StandardRealEventScreen(
                 )
             }
 
+            item {
+                StandardOfficialOthelloBlockLinks()
+            }
+
             when (state) {
                 StandardRealEventUiState.Loading -> item {
                     Text(
@@ -350,9 +354,6 @@ private fun StandardRealEventScreen(
                 }
             }
 
-            item {
-                StandardOfficialOthelloBlockLinks()
-            }
         }
     }
 }
