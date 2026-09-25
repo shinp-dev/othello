@@ -10,9 +10,10 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.othello.designsystem.OthelloTheme
 import java.util.Locale
@@ -55,9 +56,11 @@ class StandardWinningTipsScreenshotTest {
         val firstTip = localizedContext.getString(R.string.standard_winning_tip_take_less_title)
         composeRule.onNodeWithText(firstTip).assertIsDisplayed().assertHasClickAction()
         composeRule.onNodeWithText(localizedContext.getString(R.string.standard_winning_tips_tier_step_up))
-            .assertExists()
+            .performScrollTo()
+            .assertIsDisplayed()
         composeRule.onNodeWithText(localizedContext.getString(R.string.standard_winning_tips_tier_expert))
-            .assertExists()
+            .performScrollTo()
+            .assertIsDisplayed()
 
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         assertEquals("Screenshot pixel width for ${width}dp emulator", width, bitmap.width)
@@ -78,7 +81,7 @@ class StandardWinningTipsScreenshotTest {
         bitmap.recycle()
         println("Rendered StandardWinningTipsRoute at ${width}dp; saved $name")
 
-        composeRule.onNodeWithText(firstTip).performClick()
+        composeRule.onNodeWithText(firstTip).performScrollTo().performClick()
         composeRule.onNodeWithText(localizedContext.getString(R.string.standard_winning_tips_progress, 1, standardWinningTips.size))
             .assertIsDisplayed()
     }
