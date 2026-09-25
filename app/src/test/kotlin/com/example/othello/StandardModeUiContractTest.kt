@@ -38,85 +38,43 @@ class StandardModeUiContractTest {
     }
 
     @Test
-    fun standardHomeShowsPacksGachaCollectionAndTipsWhileRealEventsLiveOnSelection() {
+    fun standardHomeContainsOnlyTheTwoChallengesAndWinningTips() {
         val home = source.substringAfter("internal fun StandardHomeScreen(")
-            .substringBefore("private fun StandardOpponentPackPreviewCard")
-        val packIndex = home.indexOf("OpponentHomeSectionCards(")
-        val tipsIndex = home.indexOf("R.string.standard_winning_tips_title")
-        val gachaIndex = home.indexOf("R.string.standard_gacha_title")
-        val collectionIndex = home.indexOf("R.string.standard_collection_title")
-        assertTrue(packIndex >= 0)
-        assertTrue(gachaIndex > packIndex)
-        assertTrue(collectionIndex > gachaIndex)
-        assertTrue(tipsIndex > collectionIndex)
-        assertFalse("title = appString(StandardFeature.AI.titleRes)" in home)
-        assertFalse("title = appString(StandardFeature.ONLINE.titleRes)" in home)
-        assertTrue("OpponentHomeSection.FEATURED" in home)
-        assertTrue("OpponentHomeSection.CHALLENGES" in home)
-        assertTrue("onClick = onWinningTips" in home)
-        assertTrue("onClick = onGacha" in home)
-        assertTrue("onClick = onCollection" in home)
-        assertTrue("R.drawable.standard_home_winning_tips_art" in home)
-        assertTrue("R.drawable.standard_home_gacha_icon" in home)
-        assertTrue("R.drawable.standard_home_collection_icon" in home)
-        assertFalse("StandardFeature.REAL_EVENT" in home)
-        assertTrue("TextButton(" in home)
-        assertTrue("R.string.switch_to_advanced_mode" in home)
+            .substringBefore("@Composable\nprivate fun StandardHomeFeatureCard")
+        assertTrue("opponents.pack(\"animal\")" in home)
+        assertTrue("opponents.pack(\"lione-boss\")" in home)
+        assertTrue("R.string.standard_home_animals_title" in home)
+        assertTrue("R.string.standard_home_king_title" in home)
+        assertTrue("R.string.standard_winning_tips_title" in home)
+        assertTrue("StandardHomeTipsCard(" in home)
+        assertFalse("onGacha" in home)
+        assertFalse("onCollection" in home)
+        assertFalse("onSwitchMode" in home)
+        assertFalse("R.string.standard_mode" in home)
     }
 
     @Test
-    fun standardHomeUsesOneScreenHierarchyWithTwoMiniCards() {
+    fun cardsUseTheAssignedBackgroundsAndSharedClickableTreatment() {
         val home = source.substringAfter("internal fun StandardHomeScreen(")
-            .substringBefore("private fun StandardOpponentPackPreviewCard")
-
-        assertTrue("BoxWithConstraints(" in home)
-        assertTrue("verticalScroll(" in home)
-        assertTrue("StandardHomeWideFeatureCard(" in home)
-        assertEquals(2, home.split("StandardHomeMiniFeatureCard(").size - 1)
-        assertTrue("horizontalArrangement = Arrangement.spacedBy(itemSpacing)" in home)
-        assertTrue("modifier = Modifier.weight(1f)" in home)
-        assertTrue("Spacer(Modifier.height(itemSpacing))" in home)
-    }
-
-    @Test
-    fun animalPackUsesOneWideSceneInsteadOfFourSeparateIcons() {
-        val card = source.substringAfter("private fun StandardOpponentPackPreviewCard(")
-            .substringBefore("private fun StandardHomeWideFeatureCard")
-
-        assertTrue("installedPack.image(pack.banner)" in card)
-        assertTrue(".height(artworkHeight)" in card)
-        assertTrue(".align(Alignment.BottomCenter)" in card)
-        assertTrue("contentScale = ContentScale.Fit" in card)
-        assertFalse("pack.previewLevels.forEach" in card)
-    }
-
-    @Test
-    fun standardHomeWideCardsUseCroppedArtworkUnderADarkOverlay() {
-        val card = source.substringAfter("private fun StandardHomeWideFeatureCard(")
-            .substringBefore("private fun StandardHomeMiniFeatureCard")
-
-        assertTrue("painterResource(artworkDrawableRes)" in card)
-        assertTrue("contentScale = ContentScale.Crop" in card)
-        assertTrue("Brush.horizontalGradient" in card)
-        assertTrue("ChanrivaColors.surfaceElevated.copy" in card)
-    }
-
-    @Test
-    fun standardHomeCardsUseSubtleBordersAndElevation() {
-        val packCard = source.substringAfter("private fun StandardOpponentPackPreviewCard(")
-            .substringBefore("private fun StandardHomeWideFeatureCard")
-        val wideCard = source.substringAfter("private fun StandardHomeWideFeatureCard(")
-            .substringBefore("private fun StandardHomeMiniFeatureCard")
-        val miniCard = source.substringAfter("private fun StandardHomeMiniFeatureCard(")
-            .substringBefore("private fun standardHomeCardBorder")
-
-        listOf(packCard, wideCard, miniCard).forEach { card ->
-            assertTrue("border = standardHomeCardBorder()" in card)
-            assertTrue("elevation = standardHomeCardElevation()" in card)
-        }
-        assertTrue("MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)" in source)
-        assertTrue("defaultElevation = 1.dp" in source)
-        assertTrue("pressedElevation = 0.dp" in source)
+            .substringBefore("@Composable\nprivate fun StandardHomeFeatureCard")
+        val feature = source.substringAfter("private fun StandardHomeFeatureCard(")
+            .substringBefore("@Composable\nprivate fun StandardHomeTipsCard")
+        val tips = source.substringAfter("private fun StandardHomeTipsCard(")
+            .substringBefore("@Composable\nprivate fun StandardHomeArrow")
+        assertTrue("R.drawable.standard_screen_bg" in home)
+        assertTrue("R.drawable.card_animals_bg" in home)
+        assertTrue("R.drawable.card_lion_bg" in home)
+        assertTrue("R.drawable.card_tips_bg" in tips)
+        assertTrue("animalPack.image(animalPack.definition.banner)" in home)
+        assertTrue("kingPack.image(kingPack.definition.banner)" in home)
+        assertTrue("contentScale = ContentScale.Fit" in feature)
+        assertTrue("Brush.horizontalGradient" in feature)
+        assertTrue("StandardHomeArrow(" in feature)
+        assertTrue("StandardHomeArrow(" in tips)
+        assertTrue("Card(\n        onClick = onClick" in feature)
+        assertTrue("Card(\n        onClick = onClick" in tips)
+        assertTrue("RoundedCornerShape(20.dp)" in source)
+        assertTrue("verticalScroll(rememberScrollState())" in home)
     }
 
     @Test

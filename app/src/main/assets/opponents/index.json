@@ -7,6 +7,13 @@
       "sizeBytes": 652302,
       "sha256": "b07472cf61b6467690352dd0a11fd405e2fe8e14c846e35d0291d6fc5b0af2b7",
       "url": "https://raw.githubusercontent.com/shinp-dev/chanriva-content/main/opponents/dist/animal-v1.zip"
+    },
+    {
+      "id": "lione-boss",
+      "version": 1,
+      "sizeBytes": 613905,
+      "sha256": "3e196f973a1eacd2c6e68e998b56390d0795e9277dfebaeb148b4a69e6ab03b9",
+      "url": "https://raw.githubusercontent.com/shinp-dev/chanriva-content/main/opponents/dist/lione-boss-v1.zip"
     }
   ]
 }

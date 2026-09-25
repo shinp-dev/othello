@@ -1,0 +1,8 @@
+<resources>
+    <string name="standard_home_heading">対戦パック</string>
+    <string name="standard_home_animals_title">どうぶつチャレンジ</string>
+    <string name="standard_home_animals_supporting">やさしい姿から野生の姿まで、8体のどうぶつAIに挑戦</string>
+    <string name="standard_home_king_title">百獣の王への挑戦</string>
+    <string name="standard_home_king_supporting">豪快な序盤と終盤、その一方で中盤のセンスは王者級</string>
+    <string name="standard_home_tips_supporting">さっと読めて、次の対局ですぐ意識できるコツ</string>
+</resources>

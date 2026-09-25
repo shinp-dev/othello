@@ -15,18 +15,19 @@ import org.junit.Test
 
 class OpponentPackRepositoryTest {
     private val baseline = File("src/main/assets/opponents/animal-v1.zip").readBytes()
+    private val lionBaseline = File("src/main/assets/opponents/lione-boss-v1.zip").readBytes()
     private val baselineIndex = File("src/main/assets/opponents/index.json").readText()
 
-    @Test fun cleanInstallOfflineRetainsTheAnimalEntrance() = fixture { repo, remote, _ ->
+    @Test fun cleanInstallOfflineRetainsBothChallengeEntrances() = fixture { repo, remote, _ ->
         remote.failure = true
-        assertEquals("animal", repo.prepareForEntry().visiblePacks().single().definition.id)
+        assertEquals(listOf("animal", "lione-boss"), repo.prepareForEntry().visiblePacks().map { it.definition.id })
     }
 
     @Test fun corruptDownloadedCatalogCanStillUseBundledBaseline() = fixture { repo, remote, root ->
         repo.prepareForEntry()
         File(root, "packs").walkTopDown().first { it.name == "manifest.json" }.writeText("broken")
         remote.failure = true
-        assertEquals("animal", repository(root, remote).prepareForEntry().visiblePacks().single().definition.id)
+        assertEquals(listOf("animal", "lione-boss"), repository(root, remote).prepareForEntry().visiblePacks().map { it.definition.id })
     }
 
     @Test fun oversizedExpandedEntryCannotPromoteItsCatalog() = fixture { repo, remote, _ ->
@@ -147,7 +148,8 @@ class OpponentPackRepositoryTest {
     }
 
     private fun repository(root: File, remote: FakeRemote) = OpponentPackRepository(root,
-        { baselineIndex }, { baseline.inputStream() }, remote, validateImage = { require(it.length() > 0) })
+        { baselineIndex }, { descriptor -> (if (descriptor.id == "lione-boss") lionBaseline else baseline).inputStream() },
+        remote, validateImage = { require(it.length() > 0) })
 
     private fun archive(id: String = "animal", version: Int = 1, extraPath: String? = null, omitAsset: Boolean = false,
         transform: (MutableMap<String, JsonElement>) -> Unit = {},

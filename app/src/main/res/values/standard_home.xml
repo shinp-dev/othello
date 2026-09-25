@@ -1,0 +1,8 @@
+<resources>
+    <string name="standard_home_heading">Opponent packs</string>
+    <string name="standard_home_animals_title">Animal Challenge</string>
+    <string name="standard_home_animals_supporting">Challenge eight animal AIs, from friendly to wild</string>
+    <string name="standard_home_king_title">Challenge the King of Beasts</string>
+    <string name="standard_home_king_supporting">A bold opening and endgame, with a champion’s touch in the middle</string>
+    <string name="standard_home_tips_supporting">Quick tips you can use in your very next game</string>
+</resources>
