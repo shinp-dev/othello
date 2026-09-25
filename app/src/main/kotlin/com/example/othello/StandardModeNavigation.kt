@@ -203,6 +203,14 @@ internal fun StandardHomeScreen(
             ) {
                 ChanrivaScreenHeader(title = appString(R.string.standard_mode))
                 OpponentHomeSectionCards(opponents, OpponentHomeSection.FEATURED, onPackSelected)
+                OpponentHomeSectionCards(opponents, OpponentHomeSection.CHALLENGES, onPackSelected)
+                StandardHomeWideFeatureCard(
+                    title = appString(R.string.standard_winning_tips_title),
+                    supportingText = appString(R.string.standard_winning_tips_home_supporting),
+                    artworkDrawableRes = R.drawable.standard_home_winning_tips_art,
+                    onClick = onWinningTips,
+                    modifier = Modifier.height(wideCardHeight),
+                )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -224,14 +232,6 @@ internal fun StandardHomeScreen(
                         modifier = Modifier.weight(1f),
                     )
                 }
-                OpponentHomeSectionCards(opponents, OpponentHomeSection.CHALLENGES, onPackSelected)
-                StandardHomeWideFeatureCard(
-                    title = appString(R.string.standard_winning_tips_title),
-                    supportingText = appString(R.string.standard_winning_tips_home_supporting),
-                    artworkDrawableRes = R.drawable.standard_home_winning_tips_art,
-                    onClick = onWinningTips,
-                    modifier = Modifier.height(wideCardHeight),
-                )
                 Spacer(Modifier.height(itemSpacing))
                 TextButton(
                     onClick = onSwitchMode,
