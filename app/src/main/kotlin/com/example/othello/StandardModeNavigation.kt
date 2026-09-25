@@ -191,7 +191,7 @@ internal fun StandardHomeScreen(
         ) {
             val animalPack = requireNotNull(opponents.pack("animal")) { "Animal opponent pack is required" }
             val kingPack = requireNotNull(opponents.pack("lione-boss")) { "King opponent pack is required" }
-            val featuredCardHeight = maxOf(170.dp, maxWidth * 0.55f)
+            val featuredCardHeight = maxOf(210.dp, maxWidth * 0.55f)
 
             Column(
                 modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
@@ -274,7 +274,7 @@ private fun StandardHomeFeatureCard(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth(0.88f)
-                    .height(maxHeight * 0.62f),
+                    .height(maxHeight * 0.46f),
                 contentScale = ContentScale.Fit,
             )
             Column(
