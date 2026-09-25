@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.os.Environment
+import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalConfiguration
@@ -57,23 +58,8 @@ class StandardHomeScreenshotTest {
             localizedContext.getString(R.string.standard_winning_tips_title),
         )
         expectedTitles.forEach { composeRule.onNodeWithText(it).assertIsDisplayed() }
-        // Give Coil time to decode the real transparent opponent banners from the bundled pack files.
-        Thread.sleep(500)
-        composeRule.waitForIdle()
-
-        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val bitmap = awaitVisibleHomeScreen()
         assertEquals("Screenshot pixel width for ${width}dp emulator", width, bitmap.width)
-        val backgroundPixel = bitmap.getPixel(5, bitmap.height / 2)
-        val channelSpread = maxOf(
-            android.graphics.Color.red(backgroundPixel),
-            android.graphics.Color.green(backgroundPixel),
-            android.graphics.Color.blue(backgroundPixel),
-        ) - minOf(
-            android.graphics.Color.red(backgroundPixel),
-            android.graphics.Color.green(backgroundPixel),
-            android.graphics.Color.blue(backgroundPixel),
-        )
-        assertTrue("Captured display looks blank or blocked at ${width}dp", channelSpread > 20)
         val name = "standard-home-${width}dp.png"
         val uri = checkNotNull(context.contentResolver.insert(
             MediaStore.Downloads.EXTERNAL_CONTENT_URI,
@@ -93,5 +79,27 @@ class StandardHomeScreenshotTest {
             putString("standardHomeScreenshot", name)
         })
         println("Rendered StandardHomeScreen at ${width}dp; saved $name")
+    }
+
+    private fun awaitVisibleHomeScreen(): Bitmap {
+        val deadline = SystemClock.uptimeMillis() + 12_000L
+        do {
+            composeRule.waitForIdle()
+            val frame = checkNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
+            val backgroundPixel = frame.getPixel(5, frame.height / 2)
+            val channelSpread = maxOf(
+                android.graphics.Color.red(backgroundPixel),
+                android.graphics.Color.green(backgroundPixel),
+                android.graphics.Color.blue(backgroundPixel),
+            ) - minOf(
+                android.graphics.Color.red(backgroundPixel),
+                android.graphics.Color.green(backgroundPixel),
+                android.graphics.Color.blue(backgroundPixel),
+            )
+            if (channelSpread > 20) return frame
+            frame.recycle()
+            Thread.sleep(250)
+        } while (SystemClock.uptimeMillis() < deadline)
+        throw AssertionError("StandardHomeScreen did not render a visible background before capture")
     }
 }

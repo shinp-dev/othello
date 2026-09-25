@@ -231,7 +231,8 @@ internal fun StandardOpponentSelectionScreen(
         Box(Modifier.fillMaxSize().background(Color(0x44001418)))
 
         BoxWithConstraints(Modifier.fillMaxSize().statusBarsPadding()) {
-            val compact = maxHeight < 700.dp
+            val availableHeight = maxHeight
+            val compact = availableHeight < 700.dp
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -246,7 +247,7 @@ internal fun StandardOpponentSelectionScreen(
                     progress = progress,
                     selectedPlayer = selectedPlayer,
                     onPlayerSelected = onPlayerSelected,
-                    modifier = Modifier.fillMaxWidth().height(maxHeight * if (compact) 0.58f else 0.60f),
+                    modifier = Modifier.fillMaxWidth().height(availableHeight * (if (compact) 0.58f else 0.60f)),
                 )
                 Spacer(Modifier.height(if (compact) 10.dp else 20.dp))
                 ForestStartButton(

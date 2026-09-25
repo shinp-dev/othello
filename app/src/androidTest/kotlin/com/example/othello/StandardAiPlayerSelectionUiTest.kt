@@ -97,7 +97,7 @@ class StandardAiPlayerSelectionUiTest {
         composeRule.runOnIdle { selected.value = pack.definition.players.last() }
         composeRule.waitForIdle()
         composeRule.runOnIdle { assertEquals("wild-elephant", selected.value.id) }
-        composeRule.onNodeWithTag("standard-ai-player-animal-chick").assertExists()
+        composeRule.onNodeWithTag("standard-ai-player-animal-chick").assertDoesNotExist()
         composeRule.onNodeWithTag("standard-ai-player-animal-wild-koala").assertExists()
         composeRule.onNodeWithTag("standard-ai-player-animal-rabbit").assertDoesNotExist()
     }
