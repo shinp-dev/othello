@@ -3,6 +3,7 @@ package com.example.othello
 import android.content.ContentValues
 import android.graphics.Bitmap
 import android.os.Environment
+import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalConfiguration
@@ -62,11 +63,34 @@ class PeopleEnjoyHomeScreenshotTest {
             composeRule.onNodeWithText(localizedContext.getString(id)).assertHasClickAction()
         }
         composeRule.waitForIdle()
-        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val bitmap = awaitVisiblePeopleHomeScreen()
         assertEquals("Screenshot pixel width for ${width}dp emulator", width, bitmap.width)
         saveScreenshot(context, bitmap, "people-enjoy-home-${width}dp.png")
         bitmap.recycle()
         println("Rendered PeopleEnjoyHomeScreen at ${width}dp: people-enjoy-home-${width}dp.png")
+    }
+
+    private fun awaitVisiblePeopleHomeScreen(): Bitmap {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val deadline = SystemClock.uptimeMillis() + 12_000L
+        do {
+            composeRule.waitForIdle()
+            val frame = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+            val backgroundPixel = frame.getPixel(5, frame.height / 2)
+            val channelSpread = maxOf(
+                android.graphics.Color.red(backgroundPixel),
+                android.graphics.Color.green(backgroundPixel),
+                android.graphics.Color.blue(backgroundPixel),
+            ) - minOf(
+                android.graphics.Color.red(backgroundPixel),
+                android.graphics.Color.green(backgroundPixel),
+                android.graphics.Color.blue(backgroundPixel),
+            )
+            if (channelSpread > 20) return frame
+            frame.recycle()
+            Thread.sleep(250)
+        } while (SystemClock.uptimeMillis() < deadline)
+        throw AssertionError("PeopleEnjoyHomeScreen background was not visible before capture")
     }
 
     private fun saveScreenshot(context: android.content.Context, bitmap: Bitmap, name: String) {
