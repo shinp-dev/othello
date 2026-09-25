@@ -517,10 +517,18 @@ private fun StandardOpponentCard(
                 modifier = conditionModifier.testTag("standard-ai-unlock-condition-${opponent.id}"),
                 color = FOREST_TEXT,
                 fontFamily = FontFamily.Serif,
-                fontSize = if (centered) 12.sp else 8.sp,
-                lineHeight = if (centered) 15.sp else 9.sp,
+                fontSize = when {
+                    centered -> 12.sp
+                    previewEdge != null -> 9.sp
+                    else -> 8.sp
+                },
+                lineHeight = when {
+                    centered -> 15.sp
+                    previewEdge != null -> 11.sp
+                    else -> 9.sp
+                },
                 textAlign = TextAlign.Center,
-                maxLines = if (previewEdge == null) 2 else 4,
+                maxLines = if (previewEdge == null) 2 else 3,
                 overflow = TextOverflow.Ellipsis,
             )
         }
