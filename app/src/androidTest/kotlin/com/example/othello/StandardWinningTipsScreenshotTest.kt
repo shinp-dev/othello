@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.os.Environment
+import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalConfiguration
@@ -56,7 +57,7 @@ class StandardWinningTipsScreenshotTest {
         val firstTip = localizedContext.getString(R.string.standard_winning_tip_take_less_title)
         composeRule.onNodeWithText(firstTip).assertIsDisplayed().assertHasClickAction()
 
-        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val bitmap = awaitRenderedTipsScreen()
         assertEquals("Screenshot pixel width for ${width}dp emulator", width, bitmap.width)
         val name = "standard-winning-tips-${width}dp.png"
         val uri = checkNotNull(context.contentResolver.insert(
@@ -84,5 +85,23 @@ class StandardWinningTipsScreenshotTest {
         composeRule.onNodeWithText(firstTip).performScrollTo().performClick()
         composeRule.onNodeWithText(localizedContext.getString(R.string.standard_winning_tips_progress, 1, standardWinningTips.size))
             .assertIsDisplayed()
+    }
+
+    private fun awaitRenderedTipsScreen(): Bitmap {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val deadline = SystemClock.uptimeMillis() + 12_000L
+        do {
+            composeRule.waitForIdle()
+            val frame = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+            val backgroundPixel = frame.getPixel(5, frame.height / 2)
+            val red = android.graphics.Color.red(backgroundPixel)
+            val green = android.graphics.Color.green(backgroundPixel)
+            val blue = android.graphics.Color.blue(backgroundPixel)
+            val channelSpread = maxOf(red, green, blue) - minOf(red, green, blue)
+            if (channelSpread > 20 && (red + green + blue) / 3 < 220) return frame
+            frame.recycle()
+            Thread.sleep(250)
+        } while (SystemClock.uptimeMillis() < deadline)
+        throw AssertionError("StandardWinningTipsRoute background was not visible before capture")
     }
 }
