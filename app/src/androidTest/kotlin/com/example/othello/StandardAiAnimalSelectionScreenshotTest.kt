@@ -65,9 +65,11 @@ class StandardAiAnimalSelectionScreenshotTest {
 
         val chickPortraitSuccessTag = "standard-ai-player-portrait-chick-success"
         composeRule.waitUntil(timeoutMillis = 20_000) {
-            composeRule.onAllNodesWithTag(chickPortraitSuccessTag).fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag(chickPortraitSuccessTag, useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
         }
-        composeRule.onNodeWithTag(chickPortraitSuccessTag).assertIsDisplayed()
+        composeRule.onNodeWithTag(chickPortraitSuccessTag, useUnmergedTree = true).assertIsDisplayed()
         composeRule.waitForIdle()
         println("Confirmed central chick AsyncImage Success at ${width}dp before screenshot")
 
