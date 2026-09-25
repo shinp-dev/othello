@@ -189,33 +189,14 @@ internal fun StandardAiPlayerSelectionContent(
     onStart: () -> Unit,
     onBack: () -> Unit,
 ) {
-    Surface(Modifier.fillMaxSize().statusBarsPadding()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(ChanrivaSpacing.page),
-        ) {
-            ChanrivaScreenHeader(
-                title = appString(R.string.standard_ai_match),
-                onBack = onBack,
-                backLabel = appString(R.string.back),
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center,
-            ) {
-                StandardOpponentSelectionPanel(
-                    installedPack = installedPack,
-                    progress = progress,
-                    selectedPlayer = selectedPlayer,
-                    onPlayerSelected = onPlayerSelected,
-                    onStart = onStart,
-                )
-            }
-        }
-    }
+    StandardOpponentSelectionScreen(
+        installedPack = installedPack,
+        progress = progress,
+        selectedPlayer = selectedPlayer,
+        onPlayerSelected = onPlayerSelected,
+        onStart = onStart,
+        onBack = onBack,
+    )
 }
 
 @Composable

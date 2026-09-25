@@ -12,19 +12,26 @@ import org.junit.Test
 class OpponentPackHomeUiTest {
     @get:Rule val composeRule = createComposeRule()
 
-    @Test fun multiplePacksRemainReachableAndSelectTheirOwnId() {
-        val first = opponentUiFixture()
-        val second = first.copy(definition = first.definition.copy(
-            id = "beginner", title = OpponentText(mapOf("en" to "Beginner pack", "ja" to "Beginner pack")),
-            home = OpponentHomePlacement(OpponentHomeSection.CHALLENGES, OpponentHomeStyle.COMPACT, 10),
-        ))
+    @Test fun threeHomeCardsOpenTheirMatchingDestinations() {
+        val animals = opponentUiFixture("animal")
+        val king = opponentUiFixture("lione-boss")
+        val context = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
         var selected: String? = null
+        var tipsOpened = false
         composeRule.setContent {
             OthelloTheme {
-                StandardHomeScreen(OpponentPackSnapshot(listOf(first, second)), { selected = it }, {}, {}, {}, {})
+                StandardHomeScreen(
+                    opponents = OpponentPackSnapshot(listOf(animals, king)),
+                    onPackSelected = { selected = it },
+                    onWinningTips = { tipsOpened = true },
+                )
             }
         }
-        composeRule.onNodeWithText("Beginner pack").performScrollTo().performClick()
-        composeRule.runOnIdle { assertEquals("beginner", selected) }
+        composeRule.onNodeWithText(context.getString(R.string.standard_home_animals_title)).performScrollTo().performClick()
+        composeRule.runOnIdle { assertEquals("animal", selected) }
+        composeRule.onNodeWithText(context.getString(R.string.standard_home_king_title)).performScrollTo().performClick()
+        composeRule.runOnIdle { assertEquals("lione-boss", selected) }
+        composeRule.onNodeWithText(context.getString(R.string.standard_winning_tips_title)).performScrollTo().performClick()
+        composeRule.runOnIdle { assertEquals(true, tipsOpened) }
     }
 }

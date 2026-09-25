@@ -6,78 +6,32 @@ import kotlin.test.assertTrue
 import org.junit.Test
 
 class StandardOpponentGalleryUiContractTest {
-    private val source = File("src/main/kotlin/com/example/othello/StandardOpponentGallery.kt").readText()
+    private val gallery = File("src/main/kotlin/com/example/othello/StandardOpponentGallery.kt").readText()
+    private val route = File("src/main/kotlin/com/example/othello/StandardAiScreens.kt").readText()
 
     @Test
-    fun opponentGalleryShowsCurrentOpponentWithOnlyItsNeighbors() {
-        assertTrue("val previous = pack.players.getOrNull(selectedIndex - 1)" in source)
-        assertTrue("val current = pack.players[selectedIndex]" in source)
-        assertTrue("val next = pack.players.getOrNull(selectedIndex + 1)" in source)
-        assertTrue("standard-ai-opponent-carousel" in source)
-        assertTrue("SIDE_WEIGHT" in source)
-        assertTrue("CENTER_WEIGHT" in source)
-        assertFalse("HorizontalPager(" in source)
-        assertFalse("LinearProgressIndicator(" in source)
-        assertFalse("standard_ai_collection_progress" in source)
+    fun selectionUsesAdjacentCardsWithoutWrappingAtEitherEnd() {
+        assertTrue("pack.players.getOrNull(selectedIndex - 1)" in gallery)
+        assertTrue("pack.players.getOrNull(selectedIndex + 1)" in gallery)
+        assertTrue("if (previous != null)" in gallery)
+        assertTrue("if (next != null)" in gallery)
+        assertFalse("HorizontalPager(" in gallery)
     }
 
     @Test
-    fun opponentGalleryUsesSwipeAndTapInsteadOfASeparateStartButton() {
-        assertTrue("detectHorizontalDragGestures(" in source)
-        assertTrue("selectOpponent(next)" in source)
-        assertTrue("selectOpponent(previous)" in source)
-        assertTrue("onClick = onStart" in source)
-        assertTrue("standard-ai-player-" in source)
+    fun selectedAndLockedCardsUseTheirDedicatedArtworkAndUnlockCondition() {
+        assertTrue("R.drawable.animal_selection_frame" in gallery)
+        assertTrue("R.drawable.animal_selection_locked_frame" in gallery)
+        assertTrue("R.string.standard_ai_unlock_condition" in gallery)
+        assertTrue("Icons.Filled.Lock" in gallery)
     }
 
     @Test
-    fun opponentCardsUseGameLikeCardStylingAndSupplementaryLevels() {
-        assertTrue("Color(0xFF1C232C)" in source)
-        assertTrue("Color(0xFF141A21)" in source)
-        assertTrue("Color(0xFF161C23)" in source)
-        assertTrue("Color(0xFF10151B)" in source)
-        assertTrue("Color(0xFF27313C)" in source)
-        assertTrue("BorderStroke(1.dp" in source)
-        assertTrue("RoundedCornerShape" in source)
-        assertTrue("maxLines = 1" in source)
-        assertTrue("TextOverflow.Ellipsis" in source)
-        assertTrue("packOrder(installedPack, opponent)" in source)
-        assertTrue("text = opponentText(opponent.name)" in source)
-        assertFalse("R.string.standard_ai_opponent_level_name" in source)
-    }
-
-    @Test
-    fun strengthDirectionIsShownBelowTheCards() {
-        assertTrue("standard-ai-strength-guide" in source)
-        assertTrue("R.string.opponent_previous" in source)
-        assertTrue("R.string.opponent_next" in source)
-        assertTrue("Arrangement.SpaceBetween" in source)
-    }
-
-    @Test
-    fun opponentGalleryKeepsAllLevelsInOneSequenceWithoutGroupHeadings() {
-        assertFalse("standard_ai_group_basic" in source)
-        assertFalse("standard_ai_group_serious" in source)
-        assertFalse("pack.players.take(4)" in source)
-        assertFalse("pack.players.drop(4)" in source)
-    }
-
-    @Test
-    fun clearedAndLockedStatesAreIconsInsteadOfStatusText() {
-        assertTrue("Icons.Filled.CheckCircle" in source)
-        assertTrue("Icons.Filled.Lock" in source)
-        assertTrue("standard-ai-state-" in source)
-        assertTrue("R.string.standard_ai_locked_opponent_description" in source)
-        assertFalse("statusRes" in source)
-        assertFalse("standard_ai_opponent_status_next" in source)
-        assertFalse("standard_ai_opponent_status_selected" in source)
-        assertFalse("standard_ai_opponent_status_available" in source)
-    }
-
-    @Test
-    fun opponentGalleryDoesNotReferenceAdvancedUiOrSettings() {
-        assertFalse("Advanced" in source)
-        assertFalse("AppDestination" in source)
-        assertFalse("EdaxDataManager" in source)
+    fun selectionUsesExplicitStartButtonAndDoesNotKeepOldDirectionLabels() {
+        assertTrue("ForestStartButton(" in gallery)
+        assertTrue("onClick = onStart" in gallery)
+        assertFalse("R.string.opponent_previous" in gallery)
+        assertFalse("R.string.opponent_next" in gallery)
+        assertTrue("StandardOpponentSelectionScreen(" in route)
     }
 }

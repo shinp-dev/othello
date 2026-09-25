@@ -9,16 +9,14 @@ class StandardAiSelectionLayoutContractTest {
     private val source = File("src/main/kotlin/com/example/othello/StandardAiScreens.kt").readText()
 
     @Test
-    fun levelSelectionCentersChallengeContentBelowFixedHeader() {
+    fun animalSelectionUsesDedicatedScreenAndExplicitBackAction() {
         val selectionStart = source.indexOf("internal fun StandardAiPlayerSelectionContent")
         val selectionEnd = source.indexOf("private fun StandardAiMatchScreen", selectionStart)
         val selection = source.substring(selectionStart, selectionEnd)
 
-        assertTrue("ChanrivaScreenHeader(" in selection)
-        assertTrue(".weight(1f)" in selection)
-        assertTrue("contentAlignment = Alignment.Center" in selection)
-        assertTrue("StandardOpponentSelectionPanel(" in selection)
-        assertTrue("Surface(Modifier.fillMaxSize().statusBarsPadding())" in selection)
+        assertTrue("StandardOpponentSelectionScreen(" in selection)
+        assertTrue("onBack = onBack" in selection)
+        assertTrue("onStart = onStart" in selection)
     }
 
     @Test

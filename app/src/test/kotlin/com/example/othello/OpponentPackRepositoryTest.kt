@@ -15,18 +15,19 @@ import org.junit.Test
 
 class OpponentPackRepositoryTest {
     private val baseline = File("src/main/assets/opponents/animal-v1.zip").readBytes()
+    private val lionBaseline = File("src/main/assets/opponents/lione-boss-v1.zip").readBytes()
     private val baselineIndex = File("src/main/assets/opponents/index.json").readText()
 
-    @Test fun cleanInstallOfflineRetainsTheAnimalEntrance() = fixture { repo, remote, _ ->
+    @Test fun cleanInstallOfflineRetainsBothChallengeEntrances() = fixture { repo, remote, _ ->
         remote.failure = true
-        assertEquals("animal", repo.prepareForEntry().visiblePacks().single().definition.id)
+        assertEquals(listOf("animal", "lione-boss"), repo.prepareForEntry().visiblePacks().map { it.definition.id })
     }
 
     @Test fun corruptDownloadedCatalogCanStillUseBundledBaseline() = fixture { repo, remote, root ->
         repo.prepareForEntry()
         File(root, "packs").walkTopDown().first { it.name == "manifest.json" }.writeText("broken")
         remote.failure = true
-        assertEquals("animal", repository(root, remote).prepareForEntry().visiblePacks().single().definition.id)
+        assertEquals(listOf("animal", "lione-boss"), repository(root, remote).prepareForEntry().visiblePacks().map { it.definition.id })
     }
 
     @Test fun oversizedExpandedEntryCannotPromoteItsCatalog() = fixture { repo, remote, _ ->
@@ -40,7 +41,7 @@ class OpponentPackRepositoryTest {
             zip.closeEntry()
         }
         remote.archives = mapOf("animal" to payload.toByteArray())
-        assertEquals(1, repo.prepareForEntry().packs.single().definition.version)
+        assertEquals(1, repo.prepareForEntry().packs.single { it.definition.id == "animal" }.definition.version)
     }
 
     @Test fun corruptPackRecoveryDoesNotAllowRollbackOfTheSavedIndex() = fixture { repo, remote, root ->
@@ -49,7 +50,7 @@ class OpponentPackRepositoryTest {
         val previousIndex = File(root, "active.json").readBytes()
         File(root, "packs").walkTopDown().first { it.name == "manifest.json" }.writeText("broken")
         remote.archives = mapOf("animal" to baseline)
-        assertEquals(1, repository(root, remote).prepareForEntry().packs.single().definition.version)
+        assertEquals(1, repository(root, remote).prepareForEntry().packs.single { it.definition.id == "animal" }.definition.version)
         assertContentEquals(previousIndex, File(root, "active.json").readBytes())
     }
 
@@ -72,12 +73,15 @@ class OpponentPackRepositoryTest {
         java.util.zip.ZipInputStream(remote.archives.getValue("seasonal").inputStream()).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
-                File(directory, entry.name).apply { parentFile.mkdirs(); writeBytes(zip.readBytes()) }
+                File(directory, entry.name).apply { parentFile!!.mkdirs(); writeBytes(zip.readBytes()) }
             }
         }
         File(root, "active.json").writeText(remote.index())
         remote.failure = true
-        assertEquals("animal", repository(root, remote).prepareForEntry().visiblePacks().single().definition.id)
+        assertEquals(
+            listOf("animal", "lione-boss"),
+            repository(root, remote).prepareForEntry().visiblePacks().map { it.definition.id },
+        )
     }
 
     @Test fun supportsMultiplePacksAndSkipsInstalledVersionsAcrossProcessRecreation() = fixture { repo, remote, root ->
@@ -124,7 +128,7 @@ class OpponentPackRepositoryTest {
         )
         invalid.forEach { bytes ->
             remote.archives = mapOf("animal" to bytes)
-            assertEquals(1, repo.prepareForEntry().packs.single().definition.version)
+            assertEquals(1, repo.prepareForEntry().packs.single { it.definition.id == "animal" }.definition.version)
         }
     }
 
@@ -147,7 +151,8 @@ class OpponentPackRepositoryTest {
     }
 
     private fun repository(root: File, remote: FakeRemote) = OpponentPackRepository(root,
-        { baselineIndex }, { baseline.inputStream() }, remote, validateImage = { require(it.length() > 0) })
+        { baselineIndex }, { descriptor -> (if (descriptor.id == "lione-boss") lionBaseline else baseline).inputStream() },
+        remote, validateImage = { require(it.length() > 0) })
 
     private fun archive(id: String = "animal", version: Int = 1, extraPath: String? = null, omitAsset: Boolean = false,
         transform: (MutableMap<String, JsonElement>) -> Unit = {},
