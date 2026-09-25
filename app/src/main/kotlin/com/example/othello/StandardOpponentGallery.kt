@@ -308,7 +308,11 @@ private fun ColumnScope.ForestStartButton(enabled: Boolean, onClick: () -> Unit)
                 modifier = Modifier.weight(1f).padding(horizontal = 9.dp),
                 color = FOREST_TEXT,
                 fontFamily = FontFamily.Serif,
-                fontSize = 19.sp,
+                fontSize = when {
+                    LocalConfiguration.current.screenWidthDp <= 340 -> 16.sp
+                    LocalConfiguration.current.screenWidthDp <= 370 -> 17.sp
+                    else -> 19.sp
+                },
                 lineHeight = 23.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
