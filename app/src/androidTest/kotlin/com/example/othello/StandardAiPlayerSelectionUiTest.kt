@@ -52,8 +52,8 @@ class StandardAiPlayerSelectionUiTest {
 
         composeRule.onNodeWithText("1体のどうぶつAIに挑戦").assertExists()
         composeRule.onNodeWithText("1 / 1").assertExists()
-        composeRule.onNodeWithTag("standard-ai-player-animal-chick").assertExists()
-        composeRule.onNodeWithTag("standard-ai-player-animal-rabbit").assertDoesNotExist()
+        composeRule.onNodeWithTag("standard-ai-player-animal-chick", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag("standard-ai-player-animal-rabbit", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test
@@ -71,14 +71,14 @@ class StandardAiPlayerSelectionUiTest {
             }
         }
 
-        composeRule.onNodeWithTag("standard-ai-opponent-carousel").assertExists()
-        composeRule.onNodeWithTag("standard-ai-selection-title").assertExists()
-        composeRule.onNodeWithTag("standard-ai-selection-subtitle").assertExists()
-        composeRule.onNodeWithTag("standard-ai-selection-dots").assertExists()
+        composeRule.onNodeWithTag("standard-ai-opponent-carousel", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag("standard-ai-selection-title", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag("standard-ai-selection-subtitle", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag("standard-ai-selection-dots", useUnmergedTree = true).assertExists()
         composeRule.onNodeWithText("1 / 8").assertExists()
-        composeRule.onNodeWithTag("standard-ai-player-animal-chick").assertExists()
-        composeRule.onNodeWithTag("standard-ai-state-animal-rabbit").assertExists()
-        composeRule.onNodeWithTag("standard-ai-player-animal-wild-elephant").assertDoesNotExist()
+        composeRule.onNodeWithTag("standard-ai-player-animal-chick", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag("standard-ai-state-animal-rabbit", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag("standard-ai-player-animal-wild-elephant", useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("ひよこに勝つと解放").assertExists()
     }
 
@@ -104,9 +104,9 @@ class StandardAiPlayerSelectionUiTest {
         }
 
         composeRule.runOnIdle { assertNull(started) }
-        composeRule.onNodeWithTag("standard-ai-player-animal-wild-chick").performClick()
+        composeRule.onNodeWithTag("standard-ai-player-animal-wild-chick", useUnmergedTree = true).performClick()
         composeRule.runOnIdle { assertNull(started) }
-        composeRule.onNodeWithTag("standard-ai-start").performClick()
+        composeRule.onNodeWithTag("standard-ai-start", useUnmergedTree = true).performClick()
         composeRule.runOnIdle { assertEquals(pack.definition.players[4], started) }
     }
 
@@ -125,16 +125,16 @@ class StandardAiPlayerSelectionUiTest {
                 )
             }
         }
-        composeRule.onNodeWithTag("standard-ai-player-animal-wild-elephant").assertDoesNotExist()
-        composeRule.onNodeWithTag("standard-ai-player-animal-rabbit").performClick()
+        composeRule.onNodeWithTag("standard-ai-player-animal-wild-elephant", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithTag("standard-ai-player-animal-rabbit", useUnmergedTree = true).performClick()
         composeRule.runOnIdle { assertEquals("rabbit", selected.value.id) }
-        composeRule.onNodeWithTag("standard-ai-player-animal-chick").assertExists()
-        composeRule.onNodeWithTag("standard-ai-player-animal-koala").assertExists()
+        composeRule.onNodeWithTag("standard-ai-player-animal-chick", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag("standard-ai-player-animal-koala", useUnmergedTree = true).assertExists()
         composeRule.runOnIdle { selected.value = pack.definition.players.last() }
         composeRule.waitForIdle()
         composeRule.runOnIdle { assertEquals("wild-elephant", selected.value.id) }
-        composeRule.onNodeWithTag("standard-ai-player-animal-chick").assertDoesNotExist()
-        composeRule.onNodeWithTag("standard-ai-player-animal-wild-koala").assertExists()
-        composeRule.onNodeWithTag("standard-ai-player-animal-rabbit").assertDoesNotExist()
+        composeRule.onNodeWithTag("standard-ai-player-animal-chick", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithTag("standard-ai-player-animal-wild-koala", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag("standard-ai-player-animal-rabbit", useUnmergedTree = true).assertDoesNotExist()
     }
 }
