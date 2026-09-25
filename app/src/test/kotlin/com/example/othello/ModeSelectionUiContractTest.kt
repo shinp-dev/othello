@@ -13,7 +13,7 @@ class ModeSelectionUiContractTest {
         assertTrue("R.string.enjoy_casually" in screen)
         assertTrue("R.string.enjoy_together" in screen)
         assertTrue("R.string.enjoy_deeply" in screen)
-        assertTrue("onRealEvent" in screen)
+        assertTrue("onPeopleAndEnjoy" in screen)
         assertTrue(".clickable(role = Role.Button" in screen)
         assertTrue("390.dp * scale" in screen)
         assertTrue("R.drawable.enjoy_background" in screen)

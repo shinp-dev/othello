@@ -57,11 +57,24 @@ class StandardModeNavigationTest {
     }
 
     @Test
-    fun realEventReturnsDirectlyToSelection() {
+    fun peopleHomeAndChildScreensReturnToTheirParent() {
         assertEquals(
-            AuthenticatedModeDestination.MODE_SELECTION,
+            AuthenticatedModeDestination.PEOPLE_HOME,
             authenticatedModeBackDestination(AuthenticatedModeDestination.STANDARD_REAL_EVENT),
         )
+        assertEquals(
+            AuthenticatedModeDestination.MODE_SELECTION,
+            authenticatedModeBackDestination(AuthenticatedModeDestination.PEOPLE_HOME),
+        )
+        listOf(
+            AuthenticatedModeDestination.PEOPLE_MATCH,
+            AuthenticatedModeDestination.PEOPLE_SOCIAL,
+        ).forEach { destination ->
+            assertEquals(
+                AuthenticatedModeDestination.PEOPLE_HOME,
+                authenticatedModeBackDestination(destination),
+            )
+        }
     }
 
     @Test

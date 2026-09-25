@@ -62,6 +62,9 @@ internal enum class StandardFeature(
 
 internal enum class AuthenticatedModeDestination {
     MODE_SELECTION,
+    PEOPLE_HOME,
+    PEOPLE_MATCH,
+    PEOPLE_SOCIAL,
     STANDARD_HOME,
     STANDARD_AI,
     STANDARD_WINNING_TIPS,
@@ -90,12 +93,15 @@ internal fun authenticatedModeBackDestination(
     current: AuthenticatedModeDestination,
 ): AuthenticatedModeDestination? = when (current) {
     AuthenticatedModeDestination.STANDARD_HOME -> AuthenticatedModeDestination.MODE_SELECTION
+    AuthenticatedModeDestination.PEOPLE_HOME -> AuthenticatedModeDestination.MODE_SELECTION
+    AuthenticatedModeDestination.PEOPLE_MATCH,
+    AuthenticatedModeDestination.PEOPLE_SOCIAL -> AuthenticatedModeDestination.PEOPLE_HOME
     AuthenticatedModeDestination.STANDARD_AI,
     AuthenticatedModeDestination.STANDARD_WINNING_TIPS,
     AuthenticatedModeDestination.STANDARD_GACHA,
     AuthenticatedModeDestination.STANDARD_COLLECTION,
     AuthenticatedModeDestination.STANDARD_ONLINE_COMING_SOON -> AuthenticatedModeDestination.STANDARD_HOME
-    AuthenticatedModeDestination.STANDARD_REAL_EVENT -> AuthenticatedModeDestination.MODE_SELECTION
+    AuthenticatedModeDestination.STANDARD_REAL_EVENT -> AuthenticatedModeDestination.PEOPLE_HOME
     AuthenticatedModeDestination.MODE_SELECTION -> null
     AuthenticatedModeDestination.ADVANCED -> AuthenticatedModeDestination.MODE_SELECTION
 }
@@ -117,13 +123,27 @@ internal fun AuthenticatedModeRoute(
     when (destination) {
         AuthenticatedModeDestination.MODE_SELECTION -> ModeSelectionScreen(
             onSelect = { destination = destinationFor(it) },
-            onRealEvent = { destination = AuthenticatedModeDestination.STANDARD_REAL_EVENT },
+            onPeopleAndEnjoy = { destination = AuthenticatedModeDestination.PEOPLE_HOME },
+        )
+        AuthenticatedModeDestination.PEOPLE_HOME -> PeopleEnjoyHomeScreen(
+            onBack = { destination = AuthenticatedModeDestination.MODE_SELECTION },
+            onPlay = { destination = AuthenticatedModeDestination.PEOPLE_MATCH },
+            onEvents = { destination = AuthenticatedModeDestination.STANDARD_REAL_EVENT },
+            onCommunity = { destination = AuthenticatedModeDestination.PEOPLE_SOCIAL },
+        )
+        AuthenticatedModeDestination.PEOPLE_MATCH -> PeopleComingSoonScreen(
+            title = appString(R.string.people_play_title),
+            onBack = { destination = AuthenticatedModeDestination.PEOPLE_HOME },
+        )
+        AuthenticatedModeDestination.PEOPLE_SOCIAL -> PeopleComingSoonScreen(
+            title = appString(R.string.people_social_title),
+            onBack = { destination = AuthenticatedModeDestination.PEOPLE_HOME },
         )
         AuthenticatedModeDestination.ADVANCED -> advancedContent {
             destination = AuthenticatedModeDestination.MODE_SELECTION
         }
         AuthenticatedModeDestination.STANDARD_REAL_EVENT -> StandardRealEventRoute(
-            onBack = { destination = AuthenticatedModeDestination.MODE_SELECTION },
+            onBack = { destination = AuthenticatedModeDestination.PEOPLE_HOME },
         )
         else -> StandardBootstrapRoute(
             userId = userId,
