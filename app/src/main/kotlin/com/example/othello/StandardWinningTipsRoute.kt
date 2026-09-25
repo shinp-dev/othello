@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -287,7 +288,10 @@ private fun StandardTipTierSectionHeader(tier: StandardWinningTipTier) {
             contentScale = ContentScale.Crop,
         )
         Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 30.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 14.dp, end = 30.dp)
+                .offset(y = (-6).dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
