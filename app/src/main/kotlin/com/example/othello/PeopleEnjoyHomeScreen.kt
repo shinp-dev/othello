@@ -104,6 +104,8 @@ internal fun PeopleEnjoyHomeScreen(
                 Spacer(Modifier.width(64.dp))
             }
 
+            Spacer(Modifier.height(72.dp))
+
             PeopleHomeCard(
                 title = appString(R.string.people_play_title),
                 subtitle = appString(R.string.people_play_supporting),
