@@ -137,6 +137,10 @@ internal fun StandardOpponentSelectionPanel(
             val centerLeft = (maxWidth - cardWidth) / 2f
             val centerRight = centerLeft + cardWidth
             val sideHeight = cardHeight * 0.86f
+            val sideSpace = (maxWidth - cardWidth) / 2f
+            val sideRevealWidth = minOf(visiblePeek, sideSpace)
+            val sideContentWidth = (sideRevealWidth - 4.dp).coerceAtLeast(24.dp)
+            val sideEdgeInset = (visiblePeek - sideSpace).coerceAtLeast(0.dp) + 2.dp
 
             Column(
                 modifier = Modifier
@@ -155,6 +159,9 @@ internal fun StandardOpponentSelectionPanel(
                             opponent = previous,
                             progress = progress,
                             centered = false,
+                            previewEdge = PreviewEdge.START,
+                            previewContentWidth = sideContentWidth,
+                            previewEdgeInset = sideEdgeInset,
                             onClick = { onPlayerSelected(previous) },
                             modifier = Modifier
                                 .offset(x = centerLeft - visiblePeek)
@@ -168,6 +175,9 @@ internal fun StandardOpponentSelectionPanel(
                             opponent = next,
                             progress = progress,
                             centered = false,
+                            previewEdge = PreviewEdge.END,
+                            previewContentWidth = sideContentWidth,
+                            previewEdgeInset = sideEdgeInset,
                             onClick = { onPlayerSelected(next) },
                             modifier = Modifier
                                 .offset(x = centerRight - sideWidth + visiblePeek)
@@ -363,6 +373,9 @@ private fun StandardOpponentCard(
     opponent: Player,
     progress: StandardAiProgress,
     centered: Boolean,
+    previewEdge: PreviewEdge? = null,
+    previewContentWidth: androidx.compose.ui.unit.Dp = 58.dp,
+    previewEdgeInset: androidx.compose.ui.unit.Dp = 2.dp,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -414,22 +427,43 @@ private fun StandardOpponentCard(
 
         if (!unlocked) {
             Box(Modifier.fillMaxSize().background(Color(0x55000A11)))
+            val lockAlignment = when (previewEdge) {
+                PreviewEdge.START -> Alignment.CenterStart
+                PreviewEdge.END -> Alignment.CenterEnd
+                null -> Alignment.Center
+            }
             Icon(
                 imageVector = Icons.Filled.Lock,
                 contentDescription = appString(R.string.standard_ai_locked_opponent_description, order),
                 tint = Color(0xFFE4E7E3),
                 modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(bottom = 14.dp)
-                    .size(if (centered) 35.dp else 25.dp)
+                    .align(lockAlignment)
+                    .then(
+                        when (previewEdge) {
+                            PreviewEdge.START -> Modifier.padding(start = previewEdgeInset + 2.dp)
+                            PreviewEdge.END -> Modifier.padding(end = previewEdgeInset + 2.dp)
+                            null -> Modifier.padding(bottom = 14.dp)
+                        },
+                    )
+                    .size(if (centered) 35.dp else 22.dp)
                     .testTag("standard-ai-state-${installedPack.definition.id}-${opponent.id}"),
             )
         }
 
+        val numberAlignment = when (previewEdge) {
+            PreviewEdge.START -> Alignment.TopStart
+            PreviewEdge.END -> Alignment.TopEnd
+            null -> Alignment.TopStart
+        }
+        val numberOffsetX = when (previewEdge) {
+            PreviewEdge.START -> previewEdgeInset + 2.dp
+            PreviewEdge.END -> -(previewEdgeInset + 2.dp)
+            null -> maxWidth * 0.145f
+        }
         Box(
             modifier = Modifier
-                .align(Alignment.TopStart)
-                .offset(x = maxWidth * 0.145f, y = maxHeight * 0.09f)
+                .align(numberAlignment)
+                .offset(x = numberOffsetX, y = maxHeight * 0.09f)
                 .size(width = maxWidth * 0.15f, height = maxHeight * 0.085f),
             contentAlignment = Alignment.Center,
         ) {
@@ -459,24 +493,41 @@ private fun StandardOpponentCard(
                 overflow = TextOverflow.Ellipsis,
             )
         } else {
-            Text(
-                text = unlockCondition,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
+            val conditionAlignment = when (previewEdge) {
+                PreviewEdge.START -> Alignment.BottomStart
+                PreviewEdge.END -> Alignment.BottomEnd
+                null -> Alignment.BottomCenter
+            }
+            val conditionModifier = when (previewEdge) {
+                PreviewEdge.START -> Modifier
+                    .align(conditionAlignment)
+                    .padding(start = previewEdgeInset + 2.dp, bottom = maxHeight * 0.12f)
+                    .size(width = previewContentWidth, height = 38.dp)
+                PreviewEdge.END -> Modifier
+                    .align(conditionAlignment)
+                    .padding(end = previewEdgeInset + 2.dp, bottom = maxHeight * 0.12f)
+                    .size(width = previewContentWidth, height = 38.dp)
+                null -> Modifier
+                    .align(conditionAlignment)
                     .fillMaxWidth(0.80f)
                     .padding(bottom = maxHeight * 0.12f)
-                    .testTag("standard-ai-unlock-condition-${opponent.id}"),
+            }
+            Text(
+                text = unlockCondition,
+                modifier = conditionModifier.testTag("standard-ai-unlock-condition-${opponent.id}"),
                 color = FOREST_TEXT,
                 fontFamily = FontFamily.Serif,
                 fontSize = if (centered) 12.sp else 8.sp,
-                lineHeight = if (centered) 15.sp else 10.sp,
+                lineHeight = if (centered) 15.sp else 9.sp,
                 textAlign = TextAlign.Center,
-                maxLines = 2,
+                maxLines = if (previewEdge == null) 2 else 4,
                 overflow = TextOverflow.Ellipsis,
             )
         }
     }
 }
+
+private enum class PreviewEdge { START, END }
 
 private val FOREST_TEXT = Color(0xFFFFF6D8)
 private val FOREST_SUBTITLE = Color(0xFFE7E4D5)

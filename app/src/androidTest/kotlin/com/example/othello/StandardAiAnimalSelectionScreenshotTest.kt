@@ -62,6 +62,12 @@ class StandardAiAnimalSelectionScreenshotTest {
         composeRule.onNodeWithTag("standard-ai-player-animal-chick").assertExists()
         composeRule.onNodeWithTag("standard-ai-player-animal-rabbit").assertExists()
         composeRule.onNodeWithTag("standard-ai-player-animal-wild-elephant").assertDoesNotExist()
+        composeRule
+            .onNodeWithTag("standard-ai-state-animal-rabbit", useUnmergedTree = true)
+            .assertIsDisplayed()
+        composeRule
+            .onNodeWithTag("standard-ai-unlock-condition-rabbit", useUnmergedTree = true)
+            .assertIsDisplayed()
 
         val chickPortraitSuccessTag = "standard-ai-player-portrait-chick-success"
         composeRule.waitUntil(timeoutMillis = 20_000) {
