@@ -18,7 +18,7 @@ import org.junit.Test
 class ModeSelectionNavigationAndroidTest {
     @get:Rule val composeRule = createComposeRule()
 
-    @Test fun realEventOpensDirectlyAndSystemBackReturnsToChoices() {
+    @Test fun peopleAndEnjoyOpensThreeCardHomeAndBackReturnsToChoices() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val configuration = Configuration(context.resources.configuration).apply {
             setLocale(Locale.JAPAN)
@@ -38,7 +38,14 @@ class ModeSelectionNavigationAndroidTest {
         }
 
         composeRule.onNodeWithContentDescription(choiceLabel).performClick()
+        composeRule.onNodeWithText("人と楽しむ").assertExists()
+        composeRule.onNodeWithText("対戦する").assertExists()
+        composeRule.onNodeWithText("イベントを見る").assertExists()
+        composeRule.onNodeWithText("交流する").assertExists()
+        composeRule.onNodeWithText("イベントを見る").performClick()
         composeRule.onNodeWithText("リアルイベント").assertExists()
+        Espresso.pressBack()
+        composeRule.onNodeWithText("人と楽しむ").assertExists()
         Espresso.pressBack()
         composeRule.onNodeWithContentDescription(choiceLabel).assertExists()
     }
