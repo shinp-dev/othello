@@ -15,6 +15,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.othello.designsystem.OthelloTheme
 import java.util.Locale
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -62,6 +63,17 @@ class StandardHomeScreenshotTest {
 
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         assertEquals("Screenshot pixel width for ${width}dp emulator", width, bitmap.width)
+        val backgroundPixel = bitmap.getPixel(5, bitmap.height / 2)
+        val channelSpread = maxOf(
+            android.graphics.Color.red(backgroundPixel),
+            android.graphics.Color.green(backgroundPixel),
+            android.graphics.Color.blue(backgroundPixel),
+        ) - minOf(
+            android.graphics.Color.red(backgroundPixel),
+            android.graphics.Color.green(backgroundPixel),
+            android.graphics.Color.blue(backgroundPixel),
+        )
+        assertTrue("Captured display looks blank or blocked at ${width}dp", channelSpread > 20)
         val name = "standard-home-${width}dp.png"
         val uri = checkNotNull(context.contentResolver.insert(
             MediaStore.Downloads.EXTERNAL_CONTENT_URI,
