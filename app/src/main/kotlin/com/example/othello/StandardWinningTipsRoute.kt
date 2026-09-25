@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -283,7 +284,7 @@ private fun StandardTipTierSectionHeader(tier: StandardWinningTipTier) {
             painter = painterResource(R.drawable.standard_winning_tips_tier_banner),
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.FillBounds,
+            contentScale = ContentScale.Crop,
         )
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 30.dp),
@@ -321,6 +322,7 @@ private fun StandardTipTierSectionHeader(tier: StandardWinningTipTier) {
 @Composable
 private fun StandardWinningTipIndexCard(tip: StandardWinningTip, onClick: () -> Unit) {
     val shape = RoundedCornerShape(14.dp)
+    val titleSize = if (LocalConfiguration.current.screenWidthDp <= 320) 16.sp else 18.sp
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth().height(88.dp),
@@ -348,8 +350,8 @@ private fun StandardWinningTipIndexCard(tip: StandardWinningTip, onClick: () -> 
                     Text(
                         text = appString(tip.titleRes),
                         color = TipsIvory,
-                        fontSize = 18.sp,
-                        lineHeight = 23.sp,
+                        fontSize = titleSize,
+                        lineHeight = 22.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -365,7 +367,7 @@ private fun StandardWinningTipIndexCard(tip: StandardWinningTip, onClick: () -> 
                 }
                 Text(
                     text = "›",
-                modifier = Modifier.size(26.dp),
+                    modifier = Modifier.size(26.dp),
                     color = TipsGold,
                     fontSize = 31.sp,
                     lineHeight = 30.sp,
