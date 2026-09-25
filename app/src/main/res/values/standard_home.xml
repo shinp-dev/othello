@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="en">
     <string name="standard_home_heading">Opponent packs</string>
     <string name="standard_home_animals_title">Animal Challenge</string>
     <string name="standard_home_animals_supporting">Challenge eight animal AIs, from friendly to wild</string>
