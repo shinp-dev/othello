@@ -154,6 +154,7 @@ internal fun ChanrivaNameSelectionScreen(
                     verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 10.dp),
                 ) {
                     candidates.forEach { candidate ->
+                        if (candidate.isRare) Spacer(Modifier.height(10.dp))
                         ChanrivaNameCandidateCard(
                             candidate = candidate,
                             selected = candidate.id == selectedId,
@@ -276,7 +277,7 @@ private fun ChanrivaNameCandidateCard(
         modifier = Modifier
             .fillMaxWidth()
             .height(height)
-            .shadow(if (selected) 8.dp else 2.dp, cardShape)
+            .shadow(if (selected) 8.dp else 2.dp, cardShape, clip = false)
             .clickable(role = Role.Button, onClick = onClick)
             .semantics { role = Role.Button }
             .then(
@@ -321,8 +322,8 @@ private fun BoxScope.RareBadge() {
     Box(
         modifier = Modifier
             .align(Alignment.TopStart)
-            .offset(x = (-4).dp, y = (-19).dp)
-            .size(width = 82.dp, height = 41.dp),
+            .offset(x = (-4).dp, y = (-15).dp)
+            .size(width = 90.dp, height = 45.dp),
     ) {
         Image(
             painter = painterResource(R.drawable.chanriva_name_rare_badge),
@@ -334,7 +335,7 @@ private fun BoxScope.RareBadge() {
             text = appString(R.string.chanriva_name_selection_rare),
             modifier = Modifier.align(Alignment.CenterEnd).padding(end = 6.dp, top = 1.dp),
             color = NameIvory,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
         )
     }
