@@ -7,16 +7,18 @@ import org.junit.Test
 
 class StandardWinningTipsUiContractTest {
     private val route = File("src/main/kotlin/com/example/othello/StandardWinningTipsRoute.kt").readText()
-    private val board = File("src/main/kotlin/com/example/othello/StandardTipBoard.kt").readText()
+    private val board = File("src/main/kotlin/com/example/othello/FantasyBoard.kt").readText()
+    private val detail = File("src/main/kotlin/com/example/othello/StandardWinningTipDetailScreen.kt").readText()
     private val japaneseStrings = File("src/main/res/values-ja/standard_winning_tips.xml").readText()
 
     @Test
     fun indexKeepsExpertTipsUnlockedAndGroupsEachTier() {
-        assertTrue("StandardWinningTipTier.entries.forEach" in route)
-        assertTrue("R.string.standard_winning_tips_expert_supporting" in route)
-        assertTrue("if (tier == StandardWinningTipTier.EXPERT)" in route)
-        assertTrue("verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.control)" in route)
-        assertFalse("enabled = false" in route.substringBefore("private fun StandardWinningTipDetailScreen"))
+        val index = route.substringAfter("private fun StandardWinningTipsIndexScreen(").substringBefore("private fun StandardTipTierBadge")
+        assertTrue("StandardWinningTipTier.entries.forEach" in index)
+        assertTrue("R.string.standard_winning_tips_expert_supporting" in index)
+        assertTrue("if (tier == StandardWinningTipTier.EXPERT)" in index)
+        assertTrue("verticalArrangement = Arrangement.spacedBy(12.dp)" in index)
+        assertFalse("enabled = false" in index)
     }
 
     @Test
@@ -42,16 +44,17 @@ class StandardWinningTipsUiContractTest {
 
     @Test
     fun detailUsesSharedShortLessonLayout() {
-        assertTrue("standard_winning_tips_progress" in route)
-        assertTrue("StandardTipBoard(tip.boardExample)" in route)
-        assertTrue("standard_winning_tips_takeaway_label" in route)
-        assertTrue("standard_winning_tips_previous" in route)
-        assertTrue("standard_winning_tips_next" in route)
+        assertTrue("standard_winning_tips_progress" in detail)
+        assertTrue("StandardTipBoard(" in detail)
+        assertTrue("standard_winning_tips_takeaway_label" in detail)
+        assertTrue("standard_winning_tips_previous" in detail)
+        assertTrue("standard_winning_tips_next" in detail)
+        assertTrue("winning_tip_detail_bg" in detail)
     }
 
     @Test
     fun boardCaptionsAreLeftAlignedAndUseIntentionalBreaks() {
-        assertTrue("textAlign = TextAlign.Start" in route)
+        assertTrue("textAlign = TextAlign.Start" in detail)
         assertTrue("\\n" in japaneseStrings)
     }
 
@@ -67,14 +70,25 @@ class StandardWinningTipsUiContractTest {
     }
 
     @Test
-    fun compactBoardIsEightByEightAndHasNoCoordinateLabelsOrInputHandler() {
-        assertTrue("repeat(8) { row" in board)
-        assertTrue("repeat(8) { column" in board)
-        assertTrue("widthIn(max = 240.dp)" in board)
-        assertTrue("ChanrivaColors.board" in board)
-        assertTrue("ChanrivaColors.blackDisc" in board)
-        assertTrue("ChanrivaColors.whiteDisc" in board)
+    fun sharedFantasyBoardUsesEightByEightArtAndHasNoInputHandler() {
+        assertTrue("repeat(Board.SIZE) { row" in board)
+        assertTrue("repeat(Board.SIZE) { column" in board)
+        assertTrue("R.drawable.fantasy_board_surface" in board)
+        assertTrue("R.drawable.fantasy_disc_black" in board)
+        assertTrue("R.drawable.fantasy_disc_white" in board)
+        assertTrue("R.drawable.fantasy_marker_ring" in board)
+        assertTrue("R.drawable.fantasy_marker_x" in board)
+        assertTrue("R.drawable.fantasy_marker_frame" in board)
+        assertFalse("clickable" in board)
         assertFalse("CoordinateBoard" in board)
+    }
+
+    @Test
+    fun tipsMapExistingFocusAndWarningSquaresToSharedMarkers() {
+        val tipsBoard = File("src/main/kotlin/com/example/othello/StandardTipBoard.kt").readText()
+        assertTrue("FantasyBoardMarkerStyle.GOLD_RING" in tipsBoard)
+        assertTrue("FantasyBoardMarkerStyle.SQUARE_FRAME" in tipsBoard)
+        assertTrue("FantasyBoardMarkerStyle.WARNING_CROSS" in tipsBoard)
         assertFalse("clickable" in board)
     }
 }

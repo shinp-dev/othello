@@ -24,11 +24,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -52,8 +50,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.othello.designsystem.ChanrivaScreenHeader
-import com.example.othello.designsystem.ChanrivaSpacing
 
 @Composable
 internal fun StandardWinningTipsRoute(onBack: () -> Unit) {
@@ -188,91 +184,6 @@ private fun StandardTipsIndexHeader(onBack: () -> Unit) {
 }
 
 @Composable
-private fun StandardWinningTipDetailScreen(
-    tipIndex: Int,
-    onBack: () -> Unit,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit,
-) {
-    val tip = standardWinningTips[tipIndex]
-    StandardTipsSurface {
-        ChanrivaScreenHeader(
-            title = appString(R.string.standard_winning_tips_title),
-            onBack = onBack,
-            backLabel = appString(R.string.back),
-        )
-        Text(
-            text = appString(R.string.standard_winning_tips_progress, tipIndex + 1, standardWinningTips.size),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        StandardTipTierBadge(tip.tier)
-        Text(
-            text = appString(tip.titleRes),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(
-            text = appString(tip.leadRes),
-            style = MaterialTheme.typography.titleMedium,
-        )
-        StandardTipBoard(tip.boardExample)
-        Text(
-            text = appString(tip.boardCaptionRes),
-            modifier = Modifier.fillMaxWidth(),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Start,
-        )
-        Text(
-            text = appString(tip.bodyRes),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Surface(
-            color = MaterialTheme.colorScheme.primaryContainer,
-            shape = MaterialTheme.shapes.large,
-        ) {
-            Column(
-                modifier = Modifier.padding(ChanrivaSpacing.section),
-                verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.control),
-            ) {
-                Text(
-                    text = appString(R.string.standard_winning_tips_takeaway_label),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-                Text(
-                    text = appString(tip.takeawayRes),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(ChanrivaSpacing.control),
-        ) {
-            OutlinedButton(
-                onClick = onPrevious,
-                enabled = tipIndex > 0,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(appString(R.string.standard_winning_tips_previous))
-            }
-            Button(
-                onClick = onNext,
-                enabled = tipIndex < standardWinningTips.lastIndex,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(appString(R.string.standard_winning_tips_next))
-            }
-        }
-    }
-}
-
-@Composable
 private fun StandardTipTierSectionHeader(tier: StandardWinningTipTier) {
     Box(
         modifier = Modifier
@@ -399,20 +310,6 @@ private fun StandardTipTierBadge(tier: StandardWinningTipTier) {
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onPrimaryContainer,
-        )
-    }
-}
-
-@Composable
-private fun StandardTipsSurface(content: @Composable ColumnScope.() -> Unit) {
-    Surface(Modifier.fillMaxSize().statusBarsPadding()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(ChanrivaSpacing.page),
-            verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
-            content = content,
         )
     }
 }

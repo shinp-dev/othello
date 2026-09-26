@@ -13,6 +13,8 @@ import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.platform.app.InstrumentationRegistry
@@ -85,6 +87,46 @@ class StandardWinningTipsScreenshotTest {
         composeRule.onNodeWithText(firstTip).performScrollTo().performClick()
         composeRule.onNodeWithText(localizedContext.getString(R.string.standard_winning_tips_progress, 1, standardWinningTips.size))
             .assertIsDisplayed()
+        composeRule.onNodeWithText(firstTip).assertIsDisplayed()
+        composeRule.onNodeWithText(localizedContext.getString(R.string.standard_winning_tip_take_less_caption).substringBefore('\n'))
+            .assertIsDisplayed()
+        composeRule.onNodeWithText(localizedContext.getString(R.string.standard_winning_tips_takeaway_label))
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("fantasy-board").assertIsDisplayed()
+        saveScreenshot("standard-winning-tip-detail-${width}dp.png")
+
+        composeRule.onNodeWithContentDescription(localizedContext.getString(R.string.standard_winning_tips_next)).performClick()
+        composeRule.onNodeWithText(localizedContext.getString(R.string.standard_winning_tip_mobility_title))
+            .assertIsDisplayed()
+        saveScreenshot("standard-winning-tip-mobility-${width}dp.png")
+
+        composeRule.onNodeWithContentDescription(localizedContext.getString(R.string.standard_winning_tips_next)).performClick()
+        composeRule.onNodeWithText(localizedContext.getString(R.string.standard_winning_tip_corner_title))
+            .assertIsDisplayed()
+        saveScreenshot("standard-winning-tip-corner-${width}dp.png")
+    }
+
+    private fun saveScreenshot(name: String) {
+        composeRule.waitForIdle()
+        // Compose semantics can update just before SurfaceFlinger presents the new screen.
+        // Let that frame land so this file reflects the page the test just asserted.
+        SystemClock.sleep(300L)
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val uri = checkNotNull(context.contentResolver.insert(
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/ChanrivaPreviews")
+            },
+        ))
+        checkNotNull(context.contentResolver.openOutputStream(uri)).use { output ->
+            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) { "Failed to encode $name" }
+        }
+        bitmap.recycle()
+        println("Rendered winning tip detail; saved $name")
     }
 
     private fun awaitRenderedTipsScreen(): Bitmap {
