@@ -116,9 +116,9 @@ internal fun ChanrivaNameSelectionScreen(
     onBack: () -> Unit,
     onNameConfirmed: (ChanrivaNameCandidate) -> Unit,
 ) {
-    var candidates by remember { mutableStateOf(initialChanrivaNameCandidates()) }
     var selectedId by rememberSaveable { mutableStateOf("slow-snail") }
     var hasRerolled by rememberSaveable { mutableStateOf(false) }
+    val candidates = if (hasRerolled) rerolledChanrivaNameCandidates() else initialChanrivaNameCandidates()
 
     val selectedCandidate = candidates.firstOrNull { it.id == selectedId } ?: candidates.last()
 
@@ -173,7 +173,6 @@ internal fun ChanrivaNameSelectionScreen(
                     compact = compact,
                     hasRerolled = hasRerolled,
                     onReroll = {
-                        candidates = rerolledChanrivaNameCandidates()
                         selectedId = "emerald-firefly"
                         hasRerolled = true
                     },

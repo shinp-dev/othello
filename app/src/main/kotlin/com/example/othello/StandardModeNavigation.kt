@@ -117,6 +117,10 @@ internal fun AuthenticatedModeRoute(
         mutableStateOf(initialAuthenticatedModeDestination())
     }
     var selectedPackId by rememberSaveable(userId) { mutableStateOf<String?>(null) }
+    var peopleDisplayName by rememberSaveable(userId) { mutableStateOf<String?>(null) }
+    var pendingPeopleDestination by rememberSaveable(userId) {
+        mutableStateOf(AuthenticatedModeDestination.PEOPLE_MATCH)
+    }
     val backDestination = authenticatedModeBackDestination(destination)
     BackHandler(enabled = backDestination != null) {
         destination = requireNotNull(backDestination)
@@ -129,13 +133,30 @@ internal fun AuthenticatedModeRoute(
         )
         AuthenticatedModeDestination.PEOPLE_HOME -> PeopleEnjoyHomeScreen(
             onBack = { destination = AuthenticatedModeDestination.MODE_SELECTION },
-            onPlay = { destination = AuthenticatedModeDestination.PEOPLE_NAME_SELECTION },
+            onPlay = {
+                pendingPeopleDestination = AuthenticatedModeDestination.PEOPLE_MATCH
+                destination = if (peopleDisplayName == null) {
+                    AuthenticatedModeDestination.PEOPLE_NAME_SELECTION
+                } else {
+                    AuthenticatedModeDestination.PEOPLE_MATCH
+                }
+            },
             onEvents = { destination = AuthenticatedModeDestination.STANDARD_REAL_EVENT },
-            onCommunity = { destination = AuthenticatedModeDestination.PEOPLE_SOCIAL },
+            onCommunity = {
+                pendingPeopleDestination = AuthenticatedModeDestination.PEOPLE_SOCIAL
+                destination = if (peopleDisplayName == null) {
+                    AuthenticatedModeDestination.PEOPLE_NAME_SELECTION
+                } else {
+                    AuthenticatedModeDestination.PEOPLE_SOCIAL
+                }
+            },
         )
         AuthenticatedModeDestination.PEOPLE_NAME_SELECTION -> ChanrivaNameSelectionScreen(
             onBack = { destination = AuthenticatedModeDestination.PEOPLE_HOME },
-            onNameConfirmed = { destination = AuthenticatedModeDestination.PEOPLE_MATCH },
+            onNameConfirmed = {
+                peopleDisplayName = it.displayName
+                destination = pendingPeopleDestination
+            },
         )
         AuthenticatedModeDestination.PEOPLE_MATCH -> PeopleComingSoonScreen(
             title = appString(R.string.people_play_title),
