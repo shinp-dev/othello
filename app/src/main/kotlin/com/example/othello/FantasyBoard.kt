@@ -3,6 +3,7 @@ package com.example.othello
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -30,7 +31,7 @@ internal fun FantasyBoard(
     markers: List<FantasyBoardMarker> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .aspectRatio(1f)
             .semantics { testTag = "fantasy-board" },
@@ -44,10 +45,10 @@ internal fun FantasyBoard(
         )
         Column(
             Modifier
-                .fillMaxWidth(0.965f)
-                .fillMaxHeight(0.945f)
+                .fillMaxWidth(0.732f)
+                .fillMaxHeight(0.732f)
                 .align(Alignment.Center)
-                .offset(y = (-3).dp),
+                .offset(y = -(maxHeight * 0.025f)),
             verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             repeat(Board.SIZE) { row ->
@@ -62,13 +63,13 @@ internal fun FantasyBoard(
                                 Disc.BLACK -> Image(
                                     painter = painterResource(R.drawable.fantasy_disc_black),
                                     contentDescription = "Black disc at ${position.row},${position.column}",
-                                    modifier = Modifier.fillMaxSize().padding(3.dp),
+                                    modifier = Modifier.fillMaxSize().padding(1.5.dp),
                                     contentScale = ContentScale.Fit,
                                 )
                                 Disc.WHITE -> Image(
                                     painter = painterResource(R.drawable.fantasy_disc_white),
                                     contentDescription = "White disc at ${position.row},${position.column}",
-                                    modifier = Modifier.fillMaxSize().padding(3.dp),
+                                    modifier = Modifier.fillMaxSize().padding(1.5.dp),
                                     contentScale = ContentScale.Fit,
                                 )
                                 Disc.EMPTY -> Unit
@@ -77,7 +78,7 @@ internal fun FantasyBoard(
                                 val (resource, inset) = when (marker.style) {
                                     FantasyBoardMarkerStyle.GOLD_RING -> R.drawable.fantasy_marker_ring to 5.dp
                                     FantasyBoardMarkerStyle.SQUARE_FRAME -> R.drawable.fantasy_marker_frame to 0.dp
-                                    FantasyBoardMarkerStyle.WARNING_CROSS -> R.drawable.fantasy_marker_x to 6.dp
+                                    FantasyBoardMarkerStyle.WARNING_CROSS -> R.drawable.fantasy_marker_x to 4.dp
                                 }
                                 Image(
                                     painter = painterResource(resource),
