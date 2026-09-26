@@ -288,10 +288,7 @@ private fun StandardTipTierSectionHeader(tier: StandardWinningTipTier) {
             contentScale = ContentScale.Crop,
         )
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 14.dp, end = 30.dp)
-                .offset(y = (-6).dp),
+            modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 30.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -302,7 +299,10 @@ private fun StandardTipTierSectionHeader(tier: StandardWinningTipTier) {
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.width(14.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(
+                modifier = Modifier.offset(y = (-6).dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
                 Text(
                     text = appString(tier.titleRes),
                     style = MaterialTheme.typography.titleLarge,
