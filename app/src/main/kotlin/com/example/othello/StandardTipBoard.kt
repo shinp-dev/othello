@@ -1,92 +1,36 @@
 package com.example.othello
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import com.example.othello.designsystem.ChanrivaColors
-import com.example.othello.game.Disc
 import com.example.othello.game.Position
 
+/** Adapts a tips example to the reusable, non-interactive fantasy board renderer. */
 @Composable
-internal fun StandardTipBoard(example: StandardTipBoardExample) {
+internal fun StandardTipBoard(example: StandardTipBoardExample, modifier: Modifier = Modifier) {
     val state = remember(example.moves) { standardTipStateFor(example.moves) }
-    val focus = remember(example.focusSquares) { example.focusSquares.map(::standardTipPosition).toSet() }
-    val warnings = remember(example.warningSquares) { example.warningSquares.map(::standardTipPosition).toSet() }
-
-    Box(
-        modifier = Modifier.fillMaxWidth(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            modifier = Modifier
-                .widthIn(max = 240.dp)
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .background(ChanrivaColors.board)
-                .padding(3.dp),
-        ) {
-            repeat(8) { row ->
-                Row(Modifier.fillMaxWidth().weight(1f)) {
-                    repeat(8) { column ->
-                        val position = Position(row, column)
-                        val disc = state.board[position]
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .border(0.5.dp, ChanrivaColors.boardGrid),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (position in focus) {
-                                Box(
-                                    Modifier
-                                        .fillMaxSize()
-                                        .padding(2.dp)
-                                        .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(3.dp)),
-                                )
-                            }
-                            if (disc != Disc.EMPTY) {
-                                Box(
-                                    Modifier
-                                        .fillMaxSize()
-                                        .padding(4.dp)
-                                        .background(
-                                            if (disc == Disc.BLACK) ChanrivaColors.blackDisc else ChanrivaColors.whiteDisc,
-                                            CircleShape,
-                                        )
-                                        .border(1.dp, ChanrivaColors.discOutline, CircleShape),
-                                )
-                            }
-                            if (position in warnings) {
-                                Text(
-                                    text = "×",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Black,
-                                    color = MaterialTheme.colorScheme.error,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    val frames = remember(example.frameSquares) { example.frameSquares.map(::standardTipPosition).toSet() }
+    val focus = remember(example.focusSquares, frames) {
+        example.focusSquares.map(::standardTipPosition).toSet() - frames
     }
+    val warnings = remember(example.warningSquares) { example.warningSquares.map(::standardTipPosition).toSet() }
+    val markers = buildList {
+        focus.forEach { add(FantasyBoardMarker(it, FantasyBoardMarkerStyle.GOLD_RING)) }
+        frames.forEach { add(FantasyBoardMarker(it, FantasyBoardMarkerStyle.SQUARE_FRAME)) }
+        warnings.forEach { add(FantasyBoardMarker(it, FantasyBoardMarkerStyle.WARNING_CROSS)) }
+    }
+
+    FantasyBoard(
+        board = state.board,
+        markers = markers,
+        modifier = modifier,
+    )
+}
+
+internal fun standardTipPosition(notation: String): Position {
+    require(notation.length == 2) { "Tip coordinate must use a1-h8 notation: $notation" }
+    val column = notation[0].lowercaseChar() - 'a'
+    val row = notation[1].digitToIntOrNull()?.minus(1) ?: -1
+    require(row in 0..7 && column in 0..7) { "Tip coordinate is outside a1-h8: $notation" }
+    return Position(row, column)
 }

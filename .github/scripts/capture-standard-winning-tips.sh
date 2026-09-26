@@ -12,13 +12,19 @@ for width in 320 360 390; do
   adb pull \
     "/sdcard/Download/ChanrivaPreviews/standard-winning-tips-${width}dp.png" \
     "screenshots/standard-winning-tips-${width}dp.png"
+  for variant in detail mobility corner; do
+    adb pull \
+      "/sdcard/Download/ChanrivaPreviews/standard-winning-tip-${variant}-${width}dp.png" \
+      "screenshots/standard-winning-tip-${variant}-${width}dp.png"
+    test -s "screenshots/standard-winning-tip-${variant}-${width}dp.png"
+    size_bytes=$(stat -c %s "screenshots/standard-winning-tip-${variant}-${width}dp.png")
+    test "${size_bytes}" -gt 20000 || {
+      echo "Detail screenshot (${variant}, ${width}dp) is too small to contain the rendered screen: ${size_bytes} bytes"
+      exit 1
+    }
+  done
   test -s "screenshots/standard-winning-tips-${width}dp.png"
-  size_bytes=$(stat -c %s "screenshots/standard-winning-tips-${width}dp.png")
-  test "${size_bytes}" -gt 20000 || {
-    echo "Screenshot at ${width}dp is too small to contain the rendered screen: ${size_bytes} bytes"
-    exit 1
-  }
   echo "Captured StandardWinningTipsRoute at ${width}dp: screenshots/standard-winning-tips-${width}dp.png"
 done
 
-echo "Verified all StandardWinningTipsRoute widths: 320dp, 360dp, 390dp"
+echo "Verified winning tips screens at 320dp, 360dp, and 390dp"

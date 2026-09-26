@@ -15,6 +15,7 @@ internal data class StandardTipBoardExample(
     val moves: List<String>,
     val focusSquares: Set<String> = emptySet(),
     val warningSquares: Set<String> = emptySet(),
+    val frameSquares: Set<String> = emptySet(),
 )
 
 internal data class StandardWinningTip(
@@ -84,6 +85,7 @@ internal val standardWinningTips: List<StandardWinningTip> = listOf(
             moves = moves("c4 c5 b6 d3 c2 a7 d6 e7 d7 e3 b5 d2 f7 b1 b7 c6 e6 e8 d1 a8 c7 a4 b8 c3"),
             focusSquares = setOf("a1"),
             warningSquares = setOf("b2"),
+            frameSquares = setOf("a1"),
         ),
     ),
     StandardWinningTip(
@@ -124,6 +126,7 @@ internal val standardWinningTips: List<StandardWinningTip> = listOf(
         boardExample = StandardTipBoardExample(
             moves = moves("c4 c5 b6 d3 c2 a7 d6 e7 d7 e3 b5 d2 f7 b1 b7 c6 e6 a8"),
             focusSquares = setOf("a8"),
+            frameSquares = setOf("a8"),
         ),
     ),
     StandardWinningTip(
@@ -153,14 +156,6 @@ internal val standardWinningTips: List<StandardWinningTip> = listOf(
         ),
     ),
 )
-
-internal fun standardTipPosition(notation: String): Position {
-    require(notation.length == 2) { "Tip coordinate must use a1-h8 notation: $notation" }
-    val column = notation[0].lowercaseChar() - 'a'
-    val row = notation[1].digitToIntOrNull()?.minus(1) ?: -1
-    require(row in 0..7 && column in 0..7) { "Tip coordinate is outside a1-h8: $notation" }
-    return Position(row, column)
-}
 
 internal fun standardTipStateFor(moves: List<String>): GameState {
     var state = GameState()

@@ -1,7 +1,7 @@
 name: Standard winning tips screenshots
 on:
   push:
-    branches: [codex/winning-tips-list]
+    branches: [codex/winning-tips-list, codex/winning-tip-detail]
     paths:
       - '.github/scripts/capture-standard-winning-tips.sh'
       - '.github/workflows/standard-winning-tips-screenshots.yml'
@@ -52,5 +52,7 @@ jobs:
         if: always()
         with:
           name: standard-winning-tips-screenshots
-          path: screenshots/standard-winning-tips-*.png
+          path: |
+            screenshots/standard-winning-tips-*.png
+            screenshots/standard-winning-tip-*.png
           if-no-files-found: error
