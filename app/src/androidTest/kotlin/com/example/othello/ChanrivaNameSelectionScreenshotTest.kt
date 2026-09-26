@@ -8,10 +8,13 @@ import android.provider.MediaStore
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.test.assertDoesNotExist
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
@@ -44,7 +47,12 @@ class ChanrivaNameSelectionScreenshotTest {
                 LocalConfiguration provides configuration,
             ) {
                 OthelloTheme {
-                    ChanrivaNameSelectionScreen(onBack = {}, onNameConfirmed = {})
+                    ChanrivaNameSelectionScreen(
+                        onBack = {},
+                        onNameConfirmed = {},
+                        initialHasRareCandidate = true,
+                        rerolledHasRareCandidate = false,
+                    )
                 }
             }
         }
@@ -67,6 +75,8 @@ class ChanrivaNameSelectionScreenshotTest {
             localizedContext.getString(R.string.chanriva_name_selection_confirm),
         )
         visibleLabels.forEach { composeRule.onNodeWithText(it).assertIsDisplayed() }
+        composeRule.onAllNodesWithText(localizedContext.getString(R.string.chanriva_name_selection_rare))
+            .assertCountEquals(1)
         composeRule.onNodeWithText("やわらかひなた").assertHasClickAction()
         composeRule.onNodeWithText(localizedContext.getString(R.string.chanriva_name_selection_reroll))
             .assertHasClickAction()
@@ -75,12 +85,44 @@ class ChanrivaNameSelectionScreenshotTest {
         composeRule.onNodeWithText(localizedContext.getString(R.string.chanriva_name_selection_reroll))
             .performClick()
         composeRule.onNodeWithText("翠玉のほたる").assertIsDisplayed()
+        composeRule.onNodeWithText(localizedContext.getString(R.string.chanriva_name_selection_rare))
+            .assertDoesNotExist()
         composeRule.onNodeWithText(localizedContext.getString(R.string.chanriva_name_selection_rerolled))
             .assertIsDisplayed()
         composeRule.onNodeWithText(localizedContext.getString(R.string.chanriva_name_selection_reroll_used))
             .assertIsDisplayed()
         composeRule.onNodeWithText(localizedContext.getString(R.string.chanriva_name_selection_reroll_used))
             .assertIsNotEnabled()
+    }
+
+    @Test
+    fun renderThreeNormalCandidatesWithoutRareBadge() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val configuration = android.content.res.Configuration(context.resources.configuration).apply {
+            setLocale(Locale.JAPAN)
+        }
+        val localizedContext = context.createConfigurationContext(configuration)
+
+        composeRule.setContent {
+            CompositionLocalProvider(
+                LocalContext provides localizedContext,
+                LocalConfiguration provides configuration,
+            ) {
+                OthelloTheme {
+                    ChanrivaNameSelectionScreen(
+                        onBack = {},
+                        onNameConfirmed = {},
+                        initialHasRareCandidate = false,
+                    )
+                }
+            }
+        }
+
+        composeRule.onNodeWithText("やわらかひなた").assertIsDisplayed()
+        composeRule.onNodeWithText("ほんわか麻衣").assertIsDisplayed()
+        composeRule.onNodeWithText("のんびりかたつむり").assertIsDisplayed()
+        composeRule.onAllNodesWithText(localizedContext.getString(R.string.chanriva_name_selection_rare))
+            .assertDoesNotExist()
     }
 
     private fun awaitRenderedNameScreen(): Bitmap {

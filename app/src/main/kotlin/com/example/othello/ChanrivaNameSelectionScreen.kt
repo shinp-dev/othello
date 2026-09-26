@@ -52,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.random.Random
 
 internal data class ChanrivaNameCandidate(
     val id: String,
@@ -65,7 +66,7 @@ private val NameIvory = Color(0xFFFFF8E8)
 private val NameDeepGreen = Color(0xCC062A28)
 private val NameDeepBlue = Color(0xD9081C35)
 
-private fun initialChanrivaNameCandidates() = listOf(
+private fun initialChanrivaNameCandidates(hasRareCandidate: Boolean) = listOf(
     ChanrivaNameCandidate(
         id = "soft-sunlight",
         displayName = "やわらかひなた",
@@ -81,12 +82,16 @@ private fun initialChanrivaNameCandidates() = listOf(
     ChanrivaNameCandidate(
         id = "slow-snail",
         displayName = "のんびりかたつむり",
-        isRare = true,
-        plateRes = R.drawable.chanriva_name_plate_rare,
+        isRare = hasRareCandidate,
+        plateRes = if (hasRareCandidate) {
+            R.drawable.chanriva_name_plate_rare
+        } else {
+            R.drawable.chanriva_name_plate_emerald
+        },
     ),
 )
 
-private fun rerolledChanrivaNameCandidates() = listOf(
+private fun rerolledChanrivaNameCandidates(hasRareCandidate: Boolean) = listOf(
     ChanrivaNameCandidate(
         id = "quiet-moon-shadow",
         displayName = "しずかな月影",
@@ -102,8 +107,12 @@ private fun rerolledChanrivaNameCandidates() = listOf(
     ChanrivaNameCandidate(
         id = "emerald-firefly",
         displayName = "翠玉のほたる",
-        isRare = true,
-        plateRes = R.drawable.chanriva_name_plate_rare,
+        isRare = hasRareCandidate,
+        plateRes = if (hasRareCandidate) {
+            R.drawable.chanriva_name_plate_rare
+        } else {
+            R.drawable.chanriva_name_plate_starry
+        },
     ),
 )
 
@@ -111,10 +120,19 @@ private fun rerolledChanrivaNameCandidates() = listOf(
 internal fun ChanrivaNameSelectionScreen(
     onBack: () -> Unit,
     onNameConfirmed: (ChanrivaNameCandidate) -> Unit,
+    initialHasRareCandidate: Boolean? = null,
+    rerolledHasRareCandidate: Boolean? = null,
 ) {
     var selectedId by rememberSaveable { mutableStateOf("slow-snail") }
     var hasRerolled by rememberSaveable { mutableStateOf(false) }
-    val candidates = if (hasRerolled) rerolledChanrivaNameCandidates() else initialChanrivaNameCandidates()
+    var hasRareCandidate by rememberSaveable {
+        mutableStateOf(initialHasRareCandidate ?: Random.nextBoolean())
+    }
+    val candidates = if (hasRerolled) {
+        rerolledChanrivaNameCandidates(hasRareCandidate)
+    } else {
+        initialChanrivaNameCandidates(hasRareCandidate)
+    }
 
     val selectedCandidate = candidates.firstOrNull { it.id == selectedId } ?: candidates.last()
 
@@ -154,7 +172,6 @@ internal fun ChanrivaNameSelectionScreen(
                     verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 10.dp),
                 ) {
                     candidates.forEach { candidate ->
-                        if (candidate.isRare) Spacer(Modifier.height(18.dp))
                         ChanrivaNameCandidateCard(
                             candidate = candidate,
                             selected = candidate.id == selectedId,
@@ -169,6 +186,7 @@ internal fun ChanrivaNameSelectionScreen(
                     compact = compact,
                     hasRerolled = hasRerolled,
                     onReroll = {
+                        hasRareCandidate = rerolledHasRareCandidate ?: Random.nextBoolean()
                         selectedId = "emerald-firefly"
                         hasRerolled = true
                     },
