@@ -8,7 +8,6 @@ import android.provider.MediaStore
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
@@ -85,8 +84,8 @@ class ChanrivaNameSelectionScreenshotTest {
         composeRule.onNodeWithText(localizedContext.getString(R.string.chanriva_name_selection_reroll))
             .performClick()
         composeRule.onNodeWithText("翠玉のほたる").assertIsDisplayed()
-        composeRule.onNodeWithText(localizedContext.getString(R.string.chanriva_name_selection_rare))
-            .assertDoesNotExist()
+        composeRule.onAllNodesWithText(localizedContext.getString(R.string.chanriva_name_selection_rare))
+            .assertCountEquals(0)
         composeRule.onNodeWithText(localizedContext.getString(R.string.chanriva_name_selection_rerolled))
             .assertIsDisplayed()
         composeRule.onNodeWithText(localizedContext.getString(R.string.chanriva_name_selection_reroll_used))
@@ -122,7 +121,7 @@ class ChanrivaNameSelectionScreenshotTest {
         composeRule.onNodeWithText("ほんわか麻衣").assertIsDisplayed()
         composeRule.onNodeWithText("のんびりかたつむり").assertIsDisplayed()
         composeRule.onAllNodesWithText(localizedContext.getString(R.string.chanriva_name_selection_rare))
-            .assertDoesNotExist()
+            .assertCountEquals(0)
     }
 
     private fun awaitRenderedNameScreen(): Bitmap {
