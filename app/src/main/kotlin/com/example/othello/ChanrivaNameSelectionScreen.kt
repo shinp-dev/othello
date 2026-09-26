@@ -145,7 +145,7 @@ internal fun ChanrivaNameSelectionScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 NameBackButton(onBack)
-                Spacer(Modifier.height(if (compact) 10.dp else 16.dp))
+                Spacer(Modifier.height(if (compact) 74.dp else 80.dp))
                 NameSelectionHeader(titleSize = titleSize, compact = compact, hasRerolled = hasRerolled)
                 Spacer(Modifier.height(if (compact) 14.dp else 18.dp))
 
@@ -163,7 +163,7 @@ internal fun ChanrivaNameSelectionScreen(
                     }
                 }
 
-                Spacer(Modifier.height(if (compact) 14.dp else 18.dp))
+                Spacer(Modifier.height(if (compact) 28.dp else 32.dp))
                 NameSelectionActions(
                     compact = compact,
                     hasRerolled = hasRerolled,
@@ -321,8 +321,8 @@ private fun BoxScope.RareBadge() {
     Box(
         modifier = Modifier
             .align(Alignment.TopStart)
-            .offset(x = (-5).dp, y = (-8).dp)
-            .size(width = 112.dp, height = 56.dp),
+            .offset(x = (-4).dp, y = (-19).dp)
+            .size(width = 82.dp, height = 41.dp),
     ) {
         Image(
             painter = painterResource(R.drawable.chanriva_name_rare_badge),
@@ -332,9 +332,9 @@ private fun BoxScope.RareBadge() {
         )
         Text(
             text = appString(R.string.chanriva_name_selection_rare),
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 9.dp, top = 1.dp),
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 6.dp, top = 1.dp),
             color = NameIvory,
-            fontSize = 15.sp,
+            fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
         )
     }

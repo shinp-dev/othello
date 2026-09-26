@@ -45,7 +45,7 @@
     <string name="people_events_supporting">大会以外の企画やイベントを探す</string>
     <string name="people_social_title">交流する</string>
     <string name="people_social_supporting">待合掲示板・観戦・がんばえー！</string>
-    <string name="chanriva_name_selection_title">ちゃんりばネームを決めよう</string>
+    <string name="chanriva_name_selection_title">ちゃんりばネームを\n決めよう</string>
     <string name="chanriva_name_selection_supporting">対戦や交流で表示される名前です</string>
     <string name="chanriva_name_selection_reroll_available">あと1回だけ引き直せます</string>
     <string name="chanriva_name_selection_rerolled">引き直しは使用済みです</string>
