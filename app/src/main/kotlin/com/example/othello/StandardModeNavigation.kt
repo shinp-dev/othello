@@ -63,6 +63,7 @@ internal enum class StandardFeature(
 internal enum class AuthenticatedModeDestination {
     MODE_SELECTION,
     PEOPLE_HOME,
+    PEOPLE_NAME_SELECTION,
     PEOPLE_MATCH,
     PEOPLE_SOCIAL,
     STANDARD_HOME,
@@ -94,6 +95,7 @@ internal fun authenticatedModeBackDestination(
 ): AuthenticatedModeDestination? = when (current) {
     AuthenticatedModeDestination.STANDARD_HOME -> AuthenticatedModeDestination.MODE_SELECTION
     AuthenticatedModeDestination.PEOPLE_HOME -> AuthenticatedModeDestination.MODE_SELECTION
+    AuthenticatedModeDestination.PEOPLE_NAME_SELECTION -> AuthenticatedModeDestination.PEOPLE_HOME
     AuthenticatedModeDestination.PEOPLE_MATCH,
     AuthenticatedModeDestination.PEOPLE_SOCIAL -> AuthenticatedModeDestination.PEOPLE_HOME
     AuthenticatedModeDestination.STANDARD_AI,
@@ -127,9 +129,13 @@ internal fun AuthenticatedModeRoute(
         )
         AuthenticatedModeDestination.PEOPLE_HOME -> PeopleEnjoyHomeScreen(
             onBack = { destination = AuthenticatedModeDestination.MODE_SELECTION },
-            onPlay = { destination = AuthenticatedModeDestination.PEOPLE_MATCH },
+            onPlay = { destination = AuthenticatedModeDestination.PEOPLE_NAME_SELECTION },
             onEvents = { destination = AuthenticatedModeDestination.STANDARD_REAL_EVENT },
             onCommunity = { destination = AuthenticatedModeDestination.PEOPLE_SOCIAL },
+        )
+        AuthenticatedModeDestination.PEOPLE_NAME_SELECTION -> ChanrivaNameSelectionScreen(
+            onBack = { destination = AuthenticatedModeDestination.PEOPLE_HOME },
+            onNameConfirmed = { destination = AuthenticatedModeDestination.PEOPLE_MATCH },
         )
         AuthenticatedModeDestination.PEOPLE_MATCH -> PeopleComingSoonScreen(
             title = appString(R.string.people_play_title),
