@@ -6,7 +6,6 @@ import android.os.Environment
 import android.provider.MediaStore
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -39,7 +38,6 @@ class ChanrivaNameSelectionScreenshotTest {
 
         composeRule.setContent {
             CompositionLocalProvider(
-                LocalContext provides localizedContext,
                 LocalConfiguration provides configuration,
             ) {
                 OthelloTheme {
