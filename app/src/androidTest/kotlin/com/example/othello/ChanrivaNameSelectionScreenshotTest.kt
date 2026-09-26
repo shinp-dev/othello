@@ -40,7 +40,7 @@ class ChanrivaNameSelectionScreenshotTest {
 
         composeRule.setContent {
             CompositionLocalProvider(
-                LocalContext provides context,
+                LocalContext provides localizedContext,
                 LocalConfiguration provides configuration,
             ) {
                 OthelloTheme {
