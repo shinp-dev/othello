@@ -292,9 +292,15 @@ private fun StandardTipTierSectionHeader(tier: StandardWinningTipTier) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = if (tier == StandardWinningTipTier.BASIC) "▤" else "▤▤",
+                text = when (tier) {
+                    StandardWinningTipTier.BASIC -> "Ⅰ"
+                    StandardWinningTipTier.STEP_UP -> "Ⅱ"
+                    StandardWinningTipTier.EXPERT -> "Ⅲ"
+                },
                 modifier = Modifier.width(44.dp),
-                style = MaterialTheme.typography.titleMedium,
+                fontSize = 24.sp,
+                lineHeight = 28.sp,
+                fontWeight = FontWeight.SemiBold,
                 color = TipsGold,
                 textAlign = TextAlign.Center,
             )
