@@ -45,6 +45,14 @@
     <string name="people_events_supporting">Discover Othello events and activities</string>
     <string name="people_social_title">Connect</string>
     <string name="people_social_supporting">Lobby board · Watch · Cheer</string>
+    <string name="chanriva_name_selection_title">Choose your Chanriva name</string>
+    <string name="chanriva_name_selection_supporting">This name will be shown in matches and social features.</string>
+    <string name="chanriva_name_selection_reroll_available">You can redraw one more time.</string>
+    <string name="chanriva_name_selection_rerolled">Redraw already used.</string>
+    <string name="chanriva_name_selection_rare">Rare</string>
+    <string name="chanriva_name_selection_reroll">Redraw once</string>
+    <string name="chanriva_name_selection_reroll_used">Redraw used</string>
+    <string name="chanriva_name_selection_confirm">Use this name</string>
     <string name="switch_to_advanced_mode">Switch to Advanced mode</string>
     <string name="feature_coming_soon">This feature is coming soon.</string>
     <string name="back_to_standard_home">Back to Home</string>
