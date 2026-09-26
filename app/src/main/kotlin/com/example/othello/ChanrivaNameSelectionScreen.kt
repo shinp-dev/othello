@@ -279,17 +279,16 @@ private fun ChanrivaNameCandidateCard(
             .height(height)
             .shadow(if (selected) 8.dp else 2.dp, cardShape, clip = false)
             .clickable(role = Role.Button, onClick = onClick)
-            .semantics { role = Role.Button }
-            .then(
-                if (selected) Modifier.border(2.dp, NameGold, cardShape)
-                else Modifier.border(1.dp, NameGold.copy(alpha = 0.68f), cardShape),
-            ),
+            .semantics { role = Role.Button },
         contentAlignment = Alignment.Center,
     ) {
         Image(
             painter = painterResource(candidate.plateRes),
             contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().then(
+                if (selected) Modifier.border(2.dp, NameGold, cardShape)
+                else Modifier.border(1.dp, NameGold.copy(alpha = 0.68f), cardShape),
+            ),
             contentScale = ContentScale.FillBounds,
         )
         if (selected) {
