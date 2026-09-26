@@ -17,6 +17,9 @@ import com.example.othello.network.CURRENT_PROTOCOL_VERSION
 import com.example.othello.network.MAX_MATCH_NEGOTIATION_EPOCH
 import com.example.othello.profile.AccountDeletionRepository
 import com.example.othello.profile.CurrentRatingRepository
+import com.example.othello.profile.PlayDisplayName
+import com.example.othello.profile.PlayProfileLookup
+import com.example.othello.profile.PlayProfileRepository
 import com.example.othello.profile.RatingSummary
 import com.example.othello.profile.YesterdayRanking
 import com.example.othello.profile.isTokyoYesterday
@@ -772,6 +775,88 @@ internal class SupabaseCurrentRatingRepository(private val client: SupabaseClien
     }
 }
 
+@Serializable
+private data class PlayDisplayNameRow(
+    val id: Long,
+    @SerialName("display_name") val displayName: String,
+    @SerialName("is_rare") val isRare: Boolean,
+    @SerialName("sort_order") val sortOrder: Int,
+) {
+    fun toDomain() = PlayDisplayName(id, displayName, isRare, sortOrder)
+}
+
+@Serializable
+private data class PlayProfileRow(
+    @SerialName("display_name_id") val displayNameId: Long,
+)
+
+@Serializable
+private data class PlayProfileInsertRow(
+    @SerialName("user_id") val userId: String,
+    @SerialName("display_name_id") val displayNameId: Long,
+)
+
+private const val PLAY_PROFILE_NETWORK_TIMEOUT_MILLIS = 10_000L
+
+private suspend fun <T> boundedPlayProfileNetwork(block: suspend () -> T): T = try {
+    withTimeout(PLAY_PROFILE_NETWORK_TIMEOUT_MILLIS) { block() }
+} catch (timeout: TimeoutCancellationException) {
+    throw IllegalStateException("Play-profile network request timed out", timeout)
+}
+
+/** All reads and inserts are scoped to the current Supabase Auth identity. */
+internal class SupabasePlayProfileRepository(
+    private val client: SupabaseClient,
+) : PlayProfileRepository {
+    override suspend fun currentAuthenticatedUserId(): String =
+        client.auth.currentUserOrNull()?.id?.takeIf(String::isNotBlank)
+            ?: throw IllegalStateException("Authenticated Supabase user is required for play profiles")
+
+    override suspend fun findCurrentUserProfile(): PlayProfileLookup = try {
+        val userId = currentAuthenticatedUserId()
+        val rows = boundedPlayProfileNetwork {
+            client.from("play_profiles")
+                .select(columns = Columns.list("display_name_id")) {
+                    filter { eq("user_id", userId) }
+                    limit(2)
+                }
+                .decodeList<PlayProfileRow>()
+        }
+        when (rows.size) {
+            0 -> PlayProfileLookup.Missing
+            1 -> PlayProfileLookup.Exists(rows.single().displayNameId)
+            else -> error("More than one play profile was returned for the current user")
+        }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Exception) {
+        PlayProfileLookup.Failed(error)
+    }
+
+    override suspend fun getActiveDisplayNames(): List<PlayDisplayName> = boundedPlayProfileNetwork {
+        client.from("play_display_names")
+            .select(columns = Columns.list("id", "display_name", "is_rare", "sort_order")) {
+                filter { eq("is_active", true) }
+                order("sort_order", Order.ASCENDING)
+            }
+            .decodeList<PlayDisplayNameRow>()
+            .map(PlayDisplayNameRow::toDomain)
+    }
+
+    override suspend fun insertCurrentUserProfile(displayNameId: Long) {
+        require(displayNameId > 0) { "displayNameId must be positive" }
+        val authenticatedUserId = currentAuthenticatedUserId()
+        boundedPlayProfileNetwork {
+            client.from("play_profiles").insert(
+                PlayProfileInsertRow(
+                    userId = authenticatedUserId,
+                    displayNameId = displayNameId,
+                ),
+            )
+        }
+    }
+}
+
 internal class InvalidGameRecordRowsException : IllegalStateException("Online Game Record rows were present but none were valid")
 
 private val gameRecordJson = Json { ignoreUnknownKeys = true }
@@ -1110,6 +1195,7 @@ class SupabaseComponent private constructor(
     val onlineMatchRepository: OnlineMatchRepository,
     val accountDeletionRepository: AccountDeletionRepository,
     val currentRatingRepository: CurrentRatingRepository,
+    val playProfileRepository: PlayProfileRepository,
     val gameRecordRepository: GameRecordRepository,
     val researchParticipationRepository: ResearchParticipationRepository,
     val researchPositionRepository: ResearchPositionRepository,
@@ -1140,6 +1226,7 @@ class SupabaseComponent private constructor(
             onlineMatchRepository = SupabaseOnlineMatchRepository(client),
             accountDeletionRepository = SupabaseAccountDeletionRepository(client),
             currentRatingRepository = SupabaseCurrentRatingRepository(client),
+            playProfileRepository = SupabasePlayProfileRepository(client),
             gameRecordRepository = SupabaseGameRecordRepository(client),
             researchParticipationRepository = SupabaseResearchParticipationRepository(client),
             researchPositionRepository = SupabaseResearchPositionRepository(client),

@@ -1,6 +1,6 @@
 package com.example.othello
 
-import androidx.annotation.DrawableRes
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,10 +33,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +41,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -52,89 +49,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.random.Random
-
-internal data class ChanrivaNameCandidate(
-    val id: String,
-    val displayName: String,
-    val isRare: Boolean,
-    @DrawableRes val plateRes: Int,
-)
 
 private val NameGold = Color(0xFFFFDA74)
 private val NameIvory = Color(0xFFFFF8E8)
 private val NameDeepGreen = Color(0xCC062A28)
 private val NameDeepBlue = Color(0xD9081C35)
 
-private fun initialChanrivaNameCandidates(hasRareCandidate: Boolean) = listOf(
-    ChanrivaNameCandidate(
-        id = "soft-sunlight",
-        displayName = "やわらかひなた",
-        isRare = false,
-        plateRes = R.drawable.chanriva_name_plate_emerald,
-    ),
-    ChanrivaNameCandidate(
-        id = "gentle-mai",
-        displayName = "ほんわか麻衣",
-        isRare = false,
-        plateRes = R.drawable.chanriva_name_plate_starry,
-    ),
-    ChanrivaNameCandidate(
-        id = "slow-snail",
-        displayName = "のんびりかたつむり",
-        isRare = hasRareCandidate,
-        plateRes = if (hasRareCandidate) {
-            R.drawable.chanriva_name_plate_rare
-        } else {
-            R.drawable.chanriva_name_plate_emerald
-        },
-    ),
-)
-
-private fun rerolledChanrivaNameCandidates(hasRareCandidate: Boolean) = listOf(
-    ChanrivaNameCandidate(
-        id = "quiet-moon-shadow",
-        displayName = "しずかな月影",
-        isRare = false,
-        plateRes = R.drawable.chanriva_name_plate_starry,
-    ),
-    ChanrivaNameCandidate(
-        id = "star-reader",
-        displayName = "星読みしおり",
-        isRare = false,
-        plateRes = R.drawable.chanriva_name_plate_emerald,
-    ),
-    ChanrivaNameCandidate(
-        id = "emerald-firefly",
-        displayName = "翠玉のほたる",
-        isRare = hasRareCandidate,
-        plateRes = if (hasRareCandidate) {
-            R.drawable.chanriva_name_plate_rare
-        } else {
-            R.drawable.chanriva_name_plate_starry
-        },
-    ),
-)
-
 @Composable
 internal fun ChanrivaNameSelectionScreen(
+    candidates: List<ChanrivaNameCandidate>,
+    selectedId: Long?,
+    hasRerolled: Boolean,
+    isBusy: Boolean,
     onBack: () -> Unit,
-    onNameConfirmed: (ChanrivaNameCandidate) -> Unit,
-    initialHasRareCandidate: Boolean? = null,
-    rerolledHasRareCandidate: Boolean? = null,
+    onCandidateSelected: (Long) -> Unit,
+    onReroll: () -> Unit,
+    onNameConfirmed: (Long) -> Unit,
 ) {
-    var selectedId by rememberSaveable { mutableStateOf("slow-snail") }
-    var hasRerolled by rememberSaveable { mutableStateOf(false) }
-    var hasRareCandidate by rememberSaveable {
-        mutableStateOf(initialHasRareCandidate ?: Random.nextBoolean())
-    }
-    val candidates = if (hasRerolled) {
-        rerolledChanrivaNameCandidates(hasRareCandidate)
-    } else {
-        initialChanrivaNameCandidates(hasRareCandidate)
-    }
-
-    val selectedCandidate = candidates.firstOrNull { it.id == selectedId } ?: candidates.last()
+    require(candidates.size == 3) { "Chanriva name selection must display exactly three candidates" }
+    BackHandler(enabled = true) { }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val compact = maxWidth < 350.dp
@@ -162,7 +95,7 @@ internal fun ChanrivaNameSelectionScreen(
                     .padding(top = 10.dp, bottom = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                NameBackButton(onBack)
+                NameBackButton(onClick = onBack, enabled = false)
                 Spacer(Modifier.height(if (compact) 74.dp else 80.dp))
                 NameSelectionHeader(titleSize = titleSize, compact = compact, hasRerolled = hasRerolled)
                 Spacer(Modifier.height(if (compact) 14.dp else 18.dp))
@@ -176,7 +109,8 @@ internal fun ChanrivaNameSelectionScreen(
                             candidate = candidate,
                             selected = candidate.id == selectedId,
                             height = candidateHeight,
-                            onClick = { selectedId = candidate.id },
+                            enabled = !isBusy,
+                            onClick = { onCandidateSelected(candidate.id) },
                         )
                     }
                 }
@@ -185,12 +119,10 @@ internal fun ChanrivaNameSelectionScreen(
                 NameSelectionActions(
                     compact = compact,
                     hasRerolled = hasRerolled,
-                    onReroll = {
-                        hasRareCandidate = rerolledHasRareCandidate ?: Random.nextBoolean()
-                        selectedId = "emerald-firefly"
-                        hasRerolled = true
-                    },
-                    onConfirm = { onNameConfirmed(selectedCandidate) },
+                    isBusy = isBusy,
+                    canConfirm = selectedId != null && candidates.any { it.id == selectedId },
+                    onReroll = onReroll,
+                    onConfirm = { selectedId?.let(onNameConfirmed) },
                 )
             }
         }
@@ -198,7 +130,7 @@ internal fun ChanrivaNameSelectionScreen(
 }
 
 @Composable
-private fun NameBackButton(onClick: () -> Unit) {
+private fun NameBackButton(onClick: () -> Unit, enabled: Boolean) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -217,8 +149,9 @@ private fun NameBackButton(onClick: () -> Unit) {
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .clickable(role = Role.Button, onClick = onClick)
-                    .semantics { role = Role.Button },
+                    .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+                    .semantics { role = Role.Button }
+                    .testTag("chanriva_name_back_button"),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -287,6 +220,7 @@ private fun ChanrivaNameCandidateCard(
     candidate: ChanrivaNameCandidate,
     selected: Boolean,
     height: androidx.compose.ui.unit.Dp,
+    enabled: Boolean,
     onClick: () -> Unit,
 ) {
     val cardShape = RoundedCornerShape(20.dp)
@@ -296,8 +230,9 @@ private fun ChanrivaNameCandidateCard(
             .fillMaxWidth()
             .height(height)
             .shadow(if (selected) 8.dp else 2.dp, cardShape, clip = false)
-            .clickable(role = Role.Button, onClick = onClick)
-            .semantics { role = Role.Button },
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .semantics { role = Role.Button }
+            .testTag("chanriva_name_candidate_${candidate.id}"),
         contentAlignment = Alignment.Center,
     ) {
         Image(
@@ -362,6 +297,8 @@ private fun BoxScope.RareBadge() {
 private fun NameSelectionActions(
     compact: Boolean,
     hasRerolled: Boolean,
+    isBusy: Boolean,
+    canConfirm: Boolean,
     onReroll: () -> Unit,
     onConfirm: () -> Unit,
 ) {
@@ -377,15 +314,17 @@ private fun NameSelectionActions(
                 appString(R.string.chanriva_name_selection_reroll)
             },
             icon = { Icon(Icons.Default.Cached, contentDescription = null, modifier = Modifier.size(21.dp)) },
-            enabled = !hasRerolled,
+            enabled = !hasRerolled && !isBusy,
             primary = false,
+            testTag = "chanriva_name_reroll_button",
             onClick = onReroll,
         )
         NameActionButton(
             text = appString(R.string.chanriva_name_selection_confirm),
             icon = { Icon(Icons.Default.ChevronRight, contentDescription = null, modifier = Modifier.size(24.dp)) },
-            enabled = true,
+            enabled = canConfirm && !isBusy,
             primary = true,
+            testTag = "chanriva_name_confirm_button",
             onClick = onConfirm,
         )
     }
@@ -397,6 +336,7 @@ private fun NameActionButton(
     icon: @Composable () -> Unit,
     enabled: Boolean,
     primary: Boolean,
+    testTag: String,
     onClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(999.dp)
@@ -418,7 +358,8 @@ private fun NameActionButton(
                 shape = shape,
             )
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .semantics { role = Role.Button },
+            .semantics { role = Role.Button }
+            .testTag(testTag),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {

@@ -135,7 +135,14 @@ private fun AuthenticatedRoot(
     sessionOwner: OnlineSessionViewModel = viewModel(),
 ) {
     AuthGate(sessionOwner) { session ->
-        AuthenticatedModeRoute(session.userId) { onSwitchMode ->
+        val application = LocalContext.current.applicationContext as OthelloApplication
+        val playProfileRepository = sessionOwner.component?.playProfileRepository
+        val playProfileFlow = remember(playProfileRepository, application) {
+            playProfileRepository?.let {
+                PlayProfileSelectionFlow(it, application.pendingPlayProfileStore)
+            }
+        }
+        AuthenticatedModeRoute(session.userId, playProfileFlow) { onSwitchMode ->
             AuthenticatedApp(
                 debugAutoPlay = debugAutoPlay,
                 debugTimeControlMillis = debugTimeControlMillis,

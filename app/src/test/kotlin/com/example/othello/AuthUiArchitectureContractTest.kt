@@ -29,7 +29,7 @@ class AuthUiArchitectureContractTest {
         assertFalse("AuthGate(" in versionRootBody)
         assertTrue("sessionOwner: OnlineSessionViewModel = viewModel()" in authenticatedRootBody)
         assertTrue("AuthGate(sessionOwner)" in authenticatedRootBody)
-        assertTrue("AuthenticatedModeRoute(session.userId)" in authenticatedRootBody)
+        assertTrue("AuthenticatedModeRoute(session.userId, playProfileFlow)" in authenticatedRootBody)
         assertTrue("private fun AuthenticatedApp(" in mainActivity)
         assertTrue("session: UserSession" in mainActivity)
         assertFalse("currentSession()" in mainActivity)
