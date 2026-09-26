@@ -1,7 +1,6 @@
 package com.example.othello
 
 import androidx.annotation.DrawableRes
-import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -36,7 +35,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -45,10 +43,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -127,11 +123,10 @@ internal fun ChanrivaNameSelectionScreen(
         val horizontalPadding = if (compact) 12.dp else 16.dp
         val titleSize = if (compact) 27.sp else 30.sp
         val candidateHeight = if (compact) 68.dp else 74.dp
-        val backgroundImage = rememberNameAsset(R.drawable.chanriva_name_background)
 
         Box(modifier = Modifier.fillMaxSize()) {
             Image(
-                bitmap = backgroundImage,
+                painter = painterResource(R.drawable.chanriva_name_background),
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
@@ -277,7 +272,6 @@ private fun ChanrivaNameCandidateCard(
 ) {
     val cardShape = RoundedCornerShape(20.dp)
     val compact = height < 70.dp
-    val plateImage = rememberNameAsset(candidate.plateRes)
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -292,7 +286,7 @@ private fun ChanrivaNameCandidateCard(
         contentAlignment = Alignment.Center,
     ) {
         Image(
-            bitmap = plateImage,
+            painter = painterResource(candidate.plateRes),
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.FillBounds,
@@ -324,7 +318,6 @@ private fun ChanrivaNameCandidateCard(
 
 @Composable
 private fun BoxScope.RareBadge() {
-    val badgeImage = rememberNameAsset(R.drawable.chanriva_name_rare_badge)
     Box(
         modifier = Modifier
             .align(Alignment.TopStart)
@@ -332,7 +325,7 @@ private fun BoxScope.RareBadge() {
             .size(width = 112.dp, height = 56.dp),
     ) {
         Image(
-            bitmap = badgeImage,
+            painter = painterResource(R.drawable.chanriva_name_rare_badge),
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.FillBounds,
@@ -344,18 +337,6 @@ private fun BoxScope.RareBadge() {
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
         )
-    }
-}
-
-@Composable
-private fun rememberNameAsset(@DrawableRes resourceId: Int): ImageBitmap {
-    val resources = LocalContext.current.resources
-    return remember(resources, resourceId) {
-        val bytes = resources.openRawResource(resourceId).use { it.readBytes() }
-        val bitmap = checkNotNull(BitmapFactory.decodeByteArray(bytes, 0, bytes.size)) {
-            "Unable to decode Chanriva name selection image resource: $resourceId"
-        }
-        bitmap.asImageBitmap()
     }
 }
 

@@ -8,7 +8,12 @@ for width in 320 360 390; do
   adb shell am force-stop com.shinpstudio.chanriva || true
   ./gradlew :app:connectedDebugAndroidTest \
     -Pandroid.testInstrumentationRunnerArguments.class=com.example.othello.ChanrivaNameSelectionScreenshotTest \
-    -Pandroid.testInstrumentationRunnerArguments.captureWidth="${width}"
+    -Pandroid.testInstrumentationRunnerArguments.captureWidth="${width}" || {
+      adb pull \
+        "/sdcard/Download/ChanrivaPreviews/chanriva-name-selection-${width}dp.png" \
+        "screenshots/chanriva-name-selection-${width}dp.png" || true
+      exit 1
+    }
   adb pull \
     "/sdcard/Download/ChanrivaPreviews/chanriva-name-selection-${width}dp.png" \
     "screenshots/chanriva-name-selection-${width}dp.png"

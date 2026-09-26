@@ -48,6 +48,12 @@ class ChanrivaNameSelectionScreenshotTest {
             }
         }
 
+        composeRule.waitForIdle()
+        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        assertEquals("Screenshot pixel width for ${width}dp emulator", width, bitmap.width)
+        saveScreenshot(context, bitmap, "chanriva-name-selection-${width}dp.png")
+        bitmap.recycle()
+
         val visibleLabels = listOf(
             localizedContext.getString(R.string.chanriva_name_selection_title),
             localizedContext.getString(R.string.chanriva_name_selection_supporting),
@@ -63,12 +69,6 @@ class ChanrivaNameSelectionScreenshotTest {
         composeRule.onNodeWithText("やわらかひなた").assertHasClickAction()
         composeRule.onNodeWithText(localizedContext.getString(R.string.chanriva_name_selection_reroll))
             .assertHasClickAction()
-
-        composeRule.waitForIdle()
-        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
-        assertEquals("Screenshot pixel width for ${width}dp emulator", width, bitmap.width)
-        saveScreenshot(context, bitmap, "chanriva-name-selection-${width}dp.png")
-        bitmap.recycle()
 
         composeRule.onNodeWithText("やわらかひなた").performClick()
         composeRule.onNodeWithText(localizedContext.getString(R.string.chanriva_name_selection_reroll))
