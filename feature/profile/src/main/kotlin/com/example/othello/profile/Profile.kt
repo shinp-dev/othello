@@ -42,3 +42,29 @@ interface CurrentRatingRepository {
     /** Additive summary API; old callers can continue reading only current rating. */
     suspend fun getRatingSummary(): RatingSummary = RatingSummary(getCurrentRating(), null)
 }
+
+/** A selectable display-name row returned from the active name catalog. */
+data class PlayDisplayName(
+    val id: Long,
+    val displayName: String,
+    val isRare: Boolean,
+    val sortOrder: Int,
+)
+
+/** Distinguishes an absent profile from a failed authenticated query. */
+sealed interface PlayProfileLookup {
+    data class Exists(val displayNameId: Long) : PlayProfileLookup
+    data object Missing : PlayProfileLookup
+    data class Failed(val cause: Throwable) : PlayProfileLookup
+}
+
+/**
+ * Play-profile operations always act on the SDK's current authenticated user.
+ * The caller cannot choose a user id for a profile lookup or insert.
+ */
+interface PlayProfileRepository {
+    suspend fun currentAuthenticatedUserId(): String
+    suspend fun findCurrentUserProfile(): PlayProfileLookup
+    suspend fun getActiveDisplayNames(): List<PlayDisplayName>
+    suspend fun insertCurrentUserProfile(displayNameId: Long)
+}

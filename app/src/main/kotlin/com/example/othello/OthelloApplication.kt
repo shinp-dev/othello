@@ -41,4 +41,8 @@ class OthelloApplication : Application() {
     internal val opponentPacks by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         androidOpponentPackRepository(this)
     }
+
+    internal val pendingPlayProfileStore by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        SharedPreferencesPendingPlayProfileStore(this)
+    }
 }

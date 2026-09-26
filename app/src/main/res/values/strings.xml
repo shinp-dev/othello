@@ -53,6 +53,7 @@
     <string name="chanriva_name_selection_reroll">Redraw once</string>
     <string name="chanriva_name_selection_reroll_used">Redraw used</string>
     <string name="chanriva_name_selection_confirm">Use this name</string>
+    <string name="play_profile_network_error">Your connection is unstable. Please try again in a moment.</string>
     <string name="switch_to_advanced_mode">Switch to Advanced mode</string>
     <string name="feature_coming_soon">This feature is coming soon.</string>
     <string name="back_to_standard_home">Back to Home</string>

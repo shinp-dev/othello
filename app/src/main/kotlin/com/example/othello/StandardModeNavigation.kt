@@ -28,12 +28,19 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import coil3.compose.AsyncImage
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +53,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.example.othello.designsystem.ChanrivaScreenHeader
 import com.example.othello.designsystem.ChanrivaSpacing
 
@@ -95,7 +104,7 @@ internal fun authenticatedModeBackDestination(
 ): AuthenticatedModeDestination? = when (current) {
     AuthenticatedModeDestination.STANDARD_HOME -> AuthenticatedModeDestination.MODE_SELECTION
     AuthenticatedModeDestination.PEOPLE_HOME -> AuthenticatedModeDestination.MODE_SELECTION
-    AuthenticatedModeDestination.PEOPLE_NAME_SELECTION -> AuthenticatedModeDestination.PEOPLE_HOME
+    AuthenticatedModeDestination.PEOPLE_NAME_SELECTION -> null
     AuthenticatedModeDestination.PEOPLE_MATCH,
     AuthenticatedModeDestination.PEOPLE_SOCIAL -> AuthenticatedModeDestination.PEOPLE_HOME
     AuthenticatedModeDestination.STANDARD_AI,
@@ -111,51 +120,138 @@ internal fun authenticatedModeBackDestination(
 @Composable
 internal fun AuthenticatedModeRoute(
     userId: String,
+    playProfileFlow: PlayProfileSelectionFlow? = null,
     advancedContent: @Composable (onSwitchMode: () -> Unit) -> Unit,
 ) {
     var destination by rememberSaveable(userId) {
         mutableStateOf(initialAuthenticatedModeDestination())
     }
     var selectedPackId by rememberSaveable(userId) { mutableStateOf<String?>(null) }
-    var peopleDisplayName by rememberSaveable(userId) { mutableStateOf<String?>(null) }
     var pendingPeopleDestination by rememberSaveable(userId) {
         mutableStateOf(AuthenticatedModeDestination.PEOPLE_MATCH)
     }
-    val backDestination = authenticatedModeBackDestination(destination)
-    BackHandler(enabled = backDestination != null) {
-        destination = requireNotNull(backDestination)
+    var nameCandidates by rememberSaveable(userId, stateSaver = chanrivaNameCandidateListSaver) {
+        mutableStateOf(emptyList<ChanrivaNameCandidate>())
+    }
+    var selectedNameId by rememberSaveable(userId) { mutableStateOf<Long?>(null) }
+    var hasRerolled by rememberSaveable(userId) { mutableStateOf(false) }
+    var profileOperationBusy by remember(userId) { mutableStateOf(false) }
+    var profileNetworkErrorEvent by remember(userId) { mutableStateOf(0) }
+    val snackbarHostState = remember(userId) { SnackbarHostState() }
+    val profileNetworkErrorMessage = appString(R.string.play_profile_network_error)
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(profileNetworkErrorEvent) {
+        if (profileNetworkErrorEvent > 0) {
+            val showing = launch {
+                snackbarHostState.showSnackbar(
+                    message = profileNetworkErrorMessage,
+                    duration = SnackbarDuration.Indefinite,
+                )
+            }
+            delay(3_000L)
+            snackbarHostState.currentSnackbarData?.dismiss()
+            showing.join()
+        }
     }
 
-    when (destination) {
+    fun showProfileNetworkError() {
+        destination = AuthenticatedModeDestination.PEOPLE_HOME
+        profileOperationBusy = false
+        profileNetworkErrorEvent += 1
+    }
+
+    fun enterPeopleDestination(target: AuthenticatedModeDestination) {
+        if (profileOperationBusy) return
+        pendingPeopleDestination = target
+        profileOperationBusy = true
+        scope.launch {
+            try {
+                when (val result = playProfileFlow?.enter(userId) ?: PlayProfileEntryResult.NetworkError) {
+                    PlayProfileEntryResult.Proceed -> destination = pendingPeopleDestination
+                    is PlayProfileEntryResult.ChooseName -> {
+                        nameCandidates = result.candidates
+                        selectedNameId = null
+                        hasRerolled = false
+                        destination = AuthenticatedModeDestination.PEOPLE_NAME_SELECTION
+                    }
+                    PlayProfileEntryResult.NetworkError -> showProfileNetworkError()
+                }
+            } finally {
+                profileOperationBusy = false
+            }
+        }
+    }
+
+    val backDestination = authenticatedModeBackDestination(destination)
+    BackHandler(
+        enabled = profileOperationBusy ||
+            (backDestination != null && destination != AuthenticatedModeDestination.PEOPLE_NAME_SELECTION),
+    ) {
+        if (!profileOperationBusy) backDestination?.let { destination = it }
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        when (destination) {
         AuthenticatedModeDestination.MODE_SELECTION -> ModeSelectionScreen(
             onSelect = { destination = destinationFor(it) },
             onPeopleAndEnjoy = { destination = AuthenticatedModeDestination.PEOPLE_HOME },
         )
         AuthenticatedModeDestination.PEOPLE_HOME -> PeopleEnjoyHomeScreen(
-            onBack = { destination = AuthenticatedModeDestination.MODE_SELECTION },
-            onPlay = {
-                pendingPeopleDestination = AuthenticatedModeDestination.PEOPLE_MATCH
-                destination = if (peopleDisplayName == null) {
-                    AuthenticatedModeDestination.PEOPLE_NAME_SELECTION
-                } else {
-                    AuthenticatedModeDestination.PEOPLE_MATCH
-                }
+            onBack = {
+                if (!profileOperationBusy) destination = AuthenticatedModeDestination.MODE_SELECTION
             },
-            onEvents = { destination = AuthenticatedModeDestination.STANDARD_REAL_EVENT },
-            onCommunity = {
-                pendingPeopleDestination = AuthenticatedModeDestination.PEOPLE_SOCIAL
-                destination = if (peopleDisplayName == null) {
-                    AuthenticatedModeDestination.PEOPLE_NAME_SELECTION
-                } else {
-                    AuthenticatedModeDestination.PEOPLE_SOCIAL
-                }
+            onPlay = { enterPeopleDestination(AuthenticatedModeDestination.PEOPLE_MATCH) },
+            onEvents = {
+                if (!profileOperationBusy) destination = AuthenticatedModeDestination.STANDARD_REAL_EVENT
             },
+            onCommunity = { enterPeopleDestination(AuthenticatedModeDestination.PEOPLE_SOCIAL) },
         )
         AuthenticatedModeDestination.PEOPLE_NAME_SELECTION -> ChanrivaNameSelectionScreen(
-            onBack = { destination = AuthenticatedModeDestination.PEOPLE_HOME },
-            onNameConfirmed = {
-                peopleDisplayName = it.displayName
-                destination = pendingPeopleDestination
+            candidates = nameCandidates,
+            selectedId = selectedNameId,
+            hasRerolled = hasRerolled,
+            isBusy = profileOperationBusy,
+            onBack = {},
+            onCandidateSelected = { selectedNameId = it },
+            onReroll = {
+                if (!profileOperationBusy && !hasRerolled) {
+                    profileOperationBusy = true
+                    scope.launch {
+                        try {
+                            val rerolled = playProfileFlow?.reroll(userId, nameCandidates)
+                            if (rerolled == null) {
+                                showProfileNetworkError()
+                            } else {
+                                nameCandidates = rerolled
+                                selectedNameId = null
+                                hasRerolled = true
+                            }
+                        } finally {
+                            profileOperationBusy = false
+                        }
+                    }
+                }
+            },
+            onNameConfirmed = { selectedId ->
+                if (!profileOperationBusy) {
+                    profileOperationBusy = true
+                    scope.launch {
+                        try {
+                            val confirmed = playProfileFlow?.confirm(userId, selectedId, nameCandidates) == true
+                            if (confirmed) {
+                                nameCandidates = emptyList()
+                                selectedNameId = null
+                                hasRerolled = false
+                                destination = pendingPeopleDestination
+                            } else {
+                                showProfileNetworkError()
+                            }
+                        } finally {
+                            profileOperationBusy = false
+                        }
+                    }
+                }
             },
         )
         AuthenticatedModeDestination.PEOPLE_MATCH -> PeopleComingSoonScreen(
@@ -211,8 +307,31 @@ internal fun AuthenticatedModeRoute(
                 else -> error("Not a Standard destination: $destination")
             }
         }
+        }
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding(),
+        )
     }
 }
+
+private val chanrivaNameCandidateListSaver = listSaver<List<ChanrivaNameCandidate>, String>(
+    save = { candidates ->
+        candidates.flatMap { candidate ->
+            listOf(candidate.id.toString(), candidate.displayName, candidate.isRare.toString(), candidate.plateRes.toString())
+        }
+    },
+    restore = { values ->
+        values.chunked(4).map { row ->
+            ChanrivaNameCandidate(
+                id = requireNotNull(row[0].toLongOrNull()),
+                displayName = row[1],
+                isRare = row[2].toBooleanStrict(),
+                plateRes = requireNotNull(row[3].toIntOrNull()),
+            )
+        }
+    },
+)
 
 @Composable
 internal fun StandardHomeScreen(

@@ -75,6 +75,10 @@ class StandardModeNavigationTest {
                 authenticatedModeBackDestination(destination),
             )
         }
+        assertEquals(
+            null,
+            authenticatedModeBackDestination(AuthenticatedModeDestination.PEOPLE_NAME_SELECTION),
+        )
     }
 
     @Test

@@ -6,17 +6,24 @@ import android.os.Environment
 import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.espresso.Espresso
 import com.example.othello.designsystem.OthelloTheme
 import java.util.Locale
 import org.junit.Assert.assertEquals
@@ -40,17 +47,33 @@ class ChanrivaNameSelectionScreenshotTest {
             "Unsupported Chanriva name selection screenshot width: $width"
         }
 
+        var backCalls = 0
         composeRule.setContent {
             CompositionLocalProvider(
                 LocalContext provides localizedContext,
                 LocalConfiguration provides configuration,
             ) {
                 OthelloTheme {
+                    var candidates by remember { mutableStateOf(testChanrivaNameCandidates(hasRare = true)) }
+                    var selectedId by remember { mutableStateOf<Long?>(null) }
+                    var hasRerolled by remember { mutableStateOf(false) }
                     ChanrivaNameSelectionScreen(
-                        onBack = {},
+                        candidates = candidates,
+                        selectedId = selectedId,
+                        hasRerolled = hasRerolled,
+                        isBusy = false,
+                        onBack = { backCalls++ },
+                        onCandidateSelected = { selectedId = it },
+                        onReroll = {
+                            candidates = listOf(
+                                ChanrivaNameCandidate(11L, "しずかな月影", false, R.drawable.chanriva_name_plate_emerald),
+                                ChanrivaNameCandidate(12L, "星読みしおり", false, R.drawable.chanriva_name_plate_starry),
+                                ChanrivaNameCandidate(13L, "翠玉のほたる", false, R.drawable.chanriva_name_plate_emerald),
+                            )
+                            selectedId = null
+                            hasRerolled = true
+                        },
                         onNameConfirmed = {},
-                        initialHasRareCandidate = true,
-                        rerolledHasRareCandidate = false,
                     )
                 }
             }
@@ -77,13 +100,17 @@ class ChanrivaNameSelectionScreenshotTest {
         composeRule.onAllNodesWithText(localizedContext.getString(R.string.chanriva_name_selection_rare))
             .assertCountEquals(1)
         composeRule.onNodeWithText("やわらかひなた").assertHasClickAction()
+        composeRule.onNodeWithTag("chanriva_name_back_button").assertIsDisplayed().assertIsNotEnabled()
+        composeRule.onNodeWithTag("chanriva_name_confirm_button").assertIsNotEnabled()
         composeRule.onNodeWithText(localizedContext.getString(R.string.chanriva_name_selection_reroll))
             .assertHasClickAction()
 
         composeRule.onNodeWithText("やわらかひなた").performClick()
+        composeRule.onNodeWithTag("chanriva_name_confirm_button").assertIsEnabled()
         composeRule.onNodeWithText(localizedContext.getString(R.string.chanriva_name_selection_reroll))
             .performClick()
         composeRule.onNodeWithText("翠玉のほたる").assertIsDisplayed()
+        composeRule.onNodeWithTag("chanriva_name_confirm_button").assertIsNotEnabled()
         composeRule.onAllNodesWithText(localizedContext.getString(R.string.chanriva_name_selection_rare))
             .assertCountEquals(0)
         composeRule.onNodeWithText(localizedContext.getString(R.string.chanriva_name_selection_rerolled))
@@ -92,6 +119,10 @@ class ChanrivaNameSelectionScreenshotTest {
             .assertIsDisplayed()
         composeRule.onNodeWithText(localizedContext.getString(R.string.chanriva_name_selection_reroll_used))
             .assertIsNotEnabled()
+        Espresso.pressBack()
+        composeRule.onNodeWithText(localizedContext.getString(R.string.chanriva_name_selection_title)).assertIsDisplayed()
+        composeRule.onNodeWithTag("chanriva_name_back_button").performClick()
+        assertEquals(0, backCalls)
     }
 
     @Test
@@ -108,10 +139,16 @@ class ChanrivaNameSelectionScreenshotTest {
                 LocalConfiguration provides configuration,
             ) {
                 OthelloTheme {
+                    var selectedId by remember { mutableStateOf<Long?>(null) }
                     ChanrivaNameSelectionScreen(
+                        candidates = testChanrivaNameCandidates(hasRare = false),
+                        selectedId = selectedId,
+                        hasRerolled = false,
+                        isBusy = false,
                         onBack = {},
+                        onCandidateSelected = { selectedId = it },
+                        onReroll = {},
                         onNameConfirmed = {},
-                        initialHasRareCandidate = false,
                     )
                 }
             }
@@ -122,6 +159,7 @@ class ChanrivaNameSelectionScreenshotTest {
         composeRule.onNodeWithText("のんびりかたつむり").assertIsDisplayed()
         composeRule.onAllNodesWithText(localizedContext.getString(R.string.chanriva_name_selection_rare))
             .assertCountEquals(0)
+        composeRule.onNodeWithTag("chanriva_name_confirm_button").assertIsNotEnabled()
     }
 
     private fun awaitRenderedNameScreen(): Bitmap {
@@ -157,4 +195,15 @@ class ChanrivaNameSelectionScreenshotTest {
             }
         }
     }
+
+    private fun testChanrivaNameCandidates(hasRare: Boolean): List<ChanrivaNameCandidate> = listOf(
+        ChanrivaNameCandidate(1L, "やわらかひなた", false, R.drawable.chanriva_name_plate_emerald),
+        ChanrivaNameCandidate(2L, "ほんわか麻衣", false, R.drawable.chanriva_name_plate_starry),
+        ChanrivaNameCandidate(
+            3L,
+            "のんびりかたつむり",
+            hasRare,
+            if (hasRare) R.drawable.chanriva_name_plate_rare else R.drawable.chanriva_name_plate_emerald,
+        ),
+    )
 }
