@@ -3,6 +3,7 @@ package com.example.othello
 import android.content.ContentValues
 import android.graphics.Bitmap
 import android.os.Environment
+import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalConfiguration
@@ -49,7 +50,7 @@ class ChanrivaNameSelectionScreenshotTest {
         }
 
         composeRule.waitForIdle()
-        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val bitmap = awaitRenderedNameScreen()
         assertEquals("Screenshot pixel width for ${width}dp emulator", width, bitmap.width)
         saveScreenshot(context, bitmap, "chanriva-name-selection-${width}dp.png")
         bitmap.recycle()
@@ -80,6 +81,24 @@ class ChanrivaNameSelectionScreenshotTest {
             .assertIsDisplayed()
         composeRule.onNodeWithText(localizedContext.getString(R.string.chanriva_name_selection_reroll_used))
             .assertIsNotEnabled()
+    }
+
+    private fun awaitRenderedNameScreen(): Bitmap {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val deadline = SystemClock.uptimeMillis() + 12_000L
+        do {
+            composeRule.waitForIdle()
+            val frame = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+            val pixel = frame.getPixel(5, frame.height / 3)
+            val red = android.graphics.Color.red(pixel)
+            val green = android.graphics.Color.green(pixel)
+            val blue = android.graphics.Color.blue(pixel)
+            val spread = maxOf(red, green, blue) - minOf(red, green, blue)
+            if (spread > 10 && (red + green + blue) / 3 < 220) return frame
+            frame.recycle()
+            Thread.sleep(250)
+        } while (SystemClock.uptimeMillis() < deadline)
+        throw AssertionError("Chanriva name selection screen was not visible before capture")
     }
 
     private fun saveScreenshot(context: android.content.Context, bitmap: Bitmap, name: String) {
