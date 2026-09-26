@@ -352,7 +352,8 @@ private fun BoxScope.RareBadge() {
 private fun rememberNameAsset(@DrawableRes resourceId: Int): ImageBitmap {
     val resources = LocalContext.current.resources
     return remember(resources, resourceId) {
-        val bitmap = checkNotNull(BitmapFactory.decodeResource(resources, resourceId)) {
+        val bytes = resources.openRawResource(resourceId).use { it.readBytes() }
+        val bitmap = checkNotNull(BitmapFactory.decodeByteArray(bytes, 0, bytes.size)) {
             "Unable to decode Chanriva name selection image resource: $resourceId"
         }
         bitmap.asImageBitmap()
