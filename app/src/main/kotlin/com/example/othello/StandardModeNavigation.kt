@@ -74,6 +74,7 @@ internal enum class AuthenticatedModeDestination {
     PEOPLE_HOME,
     PEOPLE_NAME_SELECTION,
     PEOPLE_MATCH,
+    PEOPLE_ROOM,
     PEOPLE_SOCIAL,
     STANDARD_HOME,
     STANDARD_AI,
@@ -107,6 +108,7 @@ internal fun authenticatedModeBackDestination(
     AuthenticatedModeDestination.PEOPLE_NAME_SELECTION -> null
     AuthenticatedModeDestination.PEOPLE_MATCH,
     AuthenticatedModeDestination.PEOPLE_SOCIAL -> AuthenticatedModeDestination.PEOPLE_HOME
+    AuthenticatedModeDestination.PEOPLE_ROOM -> AuthenticatedModeDestination.PEOPLE_MATCH
     AuthenticatedModeDestination.STANDARD_AI,
     AuthenticatedModeDestination.STANDARD_WINNING_TIPS,
     AuthenticatedModeDestination.STANDARD_GACHA,
@@ -127,6 +129,10 @@ internal fun AuthenticatedModeRoute(
         mutableStateOf(initialAuthenticatedModeDestination())
     }
     var selectedPackId by rememberSaveable(userId) { mutableStateOf<String?>(null) }
+    var selectedPeopleRoomNameRes by rememberSaveable(userId) {
+        mutableStateOf(R.string.play_lobby_room_10)
+    }
+    var selectedPeopleRoomMinutes by rememberSaveable(userId) { mutableStateOf(10) }
     var pendingPeopleDestination by rememberSaveable(userId) {
         mutableStateOf(AuthenticatedModeDestination.PEOPLE_MATCH)
     }
@@ -256,6 +262,19 @@ internal fun AuthenticatedModeRoute(
         )
         AuthenticatedModeDestination.PEOPLE_MATCH -> PeoplePlayLobbyScreen(
             onBack = { destination = AuthenticatedModeDestination.PEOPLE_HOME },
+            onEnterRoom = { room ->
+                selectedPeopleRoomNameRes = room.nameRes
+                selectedPeopleRoomMinutes = room.minutesPerPlayer
+                destination = AuthenticatedModeDestination.PEOPLE_ROOM
+            },
+        )
+        AuthenticatedModeDestination.PEOPLE_ROOM -> PeoplePlayRoomScreen(
+            state = PeoplePlayRoomUiState(
+                roomNameRes = selectedPeopleRoomNameRes,
+                minutesPerPlayer = selectedPeopleRoomMinutes,
+            ),
+            onBack = { destination = AuthenticatedModeDestination.PEOPLE_MATCH },
+            onExit = { destination = AuthenticatedModeDestination.PEOPLE_MATCH },
         )
         AuthenticatedModeDestination.PEOPLE_SOCIAL -> PeopleComingSoonScreen(
             title = appString(R.string.people_social_title),

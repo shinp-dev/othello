@@ -53,6 +53,15 @@
     <string name="play_lobby_seated">Seated %1$d / 2</string>
     <string name="play_lobby_watching">Watching %1$d</string>
     <string name="play_lobby_enter">Enter</string>
+    <string name="people_room_time_minutes">%1$d min</string>
+    <string name="people_room_leave_seat">Leave seat</string>
+    <string name="people_room_exit">Exit</string>
+    <string name="people_room_back_description">Back to room list</string>
+    <string name="people_room_black_player">Black player, first move</string>
+    <string name="people_room_white_player">White player, second move</string>
+    <string name="people_room_black_disc_description">Black disc</string>
+    <string name="people_room_white_disc_description">White disc</string>
+    <string name="people_room_watcher">Watcher</string>
     <string name="people_events_title">Explore Events</string>
     <string name="people_events_supporting">Discover Othello events and activities</string>
     <string name="people_social_title">Connect</string>

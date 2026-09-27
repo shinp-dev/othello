@@ -52,6 +52,7 @@ private const val LobbyTableFrameAspectRatio = 1536f / 768f
 internal data class PeoplePlayLobbyRoom(
     @StringRes val nameRes: Int,
     @DrawableRes val timeIconRes: Int,
+    val minutesPerPlayer: Int,
     val isPlaying: Boolean,
     val participantIconRes: List<Int>,
     val watchers: Int,
@@ -60,15 +61,18 @@ internal data class PeoplePlayLobbyRoom(
 }
 
 internal fun samplePeoplePlayLobbyRooms() = listOf(
-    PeoplePlayLobbyRoom(R.string.play_lobby_room_20, R.drawable.play_lobby_time_20, false, listOf(R.drawable.play_lobby_icon_adult_man), 2),
-    PeoplePlayLobbyRoom(R.string.play_lobby_room_15, R.drawable.play_lobby_time_15, true, listOf(R.drawable.play_lobby_icon_adult_woman, R.drawable.play_lobby_icon_girl), 4),
-    PeoplePlayLobbyRoom(R.string.play_lobby_room_10, R.drawable.play_lobby_time_10, false, listOf(R.drawable.play_lobby_icon_staff), 1),
-    PeoplePlayLobbyRoom(R.string.play_lobby_room_5, R.drawable.play_lobby_time_5, false, listOf(R.drawable.play_lobby_icon_boy), 3),
-    PeoplePlayLobbyRoom(R.string.play_lobby_room_3, R.drawable.play_lobby_time_3, true, listOf(R.drawable.play_lobby_icon_book, R.drawable.play_lobby_icon_adult_man), 5),
+    PeoplePlayLobbyRoom(R.string.play_lobby_room_20, R.drawable.play_lobby_time_20, 20, false, listOf(R.drawable.play_lobby_icon_adult_man), 2),
+    PeoplePlayLobbyRoom(R.string.play_lobby_room_15, R.drawable.play_lobby_time_15, 15, true, listOf(R.drawable.play_lobby_icon_adult_woman, R.drawable.play_lobby_icon_girl), 4),
+    PeoplePlayLobbyRoom(R.string.play_lobby_room_10, R.drawable.play_lobby_time_10, 10, false, listOf(R.drawable.play_lobby_icon_staff), 1),
+    PeoplePlayLobbyRoom(R.string.play_lobby_room_5, R.drawable.play_lobby_time_5, 5, false, listOf(R.drawable.play_lobby_icon_boy), 3),
+    PeoplePlayLobbyRoom(R.string.play_lobby_room_3, R.drawable.play_lobby_time_3, 3, true, listOf(R.drawable.play_lobby_icon_book, R.drawable.play_lobby_icon_adult_man), 5),
 )
 
 @Composable
-internal fun PeoplePlayLobbyScreen(onBack: () -> Unit) {
+internal fun PeoplePlayLobbyScreen(
+    onBack: () -> Unit,
+    onEnterRoom: (PeoplePlayLobbyRoom) -> Unit = {},
+) {
     val rooms = samplePeoplePlayLobbyRooms()
 
     Box(Modifier.fillMaxSize()) {
@@ -144,7 +148,7 @@ internal fun PeoplePlayLobbyScreen(onBack: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(rooms) { room ->
-                    LobbyRoomCard(room = room)
+                    LobbyRoomCard(room = room, onEnterRoom = onEnterRoom)
                 }
             }
         }
@@ -184,7 +188,7 @@ private fun LobbyAction(
 }
 
 @Composable
-private fun LobbyRoomCard(room: PeoplePlayLobbyRoom) {
+private fun LobbyRoomCard(room: PeoplePlayLobbyRoom, onEnterRoom: (PeoplePlayLobbyRoom) -> Unit) {
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
@@ -290,7 +294,7 @@ private fun LobbyRoomCard(room: PeoplePlayLobbyRoom) {
                 .width(cardWidth * 0.235f)
                 .height(cardHeight * 0.205f)
                 .clip(RoundedCornerShape(24.dp))
-                .clickable { /* Joining a room is not part of this UI-only screen. */ }
+                .clickable { onEnterRoom(room) }
                 .testTag("play_lobby_enter_${room.nameRes}"),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
