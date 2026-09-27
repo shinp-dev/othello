@@ -9,18 +9,4 @@
     <string name="enjoy_deeply">Go Deeper</string>
     <string name="enjoy_deeply_detail">Online · AI · Analysis\nGame Reviews</string>
     <string name="enjoy_deeply_accessibility">Go Deeper. Online, AI, Analysis, Game Reviews</string>
-    <string name="play_lobby_room_20">Relaxed 20-min room</string>
-    <string name="play_lobby_room_15">Leisurely 15-min room</string>
-    <string name="play_lobby_room_10">Focused 10-min room</string>
-    <string name="play_lobby_room_5">Easygoing 5-min room</string>
-    <string name="play_lobby_room_3">Quick 3-min room</string>
-    <string name="people_room_time_minutes">%1$d min</string>
-    <string name="people_room_leave_seat">Leave seat</string>
-    <string name="people_room_exit">Exit</string>
-    <string name="people_room_back_description">Back to room list</string>
-    <string name="people_room_black_player">Black player, first move</string>
-    <string name="people_room_white_player">White player, second move</string>
-    <string name="people_room_black_disc_description">Black disc</string>
-    <string name="people_room_white_disc_description">White disc</string>
-    <string name="people_room_watcher">Watcher</string>
 </resources>
