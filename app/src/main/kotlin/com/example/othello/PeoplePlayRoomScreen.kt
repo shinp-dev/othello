@@ -72,7 +72,7 @@ internal fun PeoplePlayRoomScreen(
         val designWidth = minOf(screenWidth, screenHeight / RoomReferenceAspect)
         val designHeight = designWidth * RoomReferenceAspect
         val designLeft = (screenWidth - designWidth) / 2f
-        val designTop = 0.dp
+        val designTop = (screenHeight - designHeight) / 2f
         val boardSize = designWidth * 0.94f
 
         Image(
@@ -86,8 +86,8 @@ internal fun PeoplePlayRoomScreen(
         Box(
             modifier = Modifier
                 .offset(
-                    x = designLeft + designWidth * 0.012f,
-                    y = designTop + designHeight * 0.012f,
+                    x = designLeft + designWidth * 0.023f,
+                    y = designTop + designHeight * 0.041f,
                 )
                 .size(backHitSize)
                 .clickable(onClick = onBack)
@@ -97,7 +97,7 @@ internal fun PeoplePlayRoomScreen(
             Image(
                 painter = painterResource(R.drawable.people_room_back_button),
                 contentDescription = appString(R.string.people_room_back_description),
-                modifier = Modifier.size(designWidth * 0.11f),
+                modifier = Modifier.size(designWidth * 0.105f),
                 contentScale = ContentScale.Fit,
             )
         }
@@ -107,9 +107,9 @@ internal fun PeoplePlayRoomScreen(
             modifier = Modifier
                 .offset(
                     x = designLeft + designWidth * 0.245f,
-                    y = designTop + designHeight * 0.075f,
+                    y = designTop + designHeight * 0.061f,
                 )
-                .size(width = titleWidth, height = titleWidth / 3f)
+                .size(width = titleWidth, height = designHeight * 0.082f)
                 .testTag("people_room_title_banner"),
             contentAlignment = Alignment.Center,
         ) {
@@ -117,7 +117,7 @@ internal fun PeoplePlayRoomScreen(
                 painter = painterResource(R.drawable.people_room_title_banner),
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Fit,
+                contentScale = ContentScale.FillBounds,
             )
             Text(
                 text = appString(state.roomNameRes),
@@ -145,7 +145,7 @@ internal fun PeoplePlayRoomScreen(
             modifier = Modifier
                 .offset(
                     x = designLeft + designWidth * 0.03f,
-                    y = designTop + designHeight * 0.255f,
+                    y = designTop + designHeight * 0.246f,
                 )
                 .size(boardSize)
                 .testTag("people_room_board"),
@@ -205,9 +205,9 @@ private fun RoomPlayerInfoBar(
         modifier = Modifier
             .offset(
                 x = designLeft + designWidth * 0.03f,
-                y = designTop + designHeight * 0.175f,
+                y = designTop + designHeight * 0.158f,
             )
-            .size(width = infoWidth, height = infoWidth / 3f)
+            .size(width = infoWidth, height = designHeight * 0.076f)
             .testTag("people_room_info_bar"),
     ) {
         val barWidth = maxWidth
@@ -216,7 +216,7 @@ private fun RoomPlayerInfoBar(
             painter = painterResource(R.drawable.people_room_top_info_bar),
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Fit,
+            contentScale = ContentScale.FillBounds,
         )
 
         val avatarSize = minOf(barWidth * 0.125f, barHeight * 0.82f)
@@ -457,9 +457,9 @@ private fun RoomAction(
         modifier = Modifier
             .offset(
                 x = designLeft + designWidth * xFraction,
-                y = designTop + designHeight * 0.86f,
+                y = designTop + designHeight * 0.842f,
             )
-            .size(width = buttonWidth, height = buttonWidth / 2f)
+            .size(width = buttonWidth, height = designHeight * 0.070f)
             .clickable(onClick = onClick)
             .testTag(testTag),
         contentAlignment = Alignment.Center,
@@ -468,7 +468,7 @@ private fun RoomAction(
             painter = painterResource(imageRes),
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Fit,
+            contentScale = ContentScale.FillBounds,
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
             icon(Modifier.size(minOf(24.dp, designWidth * 0.07f)))
