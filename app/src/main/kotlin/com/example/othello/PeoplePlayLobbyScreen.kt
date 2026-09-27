@@ -267,8 +267,7 @@ private fun LobbyRoomCard(room: PeoplePlayLobbyRoom) {
                         .height(27.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .background(if (room.isPlaying) Color(0xFF752D2A).copy(alpha = 0.9f) else LobbyEmerald.copy(alpha = 0.94f))
-                        .border(1.dp, LobbyGold, RoundedCornerShape(16.dp))
-                        .testTag("play_lobby_status_${room.nameRes}"),
+                        .border(1.dp, LobbyGold, RoundedCornerShape(16.dp)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -278,6 +277,7 @@ private fun LobbyRoomCard(room: PeoplePlayLobbyRoom) {
                         lineHeight = 13.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
+                        modifier = Modifier.testTag("play_lobby_status_${room.nameRes}"),
                     )
                 }
                 Row(
