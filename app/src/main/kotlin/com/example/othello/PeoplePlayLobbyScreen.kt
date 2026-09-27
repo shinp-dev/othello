@@ -219,8 +219,8 @@ private fun LobbyRoomCard(room: PeoplePlayLobbyRoom) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier
-                .offset(x = cardWidth * 0.24f, y = cardHeight * 0.31f)
-                .width(cardWidth * 0.46f)
+                .offset(x = cardWidth * 0.23f, y = cardHeight * 0.31f)
+                .width(cardWidth * 0.49f)
                 .testTag("play_lobby_room_name_${room.nameRes}"),
         )
 

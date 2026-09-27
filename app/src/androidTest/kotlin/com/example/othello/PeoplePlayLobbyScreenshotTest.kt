@@ -69,6 +69,16 @@ class PeoplePlayLobbyScreenshotTest {
         val seatedCounts = listOf(1, 2, 1, 1, 2)
         val watcherCounts = listOf(2, 4, 1, 3, 5)
         val playingRooms = setOf(1, 4)
+
+        roomIds.take(3).forEach { roomId ->
+            composeRule.onNodeWithTag("play_lobby_room_$roomId").assertIsDisplayed()
+        }
+
+        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        assertEquals("Screenshot pixel width for ${width}dp emulator", width, bitmap.width)
+        saveScreenshot(context, bitmap, "people-play-lobby-$language-${width}dp.png")
+        bitmap.recycle()
+
         for ((index, roomId) in roomIds.withIndex()) {
             roomList.performScrollToIndex(index)
             composeRule.waitForIdle()
@@ -94,15 +104,8 @@ class PeoplePlayLobbyScreenshotTest {
             assertWithinScreen("play_lobby_status_$roomId", rootWidth)
             assertWithinScreen("play_lobby_room_name_$roomId", rootWidth)
             assertWithinScreen("play_lobby_seated_$roomId", rootWidth)
-            assertWithinScreen("play_lobby_watching_$roomId", rootWidth)
+                assertWithinScreen("play_lobby_watching_$roomId", rootWidth)
         }
-        roomList.performScrollToIndex(0)
-        composeRule.waitForIdle()
-
-        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
-        assertEquals("Screenshot pixel width for ${width}dp emulator", width, bitmap.width)
-        saveScreenshot(context, bitmap, "people-play-lobby-$language-${width}dp.png")
-        bitmap.recycle()
     }
 
     private fun assertWithinScreen(tag: String, screenWidth: Float) {
