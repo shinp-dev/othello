@@ -80,8 +80,12 @@ class PeoplePlayLobbyScreenshotTest {
             composeRule.onNodeWithTag("play_lobby_status_$roomId")
                 .assertIsDisplayed()
                 .assertTextEquals(localizedContext.getString(statusId))
-            composeRule.onNodeWithText(localizedContext.getString(R.string.play_lobby_seated, seatedCounts[index])).assertIsDisplayed()
-            composeRule.onNodeWithText(localizedContext.getString(R.string.play_lobby_watching, watcherCounts[index])).assertIsDisplayed()
+            composeRule.onNodeWithTag("play_lobby_seated_$roomId")
+                .assertIsDisplayed()
+                .assertTextEquals(localizedContext.getString(R.string.play_lobby_seated, seatedCounts[index]))
+            composeRule.onNodeWithTag("play_lobby_watching_$roomId")
+                .assertIsDisplayed()
+                .assertTextEquals(localizedContext.getString(R.string.play_lobby_watching, watcherCounts[index]))
 
             repeat(seatedCounts[index]) { participantIndex ->
                 composeRule.onNodeWithTag("play_lobby_participant_${roomId}_$participantIndex").assertIsDisplayed()
