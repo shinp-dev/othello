@@ -53,6 +53,15 @@
     <string name="play_lobby_seated">着席 %1$d / 2</string>
     <string name="play_lobby_watching">見ている %1$d人</string>
     <string name="play_lobby_enter">入る</string>
+    <string name="people_room_time_minutes">%1$d分</string>
+    <string name="people_room_leave_seat">離席する</string>
+    <string name="people_room_exit">退出する</string>
+    <string name="people_room_back_description">部屋一覧へ戻る</string>
+    <string name="people_room_black_player">黒・先手のプレイヤー</string>
+    <string name="people_room_white_player">白・後手のプレイヤー</string>
+    <string name="people_room_black_disc_description">黒石</string>
+    <string name="people_room_white_disc_description">白石</string>
+    <string name="people_room_watcher">観戦者</string>
     <string name="people_events_title">イベントを見る</string>
     <string name="people_events_supporting">大会以外の企画やイベントを探す</string>
     <string name="people_social_title">交流する</string>
