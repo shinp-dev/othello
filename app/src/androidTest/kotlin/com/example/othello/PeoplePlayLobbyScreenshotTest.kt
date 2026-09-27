@@ -102,7 +102,7 @@ class PeoplePlayLobbyScreenshotTest {
     }
 
     private fun assertWithinScreen(tag: String, screenWidth: Float) {
-        val bounds = composeRule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+        val bounds = composeRule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertTrue("$tag extends past the left edge: $bounds", bounds.left >= 0f)
         assertTrue("$tag extends past the right edge: $bounds", bounds.right <= screenWidth)
     }
