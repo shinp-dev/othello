@@ -442,8 +442,8 @@ private fun RoomAction(
             Text(
                 text = appString(labelRes),
                 color = RoomIvory,
-                fontSize = (screenWidth.value * 0.050f).sp,
-                lineHeight = (screenWidth.value * 0.058f).sp,
+                fontSize = (screenWidth.value * 0.043f).sp,
+                lineHeight = (screenWidth.value * 0.050f).sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 softWrap = false,
