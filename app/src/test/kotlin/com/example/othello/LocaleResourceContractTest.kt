@@ -8,7 +8,7 @@ import org.junit.Test
 class LocaleResourceContractTest {
     private val defaultFile = File("src/main/res/values/strings.xml")
     private val japaneseFile = File("src/main/res/values-ja/strings.xml")
-    private val englishChoiceCopyFile = File("src/main/res/values-en/strings.xml")
+    private val englishOverrideStringsFile = File("src/main/res/values-en/strings.xml")
     private val localeConfig = File("src/main/res/xml/locales_config.xml")
 
     @Test
@@ -32,17 +32,23 @@ class LocaleResourceContractTest {
         assertTrue("<string name=\"saving_variation\">保存中…</string>" in japaneseText)
         assertTrue("<string name=\"variation_saved\">Saved</string>" in defaultText)
         assertTrue("<string name=\"variation_saved\">保存済み</string>" in japaneseText)
-        assertTrue(englishChoiceCopyFile.isFile)
-        val englishChoiceCopy = readStrings(englishChoiceCopyFile)
+        assertTrue(englishOverrideStringsFile.isFile)
+        val englishOverrides = readStrings(englishOverrideStringsFile)
         assertEquals(
             setOf(
                 "enjoy_casually", "enjoy_casually_detail", "enjoy_casually_accessibility",
                 "enjoy_together", "enjoy_together_detail", "enjoy_together_accessibility",
                 "enjoy_deeply", "enjoy_deeply_detail", "enjoy_deeply_accessibility",
+                "play_lobby_room_20", "play_lobby_room_15", "play_lobby_room_10",
+                "play_lobby_room_5", "play_lobby_room_3", "people_room_time_minutes",
+                "people_room_leave_seat", "people_room_exit", "people_room_back_description",
+                "people_room_black_player", "people_room_white_player",
+                "people_room_black_disc_description", "people_room_white_disc_description",
+                "people_room_watcher",
             ),
-            englishChoiceCopy.keys,
+            englishOverrides.keys,
         )
-        englishChoiceCopy.forEach { (id, value) ->
+        englishOverrides.forEach { (id, value) ->
             assertEquals(readStrings(defaultFile).getValue(id), value, id)
         }
     }
