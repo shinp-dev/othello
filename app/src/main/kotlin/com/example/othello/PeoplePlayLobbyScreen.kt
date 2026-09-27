@@ -42,25 +42,24 @@ private val LobbyInk = Color(0xFF071822)
 private val LobbyEmerald = Color(0xFF0A463B)
 private val LobbyGold = Color(0xFFE8C76D)
 private val LobbyIvory = Color(0xFFFFF6DF)
-private val LobbyMuted = Color(0xFFE5DCC6)
 
 /** Local-only sample lobby. Room actions intentionally do not start network or game flows yet. */
 internal data class PeoplePlayLobbyRoom(
     @StringRes val nameRes: Int,
     @DrawableRes val timeIconRes: Int,
     val isPlaying: Boolean,
-    @StringRes val hostNameRes: Int,
-    @DrawableRes val hostIconRes: Int,
-    val seatedPlayers: Int,
+    val participantIconRes: List<Int>,
     val watchers: Int,
-)
+) {
+    val seatedPlayers: Int get() = participantIconRes.size
+}
 
 internal fun samplePeoplePlayLobbyRooms() = listOf(
-    PeoplePlayLobbyRoom(R.string.play_lobby_room_20, R.drawable.play_lobby_time_20, false, R.string.play_lobby_host_hinata, R.drawable.play_lobby_icon_adult_man, 1, 2),
-    PeoplePlayLobbyRoom(R.string.play_lobby_room_15, R.drawable.play_lobby_time_15, true, R.string.play_lobby_host_mai, R.drawable.play_lobby_icon_adult_woman, 2, 4),
-    PeoplePlayLobbyRoom(R.string.play_lobby_room_10, R.drawable.play_lobby_time_10, false, R.string.play_lobby_host_snail, R.drawable.play_lobby_icon_staff, 1, 1),
-    PeoplePlayLobbyRoom(R.string.play_lobby_room_5, R.drawable.play_lobby_time_5, false, R.string.play_lobby_host_yuto, R.drawable.play_lobby_icon_adult_man, 1, 3),
-    PeoplePlayLobbyRoom(R.string.play_lobby_room_3, R.drawable.play_lobby_time_3, true, R.string.play_lobby_host_stardrop, R.drawable.play_lobby_icon_book, 2, 5),
+    PeoplePlayLobbyRoom(R.string.play_lobby_room_20, R.drawable.play_lobby_time_20, false, listOf(R.drawable.play_lobby_icon_adult_man), 2),
+    PeoplePlayLobbyRoom(R.string.play_lobby_room_15, R.drawable.play_lobby_time_15, true, listOf(R.drawable.play_lobby_icon_adult_woman, R.drawable.play_lobby_icon_girl), 4),
+    PeoplePlayLobbyRoom(R.string.play_lobby_room_10, R.drawable.play_lobby_time_10, false, listOf(R.drawable.play_lobby_icon_staff), 1),
+    PeoplePlayLobbyRoom(R.string.play_lobby_room_5, R.drawable.play_lobby_time_5, false, listOf(R.drawable.play_lobby_icon_boy), 3),
+    PeoplePlayLobbyRoom(R.string.play_lobby_room_3, R.drawable.play_lobby_time_3, true, listOf(R.drawable.play_lobby_icon_book, R.drawable.play_lobby_icon_adult_man), 5),
 )
 
 @Composable
@@ -111,6 +110,7 @@ internal fun PeoplePlayLobbyScreen(onBack: () -> Unit) {
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     style = MaterialTheme.typography.headlineLarge,
+                    modifier = Modifier.testTag("play_lobby_title"),
                 )
                 Text(
                     text = appString(R.string.play_lobby_supporting),
@@ -120,21 +120,13 @@ internal fun PeoplePlayLobbyScreen(onBack: () -> Unit) {
                     fontWeight = FontWeight.Medium,
                     maxLines = 2,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.testTag("play_lobby_supporting"),
                 )
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth().height(58.dp).padding(bottom = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+            Box(Modifier.fillMaxWidth().height(58.dp).padding(bottom = 6.dp)) {
                 LobbyAction(
-                    modifier = Modifier.weight(1f),
-                    iconRes = R.drawable.play_lobby_icon_book,
-                    labelRes = R.string.play_lobby_table_list,
-                    onClick = { /* The list is already at its initial position. */ },
-                )
-                LobbyAction(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                     iconRes = R.drawable.play_lobby_round_table,
                     labelRes = R.string.play_lobby_create_table,
                     onClick = { /* Table creation is not part of this UI-only screen. */ },
@@ -180,6 +172,7 @@ private fun LobbyAction(
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.testTag("play_lobby_action_$labelRes"),
         )
     }
 }
@@ -216,59 +209,43 @@ private fun LobbyRoomCard(room: PeoplePlayLobbyRoom) {
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    Spacer(Modifier.width(3.dp))
-                    Text(
-                        text = appString(if (room.isPlaying) R.string.play_lobby_status_playing else R.string.play_lobby_status_open),
-                        color = if (room.isPlaying) Color(0xFFFFC5B4) else Color(0xFFE8FFD7),
-                        fontSize = 10.sp,
-                        lineHeight = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (room.isPlaying) Color(0xB5541D21) else Color(0xA817583B))
-                            .padding(horizontal = 5.dp, vertical = 2.dp)
-                            .testTag("play_lobby_status_${room.nameRes}"),
+                            .weight(1f, fill = false)
+                            .testTag("play_lobby_room_name_${room.nameRes}"),
                     )
                 }
                 Spacer(Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Image(
-                        painter = painterResource(room.hostIconRes),
-                        contentDescription = null,
-                        modifier = Modifier.size(34.dp),
-                        contentScale = ContentScale.Fit,
-                    )
-                    Spacer(Modifier.width(5.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = appString(room.hostNameRes),
-                            color = LobbyIvory,
-                            fontSize = 12.sp,
-                            lineHeight = 15.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = appString(R.string.play_lobby_host_label),
-                            color = LobbyMuted,
-                            fontSize = 10.sp,
-                            lineHeight = 12.sp,
-                            maxLines = 1,
-                        )
+                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        room.participantIconRes.forEachIndexed { index, iconRes ->
+                            Image(
+                                painter = painterResource(iconRes),
+                                contentDescription = null,
+                                modifier = Modifier.size(30.dp).testTag("play_lobby_participant_${room.nameRes}_$index"),
+                                contentScale = ContentScale.Fit,
+                            )
+                        }
                     }
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        text = appString(R.string.play_lobby_seated, room.seatedPlayers),
+                        color = LobbyIvory,
+                        fontSize = 10.sp,
+                        lineHeight = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.testTag("play_lobby_seated_${room.nameRes}"),
+                    )
                 }
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = appString(R.string.play_lobby_seated, room.seatedPlayers) +
-                        "   ·   " + appString(R.string.play_lobby_watching, room.watchers),
+                    text = appString(R.string.play_lobby_watching, room.watchers),
                     color = LobbyIvory,
                     fontSize = 10.sp,
                     lineHeight = 13.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag("play_lobby_watching_${room.nameRes}"),
                 )
             }
 
@@ -289,5 +266,18 @@ private fun LobbyRoomCard(room: PeoplePlayLobbyRoom) {
                 Text("›", color = LobbyGold, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
         }
+
+        Text(
+            text = appString(if (room.isPlaying) R.string.play_lobby_status_playing else R.string.play_lobby_status_open),
+            color = if (room.isPlaying) Color(0xFFFFC5B4) else Color(0xFFE8FFD7),
+            fontSize = 10.sp,
+            lineHeight = 13.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 18.dp, end = 34.dp)
+                .testTag("play_lobby_status_${room.nameRes}"),
+        )
     }
 }

@@ -42,7 +42,6 @@
     <string name="people_play_title">Play Together</string>
     <string name="people_play_supporting">Create a room · Join a room</string>
     <string name="play_lobby_supporting">Enter a room to take a seat or watch a game</string>
-    <string name="play_lobby_table_list">Table list</string>
     <string name="play_lobby_create_table">Create table</string>
     <string name="play_lobby_room_20">Relaxed 20-min room</string>
     <string name="play_lobby_room_15">Leisurely 15-min room</string>
@@ -51,12 +50,6 @@
     <string name="play_lobby_room_3">Quick 3-min room</string>
     <string name="play_lobby_status_open">Open</string>
     <string name="play_lobby_status_playing">Playing</string>
-    <string name="play_lobby_host_label">Host</string>
-    <string name="play_lobby_host_hinata">Gentle Hinata</string>
-    <string name="play_lobby_host_mai">Mellow Mai</string>
-    <string name="play_lobby_host_snail">Easygoing Snail</string>
-    <string name="play_lobby_host_yuto">Breezy Yuto</string>
-    <string name="play_lobby_host_stardrop">Stardrop</string>
     <string name="play_lobby_seated">Seated %1$d / 2</string>
     <string name="play_lobby_watching">Watching %1$d</string>
     <string name="play_lobby_enter">Enter</string>

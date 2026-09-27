@@ -7,17 +7,19 @@ import android.provider.MediaStore
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.othello.designsystem.OthelloTheme
 import java.util.Locale
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -44,11 +46,17 @@ class PeoplePlayLobbyScreenshotTest {
 
         val labels = listOf(
             R.string.people_play_title,
-            R.string.play_lobby_table_list,
             R.string.play_lobby_create_table,
         )
-        labels.forEach { id -> composeRule.onNodeWithText(localizedContext.getString(id)).assertExists() }
+        labels.forEach { id -> composeRule.onNodeWithText(localizedContext.getString(id)).assertIsDisplayed() }
         composeRule.onNodeWithText(localizedContext.getString(R.string.play_lobby_create_table)).assertHasClickAction()
+
+        val rootWidth = composeRule.onRoot().fetchSemanticsNode().boundsInRoot.width
+        assertEquals("Compose root width for ${width}dp emulator", width.toFloat(), rootWidth, 1f)
+        listOf("play_lobby_title", "play_lobby_supporting").forEach { tag ->
+            assertWithinScreen(tag, rootWidth)
+        }
+        assertWithinScreen("play_lobby_action_${R.string.play_lobby_create_table}", rootWidth)
 
         val roomList = composeRule.onNodeWithTag("play_lobby_room_list")
         val roomIds = listOf(
@@ -58,13 +66,31 @@ class PeoplePlayLobbyScreenshotTest {
             R.string.play_lobby_room_5,
             R.string.play_lobby_room_3,
         )
+        val seatedCounts = listOf(1, 2, 1, 1, 2)
+        val watcherCounts = listOf(2, 4, 1, 3, 5)
+        val playingRooms = setOf(1, 4)
         for ((index, roomId) in roomIds.withIndex()) {
             roomList.performScrollToIndex(index)
             composeRule.waitForIdle()
             composeRule.onNodeWithTag("play_lobby_room_$roomId").assertIsDisplayed()
+            composeRule.onNodeWithTag("play_lobby_room_name_$roomId").assertIsDisplayed()
             composeRule.onNodeWithText(localizedContext.getString(roomId)).assertIsDisplayed()
             composeRule.onNodeWithTag("play_lobby_enter_$roomId").assertHasClickAction()
-            composeRule.onNodeWithTag("play_lobby_status_$roomId").assertExists()
+            val statusId = if (index in playingRooms) R.string.play_lobby_status_playing else R.string.play_lobby_status_open
+            composeRule.onNodeWithTag("play_lobby_status_$roomId")
+                .assertIsDisplayed()
+                .assertTextEquals(localizedContext.getString(statusId))
+            composeRule.onNodeWithText(localizedContext.getString(R.string.play_lobby_seated, seatedCounts[index])).assertIsDisplayed()
+            composeRule.onNodeWithText(localizedContext.getString(R.string.play_lobby_watching, watcherCounts[index])).assertIsDisplayed()
+
+            repeat(seatedCounts[index]) { participantIndex ->
+                composeRule.onNodeWithTag("play_lobby_participant_${roomId}_$participantIndex").assertIsDisplayed()
+            }
+
+            assertWithinScreen("play_lobby_status_$roomId", rootWidth)
+            assertWithinScreen("play_lobby_room_name_$roomId", rootWidth)
+            assertWithinScreen("play_lobby_seated_$roomId", rootWidth)
+            assertWithinScreen("play_lobby_watching_$roomId", rootWidth)
         }
         roomList.performScrollToIndex(0)
         composeRule.waitForIdle()
@@ -73,6 +99,12 @@ class PeoplePlayLobbyScreenshotTest {
         assertEquals("Screenshot pixel width for ${width}dp emulator", width, bitmap.width)
         saveScreenshot(context, bitmap, "people-play-lobby-$language-${width}dp.png")
         bitmap.recycle()
+    }
+
+    private fun assertWithinScreen(tag: String, screenWidth: Float) {
+        val bounds = composeRule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+        assertTrue("$tag extends past the left edge: $bounds", bounds.left >= 0f)
+        assertTrue("$tag extends past the right edge: $bounds", bounds.right <= screenWidth)
     }
 
     private fun saveScreenshot(context: android.content.Context, bitmap: Bitmap, name: String) {
