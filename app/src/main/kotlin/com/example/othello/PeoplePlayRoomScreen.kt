@@ -73,7 +73,7 @@ internal fun PeoplePlayRoomScreen(
         val designHeight = designWidth * RoomReferenceAspect
         val designLeft = (screenWidth - designWidth) / 2f
         val designTop = (screenHeight - designHeight) / 2f
-        val boardSize = designWidth * 0.94f
+        val boardSize = designWidth * 0.98f
 
         Image(
             painter = painterResource(R.drawable.people_room_background_full),
@@ -86,8 +86,8 @@ internal fun PeoplePlayRoomScreen(
         Box(
             modifier = Modifier
                 .offset(
-                    x = designLeft + designWidth * 0.023f,
-                    y = designTop + designHeight * 0.041f,
+                    x = designLeft + designWidth * 0.031f,
+                    y = designTop + designHeight * 0.030f,
                 )
                 .size(backHitSize)
                 .clickable(onClick = onBack)
@@ -97,7 +97,7 @@ internal fun PeoplePlayRoomScreen(
             Image(
                 painter = painterResource(R.drawable.people_room_back_button),
                 contentDescription = appString(R.string.people_room_back_description),
-                modifier = Modifier.size(designWidth * 0.105f),
+                modifier = Modifier.size(designWidth * 0.125f),
                 contentScale = ContentScale.Fit,
             )
         }
@@ -122,7 +122,7 @@ internal fun PeoplePlayRoomScreen(
             Text(
                 text = appString(state.roomNameRes),
                 color = RoomIvory,
-                fontSize = (designWidth.value * 0.048f).sp,
+                fontSize = (designWidth.value * 0.050f).sp,
                 lineHeight = (designWidth.value * 0.057f).sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -144,8 +144,8 @@ internal fun PeoplePlayRoomScreen(
         PeoplePlayRoomBoard(
             modifier = Modifier
                 .offset(
-                    x = designLeft + designWidth * 0.03f,
-                    y = designTop + designHeight * 0.246f,
+                    x = designLeft + designWidth * 0.01f,
+                    y = designTop + designHeight * 0.244f,
                 )
                 .size(boardSize)
                 .testTag("people_room_board"),
@@ -166,7 +166,7 @@ internal fun PeoplePlayRoomScreen(
             designHeight = designHeight,
             designLeft = designLeft,
             designTop = designTop,
-            xFraction = 0.04f,
+            xFraction = 0.05f,
             testTag = "people_room_leave_seat",
             onClick = onLeaveSeat,
         )
@@ -185,7 +185,7 @@ internal fun PeoplePlayRoomScreen(
             designHeight = designHeight,
             designLeft = designLeft,
             designTop = designTop,
-            xFraction = 0.56f,
+            xFraction = 0.52f,
             testTag = "people_room_exit",
             onClick = onExit,
         )
@@ -200,14 +200,14 @@ private fun RoomPlayerInfoBar(
     designLeft: Dp,
     designTop: Dp,
 ) {
-    val infoWidth = designWidth * 0.94f
+    val infoWidth = designWidth * 0.98f
     BoxWithConstraints(
         modifier = Modifier
             .offset(
-                x = designLeft + designWidth * 0.03f,
-                y = designTop + designHeight * 0.158f,
+                x = designLeft + designWidth * 0.01f,
+                y = designTop + designHeight * 0.115f,
             )
-            .size(width = infoWidth, height = designHeight * 0.076f)
+            .size(width = infoWidth, height = designHeight * 0.160f)
             .testTag("people_room_info_bar"),
     ) {
         val barWidth = maxWidth
@@ -219,12 +219,12 @@ private fun RoomPlayerInfoBar(
             contentScale = ContentScale.FillBounds,
         )
 
-        val avatarSize = minOf(barWidth * 0.125f, barHeight * 0.82f)
+        val avatarSize = minOf(barWidth * 0.140f, barHeight * 0.82f)
         RoomInfoImage(
             resId = state.leftPlayerAvatarRes,
             descriptionRes = R.string.people_room_black_player,
             tag = "people_room_player_left",
-            centerFraction = 0.064f,
+            centerFraction = 0.128f,
             size = avatarSize,
             barWidth = barWidth,
             barHeight = barHeight,
@@ -234,7 +234,7 @@ private fun RoomPlayerInfoBar(
             resId = R.drawable.people_room_black_disc,
             descriptionRes = R.string.people_room_black_disc_description,
             tag = "people_room_disc_black",
-            centerFraction = 0.191f,
+            centerFraction = 0.205f,
             size = minOf(barWidth * 0.064f, barHeight * 0.50f),
             barWidth = barWidth,
             barHeight = barHeight,
@@ -244,7 +244,7 @@ private fun RoomPlayerInfoBar(
         Row(
             modifier = Modifier
                 .offset(
-                    x = barWidth * 0.258f,
+                    x = barWidth * 0.270f,
                     y = barHeight * 0.23f,
                 )
                 .size(height = barHeight * 0.54f, width = barWidth * 0.26f)
@@ -282,7 +282,7 @@ private fun RoomPlayerInfoBar(
                 resId = avatarRes,
                 descriptionRes = R.string.people_room_watcher,
                 tag = "people_room_watcher_$index",
-                centerFraction = 0.548f + index * 0.061f,
+                centerFraction = 0.545f + index * 0.060f,
                 size = size,
                 barWidth = barWidth,
                 barHeight = barHeight,
@@ -294,7 +294,7 @@ private fun RoomPlayerInfoBar(
         Box(
             modifier = Modifier
                 .offset(
-                    x = barWidth * 0.734f - countSize / 2f,
+                    x = barWidth * 0.715f - countSize / 2f,
                     y = barHeight * 0.5f - countSize / 2f,
                 )
                 .size(countSize),
@@ -317,7 +317,7 @@ private fun RoomPlayerInfoBar(
             resId = R.drawable.people_room_white_disc,
             descriptionRes = R.string.people_room_white_disc_description,
             tag = "people_room_disc_white",
-            centerFraction = 0.809f,
+            centerFraction = 0.795f,
             size = minOf(barWidth * 0.064f, barHeight * 0.50f),
             barWidth = barWidth,
             barHeight = barHeight,
@@ -326,7 +326,7 @@ private fun RoomPlayerInfoBar(
             resId = state.rightPlayerAvatarRes,
             descriptionRes = R.string.people_room_white_player,
             tag = "people_room_player_right",
-            centerFraction = 0.936f,
+            centerFraction = 0.905f,
             size = avatarSize,
             barWidth = barWidth,
             barHeight = barHeight,
@@ -452,14 +452,14 @@ private fun RoomAction(
     testTag: String,
     onClick: () -> Unit,
 ) {
-    val buttonWidth = designWidth * 0.40f
+    val buttonWidth = designWidth * 0.43f
     Box(
         modifier = Modifier
             .offset(
                 x = designLeft + designWidth * xFraction,
-                y = designTop + designHeight * 0.842f,
+                y = designTop + designHeight * 0.782f,
             )
-            .size(width = buttonWidth, height = designHeight * 0.070f)
+            .size(width = buttonWidth, height = designHeight * 0.160f)
             .clickable(onClick = onClick)
             .testTag(testTag),
         contentAlignment = Alignment.Center,
