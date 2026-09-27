@@ -2,6 +2,7 @@
 set -euo pipefail
 
 mkdir -p screenshots
+adb shell 'rm -f /sdcard/Download/ChanrivaPreviews/people-play-lobby-*.png'
 for language in ja en; do
   for width in 320 360 390; do
     adb shell wm size "${width}x800"

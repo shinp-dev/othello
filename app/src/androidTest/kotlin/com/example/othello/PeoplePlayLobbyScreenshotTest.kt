@@ -5,11 +5,14 @@ import android.graphics.Bitmap
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -74,7 +77,17 @@ class PeoplePlayLobbyScreenshotTest {
             composeRule.onNodeWithTag("play_lobby_room_$roomId").assertIsDisplayed()
         }
 
-        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        composeRule.waitForIdle()
+        instrumentation.waitForIdleSync()
+        val renderedRoot = composeRule.onRoot().captureToImage()
+        val pixels = renderedRoot.toPixelMap()
+        val sampledColors = buildSet {
+            for (y in 0 until renderedRoot.height step 8) {
+                for (x in 0 until renderedRoot.width step 8) add(pixels[x, y])
+            }
+        }
+        assertTrue("Compose screenshot appears blank at ${width}dp / $language", sampledColors.size > 64)
+        val bitmap = renderedRoot.asAndroidBitmap().copy(Bitmap.Config.ARGB_8888, false)
         assertEquals("Screenshot pixel width for ${width}dp emulator", width, bitmap.width)
         saveScreenshot(context, bitmap, "people-play-lobby-$language-${width}dp.png")
         bitmap.recycle()
