@@ -254,8 +254,7 @@ internal fun AuthenticatedModeRoute(
                 }
             },
         )
-        AuthenticatedModeDestination.PEOPLE_MATCH -> PeopleComingSoonScreen(
-            title = appString(R.string.people_play_title),
+        AuthenticatedModeDestination.PEOPLE_MATCH -> PeoplePlayLobbyScreen(
             onBack = { destination = AuthenticatedModeDestination.PEOPLE_HOME },
         )
         AuthenticatedModeDestination.PEOPLE_SOCIAL -> PeopleComingSoonScreen(
