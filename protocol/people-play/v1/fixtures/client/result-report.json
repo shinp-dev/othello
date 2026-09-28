@@ -1,0 +1,7 @@
+{
+  "protocolVersion": 1,
+  "roomId": "room-fixture-001",
+  "type": "RESULT_REPORT",
+  "ply": 60,
+  "result": "BLACK_WIN"
+}

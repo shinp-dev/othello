@@ -1,0 +1,120 @@
+{
+  "protocolVersion": 1,
+  "roomId": "room-fixture-001",
+  "type": "GAME_OVER",
+  "ply": 60,
+  "finishReason": "NORMAL",
+  "outcome": "DRAW",
+  "winner": null,
+  "decidedAt": 1780000000000,
+  "finalSnapshot": {
+    "protocolVersion": 1,
+    "roomId": "room-fixture-001",
+    "type": "ROOM_SNAPSHOT",
+    "phase": "PLAYING",
+    "timeControl": "TEN_MINUTES",
+    "seats": {
+      "a": {
+        "memberId": "member-alpha",
+        "displayName": "Sample Alpha",
+        "avatarId": "BOY"
+      },
+      "b": {
+        "memberId": "member-beta",
+        "displayName": "Sample Beta",
+        "avatarId": "MAGIC_BOOK"
+      }
+    },
+    "players": {
+      "black": {
+        "memberId": "member-beta",
+        "displayName": "Sample Beta",
+        "avatarId": "MAGIC_BOOK"
+      },
+      "white": {
+        "memberId": "member-alpha",
+        "displayName": "Sample Alpha",
+        "avatarId": "BOY"
+      }
+    },
+    "currentPly": 60,
+    "board": [
+      1,
+      2,
+      1,
+      2,
+      1,
+      2,
+      1,
+      2,
+      1,
+      2,
+      1,
+      2,
+      1,
+      2,
+      1,
+      2,
+      1,
+      2,
+      1,
+      1,
+      1,
+      2,
+      1,
+      1,
+      1,
+      2,
+      1,
+      1,
+      1,
+      2,
+      1,
+      1,
+      1,
+      2,
+      1,
+      1,
+      1,
+      2,
+      1,
+      1,
+      1,
+      2,
+      1,
+      1,
+      1,
+      2,
+      1,
+      1,
+      1,
+      2,
+      1,
+      1,
+      1,
+      2,
+      1,
+      1,
+      1,
+      2,
+      1,
+      1,
+      1,
+      2,
+      1,
+      1
+    ],
+    "move": {
+      "row": 7,
+      "column": 7
+    },
+    "nextTurn": null,
+    "terminalCandidate": true,
+    "resultCheckPly": 60,
+    "spectatorCount": 2,
+    "spectatorAvatarPreview": [
+      "GIRL",
+      "MAGIC_WAND"
+    ]
+  }
+}

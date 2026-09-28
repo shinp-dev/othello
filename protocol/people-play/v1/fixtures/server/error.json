@@ -1,0 +1,9 @@
+{
+  "protocolVersion": 1,
+  "roomId": "room-fixture-001",
+  "type": "ERROR",
+  "code": "BAD_PLY",
+  "rejectedType": "MOVE_SNAPSHOT",
+  "currentPly": 1,
+  "rejectedPly": 3
+}
