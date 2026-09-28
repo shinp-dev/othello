@@ -4,6 +4,10 @@ export interface VerifiedSupabaseUser {
   userId: string;
 }
 
+export interface AuthenticatedPeoplePlayRequest extends VerifiedSupabaseUser {
+  accessToken: string;
+}
+
 const jwksByIssuer = new Map<string, JWTVerifyGetKey>();
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -47,13 +51,20 @@ export async function isAuthenticatedPeoplePlayRequest(
   request: Request,
   supabaseUrl: string,
 ): Promise<boolean> {
+  return (await authenticatePeoplePlayRequest(request, supabaseUrl)) !== null;
+}
+
+export async function authenticatePeoplePlayRequest(
+  request: Request,
+  supabaseUrl: string,
+): Promise<AuthenticatedPeoplePlayRequest | null> {
   const authorization = request.headers.get("authorization");
   const match = authorization?.match(/^Bearer ([^\s,]+)$/i);
-  if (!match) return false;
+  if (!match) return null;
   try {
-    await verifySupabaseAccessToken(match[1], supabaseUrl);
-    return true;
+    const verified = await verifySupabaseAccessToken(match[1], supabaseUrl);
+    return { ...verified, accessToken: match[1] };
   } catch {
-    return false;
+    return null;
   }
 }

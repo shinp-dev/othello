@@ -1,12 +1,37 @@
-import { createPeoplePlayHandler, type RequestAuthenticator } from "../src/index.js";
+import {
+  Room,
+  createPeoplePlayHandler,
+  type ProfileResolver,
+  type RequestAuthenticator,
+} from "../src/index.js";
 import { RoomRegistry } from "../src/registry.js";
 
-const testAuthenticator: RequestAuthenticator = async (request) =>
-  request.headers.get("authorization") === "Bearer local-test-token";
+const TEST_USERS: Record<string, { userId: string; displayName: string }> = {
+  "local-test-token": { userId: "10000000-0000-4000-8000-000000000001", displayName: "Local Tester" },
+  "test-user-a": { userId: "00000000-0000-4000-8000-00000000000a", displayName: "サンプル・アルファ" },
+  "test-user-a-duplicate": { userId: "00000000-0000-4000-8000-00000000000a", displayName: "サンプル・アルファ" },
+  "test-user-b": { userId: "00000001-0000-4000-8000-00000000000b", displayName: "Sample Birch" },
+  "test-user-c": { userId: "00000002-0000-4000-8000-00000000000c", displayName: "Sample Cedar" },
+  "test-user-d": { userId: "00000003-0000-4000-8000-00000000000d", displayName: "Sample Dahlia" },
+  "test-user-e": { userId: "00000004-0000-4000-8000-00000000000e", displayName: "Sample Elm" },
+  "test-user-f": { userId: "00000005-0000-4000-8000-00000000000f", displayName: "Sample Fir" },
+};
 
-const peoplePlayHandler = createPeoplePlayHandler(testAuthenticator);
+const testAuthenticator: RequestAuthenticator = async (request) => {
+  const match = request.headers.get("authorization")?.match(/^Bearer ([^\s,]+)$/i);
+  const user = match ? TEST_USERS[match[1]] : undefined;
+  return user ? { userId: user.userId, accessToken: match![1] } : null;
+};
 
-export { RoomRegistry };
+const testProfileResolver: ProfileResolver = async (identity) => {
+  const user = TEST_USERS[identity.accessToken];
+  if (!user || user.userId !== identity.userId) throw new Error("Missing test profile");
+  return { displayName: user.displayName };
+};
+
+const peoplePlayHandler = createPeoplePlayHandler(testAuthenticator, testProfileResolver);
+
+export { Room, RoomRegistry };
 
 function response(body: unknown, status = 200): Response {
   return Response.json(body, { status });
@@ -16,6 +41,14 @@ export default {
   async fetch(request: Request<unknown, IncomingRequestCfProperties>, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/__test/health" && request.method === "GET") return response({ ok: true });
+    if (url.pathname === "/__test/upgrade-required-header" && request.method === "GET") {
+      const inspected = await peoplePlayHandler.fetch!(
+        new Request("http://internal.test/v1/people-play/rooms/new/socket") as Request<unknown, IncomingRequestCfProperties>,
+        env,
+        ctx,
+      );
+      return response({ status: inspected.status, upgrade: inspected.headers.get("upgrade") });
+    }
     if (!url.pathname.startsWith("/__test/registry/")) return peoplePlayHandler.fetch!(request, env, ctx);
     if (request.method !== "POST") return response({ error: "METHOD_NOT_ALLOWED" }, 405);
 
@@ -40,6 +73,8 @@ export default {
         return response(await registry.closeRoom(String(body.roomId ?? "")));
       case "/__test/registry/resolve":
         return response(await registry.resolveRoom(String(body.roomId ?? "")));
+      case "/__test/registry/resolve-join-target":
+        return response(await registry.resolveJoinTarget(String(body.roomId ?? "")));
       case "/__test/registry/list":
         return response({ rooms: await registry.listRooms() });
       default:

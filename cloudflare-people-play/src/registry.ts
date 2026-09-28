@@ -128,6 +128,14 @@ export class RoomRegistry extends DurableObject<Env> {
     return issued.closed_at === null ? { status: "active" } : { status: "closed" };
   }
 
+  async resolveJoinTarget(roomId: string): Promise<ResolveRoomResult> {
+    if (!roomId.trim()) return { status: "unknown" };
+    const issued = this.findIssuedRoom(roomId);
+    if (!issued) return { status: "unknown" };
+    if (issued.closed_at !== null) return { status: "closed" };
+    return this.hasProjection(roomId) ? { status: "active" } : { status: "unknown" };
+  }
+
   async listRooms(): Promise<LobbyProjection[]> {
     const rows = this.ctx.storage.sql.exec<ProjectionRow>(
       `SELECT p.room_id, p.projection_json
