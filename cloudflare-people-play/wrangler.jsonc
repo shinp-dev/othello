@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "chanriva-people-play",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-09",
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOM_REGISTRY", "class_name": "RoomRegistry" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["RoomRegistry"] }
+  ],
+  "vars": {
+    "SUPABASE_URL": "https://zgzllmaoyymoeiqtybck.supabase.co"
+  }
+}
