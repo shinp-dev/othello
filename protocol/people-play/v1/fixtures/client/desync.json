@@ -1,0 +1,7 @@
+{
+  "protocolVersion": 1,
+  "roomId": "room-fixture-001",
+  "type": "DESYNC",
+  "observedPly": 1,
+  "reason": "SNAPSHOT_MISMATCH"
+}

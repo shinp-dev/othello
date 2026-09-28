@@ -1,0 +1,59 @@
+{
+  "protocolVersion": 1,
+  "commands": [
+    {
+      "type": "TAKE_SEAT",
+      "phase": "WAITING",
+      "sender": "SPECTATOR",
+      "conditions": [
+        "member_is_connected",
+        "has_no_seat",
+        "empty_seat_exists"
+      ]
+    },
+    {
+      "type": "LEAVE_SEAT",
+      "phase": "WAITING",
+      "sender": "SEATED_MEMBER",
+      "conditions": [
+        "member_is_connected"
+      ]
+    },
+    {
+      "type": "MOVE_SNAPSHOT",
+      "phase": "PLAYING",
+      "sender": "CURRENT_TURN_PLAYER",
+      "conditions": [
+        "member_is_connected",
+        "result_check_inactive",
+        "ply_is_current_plus_one"
+      ]
+    },
+    {
+      "type": "DESYNC",
+      "phase": "PLAYING",
+      "sender": "PLAYER",
+      "conditions": [
+        "member_is_connected",
+        "observed_ply_from_one_through_current"
+      ]
+    },
+    {
+      "type": "RESULT_REPORT",
+      "phase": "PLAYING",
+      "sender": "PLAYER",
+      "conditions": [
+        "member_is_connected",
+        "ply_is_current"
+      ]
+    },
+    {
+      "type": "TIMEOUT_SELF",
+      "phase": "PLAYING",
+      "sender": "PLAYER",
+      "conditions": [
+        "member_is_connected"
+      ]
+    }
+  ]
+}
