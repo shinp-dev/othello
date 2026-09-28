@@ -10,5 +10,12 @@
     "outDir": "dist-test",
     "rootDir": "."
   },
-  "include": ["src/registry-core.ts", "src/auth.ts"]
+  "include": [
+    "src/registry-core.ts",
+    "src/auth.ts",
+    "src/avatar.ts",
+    "src/profile.ts",
+    "src/people-play-protocol.ts",
+    "src/room-state.ts"
+  ]
 }

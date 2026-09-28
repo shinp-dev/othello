@@ -1,11 +1,39 @@
-import { isAuthenticatedPeoplePlayRequest } from "./auth.js";
-import type { LobbyProjection } from "./registry-core.js";
+import {
+  authenticatePeoplePlayRequest,
+  type AuthenticatedPeoplePlayRequest,
+} from "./auth.js";
+import { deriveAvatarId } from "./avatar.js";
+import {
+  ProfileResolutionError,
+  resolveCanonicalPeoplePlayProfile,
+  type CanonicalPeoplePlayProfile,
+} from "./profile.js";
+import { TIME_CONTROLS, type LobbyProjection, type TimeControl } from "./registry-core.js";
 import { RoomRegistry } from "./registry.js";
+import { Room } from "./room.js";
 
 const ROOMS_PATH = "/v1/people-play/rooms";
+const NEW_SOCKET_PATH = "/v1/people-play/rooms/new/socket";
+const ROOM_SOCKET_PATTERN = /^\/v1\/people-play\/rooms\/([^/]+)\/socket$/;
 const REGISTRY_NAME = "people-play-room-registry";
+const INTERNAL_IDENTITY_HEADER = "x-people-play-internal-identity";
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export type RequestAuthenticator = (request: Request, env: Env) => Promise<boolean>;
+export type RequestAuthenticator = (
+  request: Request,
+  env: Env,
+) => Promise<AuthenticatedPeoplePlayRequest | null>;
+
+export type ProfileResolver = (
+  identity: AuthenticatedPeoplePlayRequest,
+  env: Env,
+) => Promise<CanonicalPeoplePlayProfile>;
+
+interface InternalIdentity {
+  userId: string;
+  displayName: string;
+  avatarId: ReturnType<typeof deriveAvatarId>;
+}
 
 const jsonResponse = (body: unknown, status = 200, extraHeaders: HeadersInit = {}): Response => {
   const headers = new Headers(extraHeaders);
@@ -13,26 +41,140 @@ const jsonResponse = (body: unknown, status = 200, extraHeaders: HeadersInit = {
   return new Response(JSON.stringify(body), { status, headers });
 };
 
+function encodeBase64UrlUtf8(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+}
+
+function internalIdentityHeader(identity: InternalIdentity): string {
+  return encodeBase64UrlUtf8(JSON.stringify(identity));
+}
+
+function isWebSocketUpgrade(request: Request): boolean {
+  return request.headers.get("upgrade")?.toLowerCase() === "websocket";
+}
+
+function parseTimeControl(value: string | null): TimeControl | null {
+  return value && TIME_CONTROLS.includes(value as TimeControl) ? value as TimeControl : null;
+}
+
+async function resolveProfileForSocket(
+  identity: AuthenticatedPeoplePlayRequest,
+  env: Env,
+  resolver: ProfileResolver,
+): Promise<CanonicalPeoplePlayProfile | Response> {
+  try {
+    return await resolver(identity, env);
+  } catch (error) {
+    if (error instanceof ProfileResolutionError && error.code === "PROFILE_REQUIRED") {
+      return jsonResponse({ error: "PROFILE_REQUIRED" }, 403);
+    }
+    return jsonResponse({ error: "PROFILE_UNAVAILABLE" }, 503);
+  }
+}
+
 export function createPeoplePlayHandler(
-  authenticate: RequestAuthenticator = (request, env) => isAuthenticatedPeoplePlayRequest(request, env.SUPABASE_URL),
+  authenticate: RequestAuthenticator = (request, env) => authenticatePeoplePlayRequest(request, env.SUPABASE_URL),
+  resolveProfile: ProfileResolver = (identity, env) => resolveCanonicalPeoplePlayProfile(
+    identity,
+    env.SUPABASE_URL,
+    env.SUPABASE_ANON_KEY,
+  ),
 ): ExportedHandler<Env> {
   return {
     async fetch(request, env): Promise<Response> {
       const url = new URL(request.url);
-      if (url.pathname !== ROOMS_PATH) return jsonResponse({ error: "NOT_FOUND" }, 404);
-      if (request.method !== "GET") return jsonResponse({ error: "METHOD_NOT_ALLOWED" }, 405, { allow: "GET" });
-      if (!(await authenticate(request, env))) return jsonResponse({ error: "AUTH_REQUIRED" }, 401);
+      const socketMatch = url.pathname.match(ROOM_SOCKET_PATTERN);
+      const isNewSocket = url.pathname === NEW_SOCKET_PATH;
+      const isExistingSocket = socketMatch !== null;
+      if (url.pathname !== ROOMS_PATH && !isNewSocket && !isExistingSocket) {
+        return jsonResponse({ error: "NOT_FOUND" }, 404);
+      }
+      if (request.method !== "GET") {
+        return jsonResponse({ error: "METHOD_NOT_ALLOWED" }, 405, { allow: "GET" });
+      }
+      if ((isNewSocket || isExistingSocket) && !isWebSocketUpgrade(request)) {
+        return jsonResponse({ error: "UPGRADE_REQUIRED" }, 426, { upgrade: "websocket" });
+      }
 
+      const authenticated = await authenticate(request, env);
+      if (!authenticated) return jsonResponse({ error: "AUTH_REQUIRED" }, 401);
+      const registry = env.ROOM_REGISTRY.getByName(REGISTRY_NAME);
+      if (url.pathname === ROOMS_PATH) {
+        try {
+          const rooms: LobbyProjection[] = await registry.listRooms();
+          return jsonResponse({ rooms });
+        } catch {
+          return jsonResponse({ error: "INTERNAL_ERROR" }, 500);
+        }
+      }
+
+      const profileOrResponse = await resolveProfileForSocket(authenticated, env, resolveProfile);
+      if (profileOrResponse instanceof Response) return profileOrResponse;
+      const identity: InternalIdentity = {
+        userId: authenticated.userId,
+        displayName: profileOrResponse.displayName,
+        avatarId: deriveAvatarId(authenticated.userId),
+      };
+
+      if (isNewSocket) {
+        const timeControl = parseTimeControl(url.searchParams.get("timeControl"));
+        if (!timeControl) return jsonResponse({ error: "BAD_TIME_CONTROL" }, 400);
+        let roomId: string | null = null;
+        let room: DurableObjectStub<Room> | null = null;
+        try {
+          roomId = await registry.allocateRoomId();
+          room = env.ROOM.getByName(roomId);
+          const headers = new Headers({
+            upgrade: "websocket",
+            [INTERNAL_IDENTITY_HEADER]: internalIdentityHeader(identity),
+          });
+          const internalUrl = new URL("https://room.internal/create");
+          internalUrl.searchParams.set("roomId", roomId);
+          internalUrl.searchParams.set("timeControl", timeControl);
+          const response = await room.fetch(new Request(internalUrl, { method: "GET", headers }));
+          if (response.status === 101) return response;
+        } catch {
+          // Cleanup below deliberately hides internal errors and credentials.
+        }
+        if (roomId) {
+          try { await room?.abortCreate(roomId); } catch { /* best effort */ }
+          try { await registry.closeRoom(roomId); } catch { /* best effort */ }
+        }
+        return jsonResponse({ error: "ROOM_CREATE_FAILED" }, 503);
+      }
+
+      let roomId: string;
       try {
-        const rooms: LobbyProjection[] = await env.ROOM_REGISTRY.getByName(REGISTRY_NAME).listRooms();
-        return jsonResponse({ rooms });
+        roomId = decodeURIComponent(socketMatch?.[1] ?? "");
       } catch {
-        return jsonResponse({ error: "INTERNAL_ERROR" }, 500);
+        return jsonResponse({ error: "ROOM_NOT_FOUND" }, 404);
+      }
+      if (!UUID_PATTERN.test(roomId)) return jsonResponse({ error: "ROOM_NOT_FOUND" }, 404);
+      try {
+        const resolution = await registry.resolveJoinTarget(roomId);
+        if (resolution.status === "unknown") return jsonResponse({ error: "ROOM_NOT_FOUND" }, 404);
+        if (resolution.status === "closed") return jsonResponse({ error: "ROOM_CLOSED" }, 410);
+        const headers = new Headers({
+          upgrade: "websocket",
+          [INTERNAL_IDENTITY_HEADER]: internalIdentityHeader(identity),
+        });
+        const internalUrl = new URL("https://room.internal/join");
+        internalUrl.searchParams.set("roomId", roomId);
+        const response = await env.ROOM.getByName(roomId).fetch(new Request(internalUrl, { method: "GET", headers }));
+        if (response.status === 101) return response;
+        if (response.status === 410) return jsonResponse({ error: "ROOM_CLOSED" }, 410);
+        if (response.status === 404) return jsonResponse({ error: "ROOM_NOT_FOUND" }, 404);
+        return jsonResponse({ error: "ROOM_UNAVAILABLE" }, 503);
+      } catch {
+        return jsonResponse({ error: "ROOM_UNAVAILABLE" }, 503);
       }
     },
   };
 }
 
-export { RoomRegistry };
+export { Room, RoomRegistry };
 
 export default createPeoplePlayHandler();

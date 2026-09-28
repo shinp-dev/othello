@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { once } from "node:events";
+import http from "node:http";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -48,6 +49,18 @@ async function post(pathname, body = {}) {
     body: JSON.stringify(body),
   });
   return { status: response.status, body: await response.json() };
+}
+
+async function rawGet(pathname) {
+  return new Promise((resolve, reject) => {
+    const request = http.get(`${baseUrl}${pathname}`, (response) => {
+      let body = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => { body += chunk; });
+      response.on("end", () => resolve({ status: response.statusCode, headers: response.headers, body: JSON.parse(body) }));
+    });
+    request.on("error", reject);
+  });
 }
 
 async function registryList() {
@@ -140,9 +153,17 @@ test("local Wrangler HTTP contract authenticates GET rooms and rejects other rou
   const wrongMethod = await fetch(`${baseUrl}/v1/people-play/rooms`, { method: "POST" });
   assert.equal(wrongMethod.status, 405);
   assert.equal(wrongMethod.headers.get("allow"), "GET");
-  for (const route of ["/unknown", "/v1/people-play/rooms/new/socket", "/v1/people-play/rooms/a/socket"]) {
-    assert.equal((await fetch(`${baseUrl}${route}`)).status, 404);
+  assert.equal((await fetch(`${baseUrl}/unknown`)).status, 404);
+  for (const route of ["/v1/people-play/rooms/new/socket", "/v1/people-play/rooms/a/socket"]) {
+    const response = await rawGet(route);
+    assert.equal(response.status, 426);
+    assert.deepEqual(response.body, { error: "UPGRADE_REQUIRED" });
   }
+  const inspectedUpgrade = await fetch(`${baseUrl}/__test/upgrade-required-header`);
+  assert.deepEqual(await inspectedUpgrade.json(), { status: 426, upgrade: "websocket" });
+  const wrongSocketMethod = await fetch(`${baseUrl}/v1/people-play/rooms/new/socket`, { method: "POST" });
+  assert.equal(wrongSocketMethod.status, 405);
+  assert.equal(wrongSocketMethod.headers.get("allow"), "GET");
 });
 
 test("RoomRegistry allocates privately, publishes and replaces only listed projections", async () => {
