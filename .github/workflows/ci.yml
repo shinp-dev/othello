@@ -16,10 +16,15 @@ jobs:
           cache: npm
           cache-dependency-path: |
             cloudflare-admin/package-lock.json
+            cloudflare-people-play/package-lock.json
             landing-page/package-lock.json
       - run: npm ci --prefix cloudflare-admin
       - run: npm run typecheck --prefix cloudflare-admin
       - run: npm test --prefix cloudflare-admin
+      - run: npm ci --prefix cloudflare-people-play
+      - run: npm run typecheck --prefix cloudflare-people-play
+      - run: npm test --prefix cloudflare-people-play
+      - run: npm run dry-run --prefix cloudflare-people-play
       - run: npm ci --prefix landing-page
       - run: npm run lint --prefix landing-page
       - run: npm test --prefix landing-page

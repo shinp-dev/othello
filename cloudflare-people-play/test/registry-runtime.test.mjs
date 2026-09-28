@@ -1,0 +1,209 @@
+import assert from "node:assert/strict";
+import { execFileSync, spawn } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { once } from "node:events";
+import net from "node:net";
+import os from "node:os";
+import path from "node:path";
+import test, { after, before } from "node:test";
+import { fileURLToPath } from "node:url";
+
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const registryName = "people-play-room-registry";
+const authHeaders = { authorization: "Bearer local-test-token" };
+let worker;
+let baseUrl;
+let output = "";
+let persistDir;
+
+async function freePort() {
+  const server = net.createServer();
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  return address.port;
+}
+
+async function waitForWorker() {
+  const deadline = Date.now() + 90_000;
+  while (Date.now() < deadline) {
+    if (worker.exitCode !== null) throw new Error(`Local Wrangler exited (${worker.exitCode}):\n${output}`);
+    try {
+      const response = await fetch(`${baseUrl}/__test/health`);
+      if (response.ok) return;
+    } catch {
+      // Wrangler is still starting its local runtime.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`Timed out starting local Wrangler:\n${output}`);
+}
+
+async function post(pathname, body = {}) {
+  const response = await fetch(`${baseUrl}${pathname}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return { status: response.status, body: await response.json() };
+}
+
+async function registryList() {
+  const result = await post("/__test/registry/list");
+  assert.equal(result.status, 200);
+  return result.body.rooms;
+}
+
+async function allocate() {
+  const result = await post("/__test/registry/allocate");
+  assert.equal(result.status, 200);
+  assert.match(result.body.roomId, /^[0-9a-f]{8}-[0-9a-f-]{27}$/i);
+  return result.body.roomId;
+}
+
+const member = (memberId, displayName) => ({ memberId, displayName, avatarId: "GIRL" });
+const projection = (roomId, phase = "WAITING", spectatorCount = 1) => phase === "WAITING"
+  ? {
+      roomId,
+      timeControl: "FIFTEEN_MINUTES",
+      phase,
+      seats: { a: member("member-a", "Aster"), b: null },
+      players: null,
+      spectatorCount,
+    }
+  : {
+      roomId,
+      timeControl: "FIFTEEN_MINUTES",
+      phase,
+      seats: { a: member("member-a", "Aster"), b: member("member-b", "Birch") },
+      players: { black: member("member-b", "Birch"), white: member("member-a", "Aster") },
+      spectatorCount,
+    };
+
+before(async () => {
+  const port = await freePort();
+  persistDir = await mkdtemp(path.join(os.tmpdir(), "people-play-wrangler-"));
+  baseUrl = `http://127.0.0.1:${port}`;
+  const wranglerPath = path.join(packageRoot, "node_modules", "wrangler", "bin", "wrangler.js");
+  worker = spawn(process.execPath, [
+    wranglerPath,
+    "dev",
+    "--local",
+    "--config",
+    "test/wrangler.local.jsonc",
+    "--port",
+    String(port),
+    "--ip",
+    "127.0.0.1",
+    "--persist-to",
+    persistDir,
+    "--log-level",
+    "error",
+  ], { cwd: packageRoot, detached: process.platform !== "win32", windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+  worker.stdout.setEncoding("utf8").on("data", (chunk) => { output = (output + chunk).slice(-10_000); });
+  worker.stderr.setEncoding("utf8").on("data", (chunk) => { output = (output + chunk).slice(-10_000); });
+  await waitForWorker();
+});
+
+after(async () => {
+  if (worker && worker.exitCode === null) {
+    if (process.platform === "win32") {
+      try { execFileSync("taskkill", ["/pid", String(worker.pid), "/T", "/F"], { stdio: "ignore" }); } catch { /* process may already have exited */ }
+    } else {
+      try { process.kill(-worker.pid, "SIGTERM"); } catch { /* process may already have exited */ }
+    }
+    await Promise.race([once(worker, "exit"), new Promise((resolve) => setTimeout(resolve, 10_000))]);
+  }
+  if (persistDir && path.dirname(persistDir) === os.tmpdir() && path.basename(persistDir).startsWith("people-play-wrangler-")) {
+    await rm(persistDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
+  }
+});
+
+test("local Wrangler HTTP contract authenticates GET rooms and rejects other routes/methods", async () => {
+  const noToken = await fetch(`${baseUrl}/v1/people-play/rooms`);
+  assert.equal(noToken.status, 401);
+  assert.deepEqual(await noToken.json(), { error: "AUTH_REQUIRED" });
+
+  for (const authorization of ["Basic abc", "Bearer", "Bearer invalid-token"]) {
+    const denied = await fetch(`${baseUrl}/v1/people-play/rooms`, { headers: { authorization } });
+    assert.equal(denied.status, 401);
+    assert.deepEqual(await denied.json(), { error: "AUTH_REQUIRED" });
+  }
+
+  const empty = await fetch(`${baseUrl}/v1/people-play/rooms`, { headers: authHeaders });
+  assert.equal(empty.status, 200);
+  assert.match(empty.headers.get("content-type") ?? "", /^application\/json/);
+  assert.deepEqual(await empty.json(), { rooms: [] });
+
+  const wrongMethod = await fetch(`${baseUrl}/v1/people-play/rooms`, { method: "POST" });
+  assert.equal(wrongMethod.status, 405);
+  assert.equal(wrongMethod.headers.get("allow"), "GET");
+  for (const route of ["/unknown", "/v1/people-play/rooms/new/socket", "/v1/people-play/rooms/a/socket"]) {
+    assert.equal((await fetch(`${baseUrl}${route}`)).status, 404);
+  }
+});
+
+test("RoomRegistry allocates privately, publishes and replaces only listed projections", async () => {
+  const id = await allocate();
+  assert.deepEqual(await (await post("/__test/registry/resolve", { roomId: id })).body, { status: "active" });
+  assert.deepEqual(await registryList(), []);
+
+  const unknown = await post("/__test/registry/publish", { roomId: "unknown-id", projection: projection("unknown-id") });
+  assert.deepEqual(unknown.body, { ok: false, error: "NOT_FOUND" });
+
+  const waiting = projection(id);
+  assert.deepEqual((await post("/__test/registry/publish", { roomId: id, projection: waiting })).body, { ok: true });
+  assert.deepEqual(await registryList(), [waiting]);
+  assert.deepEqual((await post("/__test/registry/publish", { roomId: id, projection: waiting })).body, { ok: false, error: "ALREADY_PUBLISHED" });
+
+  const updatedWaiting = { ...waiting, spectatorCount: 3 };
+  assert.deepEqual((await post("/__test/registry/update", { roomId: id, projection: updatedWaiting })).body, { ok: true });
+  assert.deepEqual(await registryList(), [updatedWaiting]);
+
+  const playing = projection(id, "PLAYING", 2);
+  assert.deepEqual((await post("/__test/registry/update", { roomId: id, projection: playing })).body, { ok: true });
+  assert.deepEqual(await registryList(), [playing]);
+  assert.deepEqual((await post("/__test/registry/close", { roomId: id })).body, { ok: true });
+  assert.deepEqual(await registryList(), []);
+});
+
+test("issued-only failures stay hidden and publish/update/close enforce lifecycle", async () => {
+  const issuedOnly = await allocate();
+  assert.deepEqual(await registryList(), []);
+  assert.deepEqual((await post("/__test/registry/update", { roomId: issuedOnly, projection: projection(issuedOnly, "PLAYING") })).body, { ok: false, error: "NOT_PUBLISHED" });
+  assert.deepEqual((await post("/__test/registry/close", { roomId: issuedOnly })).body, { ok: true });
+  assert.deepEqual((await post("/__test/registry/close", { roomId: issuedOnly })).body, { ok: true });
+  assert.deepEqual((await post("/__test/registry/resolve", { roomId: issuedOnly })).body, { status: "closed" });
+  assert.deepEqual((await post("/__test/registry/publish", { roomId: issuedOnly, projection: projection(issuedOnly) })).body, { ok: false, error: "ROOM_CLOSED" });
+  assert.deepEqual((await post("/__test/registry/update", { roomId: issuedOnly, projection: projection(issuedOnly) })).body, { ok: false, error: "ROOM_CLOSED" });
+  assert.deepEqual(await registryList(), []);
+
+  assert.deepEqual((await post("/__test/registry/update", { roomId: "missing-id", projection: projection("missing-id") })).body, { ok: false, error: "NOT_FOUND" });
+  assert.deepEqual((await post("/__test/registry/close", { roomId: "missing-id" })).body, { ok: false, error: "NOT_FOUND" });
+  assert.deepEqual((await post("/__test/registry/resolve", { roomId: "missing-id" })).body, { status: "unknown" });
+
+  const activeId = await allocate();
+  const activeProjection = projection(activeId);
+  assert.deepEqual((await post("/__test/registry/publish", { roomId: activeId, projection: activeProjection })).body, { ok: true });
+  assert.equal((await registryList()).length, 1);
+  assert.deepEqual((await post("/__test/registry/close", { roomId: activeId })).body, { ok: true });
+  assert.deepEqual(await registryList(), []);
+  assert.deepEqual((await post("/__test/registry/resolve", { roomId: activeId })).body, { status: "closed" });
+  assert.deepEqual((await post("/__test/registry/update", { roomId: activeId, projection: projection(activeId, "PLAYING") })).body, { ok: false, error: "ROOM_CLOSED" });
+  assert.deepEqual(await registryList(), []);
+
+  const laterId = await allocate();
+  assert.notEqual(laterId, activeId);
+  assert.deepEqual(await registryList(), []);
+});
+
+test("invalid projections never publish or replace an existing projection", async () => {
+  const id = await allocate();
+  const waiting = projection(id);
+  assert.deepEqual((await post("/__test/registry/publish", { roomId: id, projection: { ...waiting, phase: "CLOSED" } })).body, { ok: false, error: "INVALID_PROJECTION" });
+  assert.deepEqual((await post("/__test/registry/publish", { roomId: id, projection: waiting })).body, { ok: true });
+  assert.deepEqual((await post("/__test/registry/update", { roomId: id, projection: { ...waiting, seats: { a: member("a", "A"), b: member("b", "B") } } })).body, { ok: false, error: "INVALID_PROJECTION" });
+  assert.deepEqual(await registryList(), [waiting]);
+});

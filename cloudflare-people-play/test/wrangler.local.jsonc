@@ -1,0 +1,14 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "chanriva-people-play-local-test",
+  "main": "./local-entry.ts",
+  "compatibility_date": "2026-08-08",
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOM_REGISTRY", "class_name": "RoomRegistry" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["RoomRegistry"] }
+  ]
+}
