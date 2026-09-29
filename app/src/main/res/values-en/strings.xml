@@ -16,6 +16,9 @@
     <string name="play_lobby_room_3">Quick 3-min room</string>
     <string name="people_room_time_minutes">%1$d min</string>
     <string name="people_room_leave_seat">Leave seat</string>
+    <string name="people_room_take_seat">Take seat</string>
+    <string name="people_room_seat_a">Seat A</string>
+    <string name="people_room_seat_b">Seat B</string>
     <string name="people_room_exit">Exit</string>
     <string name="people_room_back_description">Back to room list</string>
     <string name="people_room_black_player">Black player, first move</string>
@@ -23,4 +26,20 @@
     <string name="people_room_black_disc_description">Black disc</string>
     <string name="people_room_white_disc_description">White disc</string>
     <string name="people_room_watcher">Watcher</string>
+    <string name="people_play_error_room_not_found">This room is no longer available. The room list was updated.</string>
+    <string name="people_play_error_room_closed">This room has closed. The room list was updated.</string>
+    <string name="people_play_error_auth_required">Your session needs to be refreshed before joining.</string>
+    <string name="people_play_error_api_unavailable">Online rooms are not configured on this build.</string>
+    <string name="people_play_error_connection">Could not connect to online rooms.</string>
+    <string name="people_play_return_lobby">Room list</string>
+    <string name="people_play_record">People Play</string>
+    <string name="people_play_game_over_format">%1$s · %2$s</string>
+    <string name="people_play_outcome_black_win">Black wins</string>
+    <string name="people_play_outcome_white_win">White wins</string>
+    <string name="people_play_outcome_draw">Draw</string>
+    <string name="people_play_outcome_no_contest">No contest</string>
+    <string name="people_play_reason_normal">Confirmed result</string>
+    <string name="people_play_reason_timeout">Time expired</string>
+    <string name="people_play_reason_disconnect">Player disconnected</string>
+    <string name="people_play_reason_desync">Snapshots differed</string>
 </resources>

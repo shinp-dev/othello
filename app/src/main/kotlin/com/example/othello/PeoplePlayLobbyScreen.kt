@@ -41,6 +41,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.othello.network.peopleplay.AvatarId
+import com.example.othello.network.peopleplay.RoomPhase
+import com.example.othello.network.peopleplay.TimeControl
 
 private val LobbyInk = Color(0xFF071822)
 private val LobbyEmerald = Color(0xFF0A463B)
@@ -48,7 +51,7 @@ private val LobbyGold = Color(0xFFE8C76D)
 private val LobbyIvory = Color(0xFFFFF6DF)
 private const val LobbyTableFrameAspectRatio = 1536f / 768f
 
-/** Local-only sample lobby. Room actions intentionally do not start network or game flows yet. */
+/** Render model shared by live Room projections and screenshot/test samples. */
 internal data class PeoplePlayLobbyRoom(
     @StringRes val nameRes: Int,
     @DrawableRes val timeIconRes: Int,
@@ -56,6 +59,7 @@ internal data class PeoplePlayLobbyRoom(
     val isPlaying: Boolean,
     val participantIconRes: List<Int>,
     val watchers: Int,
+    val roomId: String? = null,
 ) {
     val seatedPlayers: Int get() = participantIconRes.size
 }
@@ -68,13 +72,44 @@ internal fun samplePeoplePlayLobbyRooms() = listOf(
     PeoplePlayLobbyRoom(R.string.play_lobby_room_3, R.drawable.play_lobby_time_3, 3, true, listOf(R.drawable.play_lobby_icon_book, R.drawable.play_lobby_icon_adult_man), 5),
 )
 
+internal fun PeoplePlayLobbyEntry.toLobbyRoom(): PeoplePlayLobbyRoom {
+    val (name, icon, minutes) = when (timeControl) {
+        TimeControl.TWENTY_MINUTES -> Triple(R.string.play_lobby_room_20, R.drawable.play_lobby_time_20, 20)
+        TimeControl.FIFTEEN_MINUTES -> Triple(R.string.play_lobby_room_15, R.drawable.play_lobby_time_15, 15)
+        TimeControl.TEN_MINUTES -> Triple(R.string.play_lobby_room_10, R.drawable.play_lobby_time_10, 10)
+        TimeControl.FIVE_MINUTES -> Triple(R.string.play_lobby_room_5, R.drawable.play_lobby_time_5, 5)
+        TimeControl.THREE_MINUTES -> Triple(R.string.play_lobby_room_3, R.drawable.play_lobby_time_3, 3)
+    }
+    val participants = if (phase == RoomPhase.WAITING) listOfNotNull(seats.a, seats.b)
+    else listOfNotNull(players?.black, players?.white)
+    return PeoplePlayLobbyRoom(
+        nameRes = name,
+        timeIconRes = icon,
+        minutesPerPlayer = minutes,
+        isPlaying = phase == RoomPhase.PLAYING,
+        participantIconRes = participants.map { it.avatarId.toPeoplePlayAvatarDrawable() },
+        watchers = spectatorCount,
+        roomId = roomId,
+    )
+}
+
+internal fun AvatarId.toPeoplePlayAvatarDrawable(): Int = when (this) {
+    AvatarId.ADULT_MAN -> R.drawable.play_lobby_icon_adult_man
+    AvatarId.ADULT_WOMAN -> R.drawable.play_lobby_icon_adult_woman
+    AvatarId.BOY -> R.drawable.play_lobby_icon_boy
+    AvatarId.GIRL -> R.drawable.play_lobby_icon_girl
+    AvatarId.MAGIC_WAND -> R.drawable.play_lobby_icon_staff
+    AvatarId.MAGIC_BOOK -> R.drawable.play_lobby_icon_book
+}
+
 @Composable
 internal fun PeoplePlayLobbyScreen(
     onBack: () -> Unit,
     onEnterRoom: (PeoplePlayLobbyRoom) -> Unit = {},
+    rooms: List<PeoplePlayLobbyRoom> = samplePeoplePlayLobbyRooms(),
+    onCreateRoom: () -> Unit = {},
+    isOpeningRoom: Boolean = false,
 ) {
-    val rooms = samplePeoplePlayLobbyRooms()
-
     Box(Modifier.fillMaxSize()) {
         Image(
             painter = painterResource(R.drawable.play_lobby_bg),
@@ -138,7 +173,8 @@ internal fun PeoplePlayLobbyScreen(
                     modifier = Modifier.fillMaxWidth(),
                     iconRes = R.drawable.play_lobby_round_table,
                     labelRes = R.string.play_lobby_create_table,
-                    onClick = { /* Table creation is not part of this UI-only screen. */ },
+                    onClick = onCreateRoom,
+                    enabled = !isOpeningRoom,
                 )
             }
 
@@ -147,7 +183,7 @@ internal fun PeoplePlayLobbyScreen(
                 contentPadding = PaddingValues(bottom = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                items(rooms) { room ->
+                items(rooms, key = { it.roomId ?: "preview-${it.nameRes}" }) { room ->
                     LobbyRoomCard(room = room, onEnterRoom = onEnterRoom)
                 }
             }
@@ -161,13 +197,14 @@ private fun LobbyAction(
     @DrawableRes iconRes: Int,
     @StringRes labelRes: Int,
     onClick: () -> Unit,
+    enabled: Boolean = true,
 ) {
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(24.dp))
             .background(LobbyEmerald.copy(alpha = 0.92f))
             .border(1.2.dp, LobbyGold, RoundedCornerShape(24.dp))
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,

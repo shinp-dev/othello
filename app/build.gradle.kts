@@ -1,6 +1,8 @@
 import java.security.MessageDigest
 import java.security.cert.X509Certificate
+import java.net.URI
 import java.util.jar.JarFile
+import java.util.Properties
 
 fun chanrivaGitOutput(vararg arguments: String): String? = runCatching {
     val output = providers.exec {
@@ -12,6 +14,30 @@ fun chanrivaGitOutput(vararg arguments: String): String? = runCatching {
 val chanrivaGitShortSha = chanrivaGitOutput("rev-parse", "--short=8", "HEAD")
 val chanrivaGitDirty = chanrivaGitShortSha?.let {
     chanrivaGitOutput("status", "--porcelain")?.isNotEmpty() == true
+}
+val chanrivaLocalProperties = Properties().apply {
+    val localFile = rootProject.file("local.properties")
+    if (localFile.exists()) localFile.inputStream().use(::load)
+}
+val peoplePlayApiBaseUrl = providers.gradleProperty("peoplePlay.apiBaseUrl")
+    .orElse(providers.environmentVariable("PEOPLE_PLAY_API_BASE_URL"))
+    .orElse(chanrivaLocalProperties.getProperty("peoplePlay.apiBaseUrl") ?: "")
+    .getOrElse("").trim().trimEnd('/')
+
+fun isSecurePeoplePlayApiUrl(value: String): Boolean = runCatching {
+    val parsed = URI(value)
+    parsed.scheme == "https" && !parsed.host.isNullOrBlank() && parsed.userInfo == null &&
+        parsed.query == null && parsed.fragment == null
+}.getOrDefault(false)
+
+val validatePeoplePlayApiUrl = tasks.register("validatePeoplePlayApiUrl") {
+    group = "verification"
+    description = "Fail closed when a release build has no HTTPS People Play Worker URL."
+    doLast {
+        if (!isSecurePeoplePlayApiUrl(peoplePlayApiBaseUrl)) {
+            throw GradleException("Release People Play configuration requires peoplePlay.apiBaseUrl (HTTPS Worker origin).")
+        }
+    }
 }
 
 plugins {
@@ -57,6 +83,7 @@ android {
         versionName = "0.2.1"
         buildConfigField("String", "CHANRIVA_GIT_SHA", "\"${chanrivaGitShortSha ?: "unknown"}\"")
         buildConfigField("boolean", "CHANRIVA_GIT_DIRTY", (chanrivaGitDirty == true).toString())
+        buildConfigField("String", "PEOPLE_PLAY_API_BASE_URL", "\"${peoplePlayApiBaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
@@ -181,13 +208,19 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-gif:3.3.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     debugImplementation("androidx.compose.ui:ui-tooling:1.6.8")
     debugImplementation("androidx.compose.ui:ui-test-manifest:1.6.8")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4:1.6.8")
+}
+
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    dependsOn(validatePeoplePlayApiUrl)
 }

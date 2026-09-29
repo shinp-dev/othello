@@ -20,6 +20,8 @@ sealed interface AuthSessionStatus {
 interface AuthGateway {
     val sessionStatus: Flow<AuthSessionStatus>
     suspend fun currentSession(): UserSession?
+    /** Returns the current Supabase access token for authenticated API calls; callers must not persist it. */
+    suspend fun currentAccessToken(): String?
     suspend fun signIn(email: String, password: String): UserSession
     suspend fun signUp(email: String, password: String): SignUpResult
     suspend fun requestPasswordReset(email: String)

@@ -48,7 +48,38 @@ interface GameRecordRepository {
     suspend fun get(matchId: String): GameRecord
 }
 
-enum class LocalRecordType { LOCAL_HUMAN, LOCAL_AI, RESEARCH_LINE, ONLINE_SAVED }
+enum class LocalRecordType { LOCAL_HUMAN, LOCAL_AI, RESEARCH_LINE, ONLINE_SAVED, PEOPLE_PLAY }
+
+@Serializable enum class PeoplePlayLocalResult { BLACK_WIN, WHITE_WIN, DRAW, NO_CONTEST }
+@Serializable enum class PeoplePlayLocalFinishReason { NORMAL, TIMEOUT, DISCONNECT, DESYNC }
+@Serializable enum class PeoplePlayLocalResultSource { SERVER_MESSAGE, LOCAL_DISCONNECT }
+@Serializable enum class PeoplePlayLocalColor { BLACK, WHITE }
+
+/** Structured device-only metadata for the lightweight People Play record format. */
+@Serializable
+data class PeoplePlayLocalMetadata(
+    val roomId: String,
+    val playedAtEpochMillis: Long,
+    val opponentDisplayName: String,
+    val playerColor: PeoplePlayLocalColor,
+    val timeControl: String,
+    val result: PeoplePlayLocalResult,
+    val finishReason: PeoplePlayLocalFinishReason,
+    val resultSource: PeoplePlayLocalResultSource,
+    /** False means [LocalGameRecord.moves] is only the verified prefix before DESYNC. */
+    val moveHistoryComplete: Boolean,
+) {
+    init {
+        require(roomId.isNotBlank())
+        require(playedAtEpochMillis >= 0)
+        require(opponentDisplayName.isNotBlank())
+        require(timeControl in setOf("TWENTY_MINUTES", "FIFTEEN_MINUTES", "TEN_MINUTES", "FIVE_MINUTES", "THREE_MINUTES"))
+        require((finishReason == PeoplePlayLocalFinishReason.DESYNC) == (result == PeoplePlayLocalResult.NO_CONTEST))
+        require(moveHistoryComplete || finishReason == PeoplePlayLocalFinishReason.DESYNC)
+        require(resultSource != PeoplePlayLocalResultSource.LOCAL_DISCONNECT ||
+            (finishReason == PeoplePlayLocalFinishReason.DISCONNECT && result != PeoplePlayLocalResult.NO_CONTEST))
+    }
+}
 
 /** A device-only record. It never enters the Server GameRecord repository. */
 data class LocalGameRecord(
@@ -62,6 +93,7 @@ data class LocalGameRecord(
     val sourceMatchId: String? = null,
     /** Optional device-only study memo. It is never sent to Supabase or Research. */
     val memo: String? = null,
+    val peoplePlay: PeoplePlayLocalMetadata? = null,
 ) {
     init {
         require(localId.isNotBlank())
@@ -69,6 +101,12 @@ data class LocalGameRecord(
         require((result == null) == (finishReason == null)) { "result and finishReason must be provided together" }
         require(type != LocalRecordType.ONLINE_SAVED || !sourceMatchId.isNullOrBlank()) {
             "online-saved records require sourceMatchId"
+        }
+        require((type == LocalRecordType.PEOPLE_PLAY) == (peoplePlay != null)) {
+            "people-play records require structured People Play metadata"
+        }
+        require(type != LocalRecordType.PEOPLE_PLAY || (result == null && finishReason == null && sourceMatchId == null)) {
+            "People Play outcomes must not alter legacy match-result fields"
         }
         replay(moves)
     }
@@ -103,6 +141,7 @@ private data class LocalGameRecordDto(
     @SerialName("player_disc") val playerDisc: String? = null,
     @SerialName("source_match_id") val sourceMatchId: String? = null,
     val memo: String? = null,
+    @SerialName("people_play") val peoplePlay: PeoplePlayLocalMetadata? = null,
 )
 
 /** Stable, dependency-free-on-Android representation for the private local store. */
@@ -120,6 +159,7 @@ object LocalGameRecordJson {
             playerDisc = record.playerDisc?.name,
             sourceMatchId = record.sourceMatchId,
             memo = record.memo,
+            peoplePlay = record.peoplePlay,
         ),
     )
 
@@ -135,6 +175,7 @@ object LocalGameRecordJson {
             playerDisc = dto.playerDisc?.let(Disc::valueOf),
             sourceMatchId = dto.sourceMatchId,
             memo = dto.memo,
+            peoplePlay = dto.peoplePlay,
         )
     }
 

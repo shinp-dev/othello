@@ -44,7 +44,7 @@ class PeoplePlayRoomScreenshotTest {
             CompositionLocalProvider(LocalContext provides localizedContext, LocalConfiguration provides configuration) {
                 OthelloTheme {
                     PeoplePlayRoomScreen(
-                        state = PeoplePlayRoomUiState(),
+                        state = PeoplePlayRoomPresentationState(),
                         onBack = {},
                         onLeaveSeat = {},
                         onExit = {},

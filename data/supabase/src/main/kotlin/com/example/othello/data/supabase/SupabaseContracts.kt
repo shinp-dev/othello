@@ -646,6 +646,16 @@ internal class SupabaseAuthGateway(private val client: SupabaseClient) : AuthGat
         }
     }
 
+    override suspend fun currentAccessToken(): String? {
+        client.auth.awaitInitialization()
+        return when (val status = client.auth.sessionStatus.value) {
+            is SupabaseSessionStatus.Authenticated -> status.session.accessToken
+            is SupabaseSessionStatus.NotAuthenticated -> null
+            is SupabaseSessionStatus.RefreshFailure -> throw sessionRestoreFailure(status)
+            SupabaseSessionStatus.Initializing -> error("Supabase Auth initialization did not complete")
+        }
+    }
+
     override suspend fun signIn(email: String, password: String): UserSession {
         require(email.isNotBlank()) { "email is required" }
         require(password.isNotBlank()) { "password is required" }

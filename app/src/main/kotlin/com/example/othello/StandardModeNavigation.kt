@@ -35,6 +35,8 @@ import androidx.compose.material3.Text
 import coil3.compose.AsyncImage
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +50,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,6 +58,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.othello.network.peopleplay.FinishReason as PeoplePlayFinishReason
+import com.example.othello.network.peopleplay.Outcome as PeoplePlayOutcome
+import com.example.othello.network.peopleplay.PeoplePlayGameResult
 import com.example.othello.designsystem.ChanrivaScreenHeader
 import com.example.othello.designsystem.ChanrivaSpacing
 
@@ -119,20 +129,40 @@ internal fun authenticatedModeBackDestination(
     AuthenticatedModeDestination.ADVANCED -> AuthenticatedModeDestination.MODE_SELECTION
 }
 
+internal fun PeoplePlayGameResult.toGameOverStringResources(): Pair<Int, Int> =
+    (when (outcome) {
+        PeoplePlayOutcome.BLACK_WIN -> R.string.people_play_outcome_black_win
+        PeoplePlayOutcome.WHITE_WIN -> R.string.people_play_outcome_white_win
+        PeoplePlayOutcome.DRAW -> R.string.people_play_outcome_draw
+        PeoplePlayOutcome.NO_CONTEST -> R.string.people_play_outcome_no_contest
+    }) to when (finishReason) {
+        PeoplePlayFinishReason.NORMAL -> R.string.people_play_reason_normal
+        PeoplePlayFinishReason.TIMEOUT -> R.string.people_play_reason_timeout
+        PeoplePlayFinishReason.DISCONNECT -> R.string.people_play_reason_disconnect
+        PeoplePlayFinishReason.DESYNC -> R.string.people_play_reason_desync
+    }
+
+internal fun peoplePlayGameOverMessage(context: android.content.Context, result: PeoplePlayGameResult): String {
+    val (outcomeRes, reasonRes) = result.toGameOverStringResources()
+    return context.getString(
+        R.string.people_play_game_over_format,
+        context.getString(outcomeRes),
+        context.getString(reasonRes),
+    )
+}
+
 @Composable
 internal fun AuthenticatedModeRoute(
     userId: String,
     playProfileFlow: PlayProfileSelectionFlow? = null,
+    peoplePlaySession: PeoplePlaySessionOwner? = null,
     advancedContent: @Composable (onSwitchMode: () -> Unit) -> Unit,
 ) {
     var destination by rememberSaveable(userId) {
         mutableStateOf(initialAuthenticatedModeDestination())
     }
     var selectedPackId by rememberSaveable(userId) { mutableStateOf<String?>(null) }
-    var selectedPeopleRoomNameRes by rememberSaveable(userId) {
-        mutableStateOf(R.string.play_lobby_room_10)
-    }
-    var selectedPeopleRoomMinutes by rememberSaveable(userId) { mutableStateOf(10) }
+    var selectedPeopleRoomId by rememberSaveable(userId) { mutableStateOf<String?>(null) }
     var pendingPeopleDestination by rememberSaveable(userId) {
         mutableStateOf(AuthenticatedModeDestination.PEOPLE_MATCH)
     }
@@ -144,6 +174,20 @@ internal fun AuthenticatedModeRoute(
     var profileOperationBusy by remember(userId) { mutableStateOf(false) }
     var profileNetworkErrorEvent by remember(userId) { mutableStateOf(0) }
     val snackbarHostState = remember(userId) { SnackbarHostState() }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val context = LocalContext.current
+    val lobbyStateFlow = remember(peoplePlaySession) {
+        peoplePlaySession?.lobby?.state ?: MutableStateFlow(PeoplePlayLobbyState())
+    }
+    val lobbyState by lobbyStateFlow.collectAsState()
+    val activeRoomFlow = remember(peoplePlaySession) {
+        peoplePlaySession?.activeRoom ?: MutableStateFlow<PeoplePlayRoomStateHolder?>(null)
+    }
+    val activeRoomHolder by activeRoomFlow.collectAsState()
+    val activeRoomStateFlow = remember(activeRoomHolder) {
+        activeRoomHolder?.state ?: MutableStateFlow(PeoplePlayRoomUiState(status = PeoplePlayConnectionStatus.FAILED))
+    }
+    val activeRoomState by activeRoomStateFlow.collectAsState()
     val profileNetworkErrorMessage = appString(R.string.play_profile_network_error)
     val scope = rememberCoroutineScope()
 
@@ -165,6 +209,81 @@ internal fun AuthenticatedModeRoute(
         destination = AuthenticatedModeDestination.PEOPLE_HOME
         profileOperationBusy = false
         profileNetworkErrorEvent += 1
+    }
+
+    fun returnFromPeopleRoom() {
+        peoplePlaySession?.leaveRoom()
+        selectedPeopleRoomId = null
+        destination = AuthenticatedModeDestination.PEOPLE_MATCH
+    }
+
+    DisposableEffect(peoplePlaySession, destination, lifecycleOwner) {
+        val lobby = peoplePlaySession?.lobby
+        fun updateLifecycle() {
+            lobby?.setLifecycle(
+                isVisible = destination == AuthenticatedModeDestination.PEOPLE_MATCH,
+                isForeground = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED),
+            )
+        }
+        val observer = LifecycleEventObserver { _, event ->
+            updateLifecycle()
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_START) activeRoomHolder?.refreshClock()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        updateLifecycle()
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            lobby?.setLifecycle(isVisible = false, isForeground = false)
+        }
+    }
+
+    LaunchedEffect(destination, activeRoomHolder) {
+        if (destination == AuthenticatedModeDestination.PEOPLE_ROOM && activeRoomHolder != null) {
+            while (true) {
+                activeRoomHolder?.refreshClock()
+                delay(1_000L)
+            }
+        }
+    }
+
+    LaunchedEffect(activeRoomState.roomId, destination) {
+        val readyRoomId = activeRoomState.roomId ?: return@LaunchedEffect
+        if (destination == AuthenticatedModeDestination.PEOPLE_MATCH) {
+            selectedPeopleRoomId = readyRoomId
+            destination = AuthenticatedModeDestination.PEOPLE_ROOM
+        }
+    }
+
+    LaunchedEffect(destination, activeRoomHolder, selectedPeopleRoomId) {
+        if (destination == AuthenticatedModeDestination.PEOPLE_ROOM && activeRoomHolder == null) {
+            selectedPeopleRoomId = null
+            destination = AuthenticatedModeDestination.PEOPLE_MATCH
+            peoplePlaySession?.lobby?.refreshImmediately()
+        }
+    }
+
+    LaunchedEffect(lobbyState.errorCode) {
+        val error = lobbyState.errorCode ?: return@LaunchedEffect
+        val messageId = when (error) {
+            "ROOM_NOT_FOUND" -> R.string.people_play_error_room_not_found
+            "ROOM_CLOSED" -> R.string.people_play_error_room_closed
+            "AUTH_REQUIRED" -> R.string.people_play_error_auth_required
+            "API_UNAVAILABLE" -> R.string.people_play_error_api_unavailable
+            else -> R.string.people_play_error_connection
+        }
+        snackbarHostState.showSnackbar(context.getString(messageId), duration = SnackbarDuration.Short)
+    }
+
+    LaunchedEffect(activeRoomState.gameOver, destination) {
+        val result = activeRoomState.gameOver ?: return@LaunchedEffect
+        if (destination != AuthenticatedModeDestination.PEOPLE_ROOM) return@LaunchedEffect
+        val message = peoplePlayGameOverMessage(context, result)
+        snackbarHostState.showSnackbar(
+            message = message,
+            actionLabel = context.getString(R.string.people_play_return_lobby),
+            duration = SnackbarDuration.Indefinite,
+        )
+        if (destination == AuthenticatedModeDestination.PEOPLE_ROOM) returnFromPeopleRoom()
     }
 
     fun enterPeopleDestination(target: AuthenticatedModeDestination) {
@@ -194,7 +313,15 @@ internal fun AuthenticatedModeRoute(
         enabled = profileOperationBusy ||
             (backDestination != null && destination != AuthenticatedModeDestination.PEOPLE_NAME_SELECTION),
     ) {
-        if (!profileOperationBusy) backDestination?.let { destination = it }
+        if (!profileOperationBusy) {
+            if (destination == AuthenticatedModeDestination.PEOPLE_ROOM) returnFromPeopleRoom()
+            else {
+                if (destination == AuthenticatedModeDestination.PEOPLE_MATCH && lobbyState.isOpeningRoom) {
+                    peoplePlaySession?.cancelOpening()
+                }
+                backDestination?.let { destination = it }
+            }
+        }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -262,19 +389,22 @@ internal fun AuthenticatedModeRoute(
         )
         AuthenticatedModeDestination.PEOPLE_MATCH -> PeoplePlayLobbyScreen(
             onBack = { destination = AuthenticatedModeDestination.PEOPLE_HOME },
-            onEnterRoom = { room ->
-                selectedPeopleRoomNameRes = room.nameRes
-                selectedPeopleRoomMinutes = room.minutesPerPlayer
-                destination = AuthenticatedModeDestination.PEOPLE_ROOM
-            },
+            rooms = lobbyState.rooms.map(PeoplePlayLobbyEntry::toLobbyRoom),
+            isOpeningRoom = lobbyState.isOpeningRoom,
+            onCreateRoom = { peoplePlaySession?.createRoom() },
+            onEnterRoom = { room -> room.roomId?.let { peoplePlaySession?.joinRoom(it) } },
         )
         AuthenticatedModeDestination.PEOPLE_ROOM -> PeoplePlayRoomScreen(
-            state = PeoplePlayRoomUiState(
-                roomNameRes = selectedPeopleRoomNameRes,
-                minutesPerPlayer = selectedPeopleRoomMinutes,
-            ),
-            onBack = { destination = AuthenticatedModeDestination.PEOPLE_MATCH },
-            onExit = { destination = AuthenticatedModeDestination.PEOPLE_MATCH },
+            state = if (selectedPeopleRoomId == null || activeRoomState.roomId == selectedPeopleRoomId) {
+                activeRoomState.toPresentationState()
+            } else {
+                activeRoomState.copy(roomId = selectedPeopleRoomId, snapshot = null).toPresentationState()
+            },
+            onBack = ::returnFromPeopleRoom,
+            onLeaveSeat = { activeRoomHolder?.leaveSeat() },
+            onTakeSeat = { activeRoomHolder?.takeSeat() },
+            onCellClicked = { position -> activeRoomHolder?.play(position) },
+            onExit = ::returnFromPeopleRoom,
         )
         AuthenticatedModeDestination.PEOPLE_SOCIAL -> PeopleComingSoonScreen(
             title = appString(R.string.people_social_title),

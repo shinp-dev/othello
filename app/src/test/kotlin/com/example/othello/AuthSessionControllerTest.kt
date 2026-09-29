@@ -407,6 +407,8 @@ class AuthSessionControllerTest {
             return currentSessionBlock?.invoke() ?: current
         }
 
+        override suspend fun currentAccessToken(): String? = current?.let { "fixture-access-token" }
+
         override suspend fun signIn(email: String, password: String): UserSession {
             emailSignInCalls++
             signInFailure?.let { throw it }

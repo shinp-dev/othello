@@ -17,6 +17,17 @@ class OnlineSessionViewModel(application: Application) : AndroidViewModel(applic
     val componentResult: Result<SupabaseComponent> = SupabaseModule.create(scope = viewModelScope)
     val component: SupabaseComponent? = componentResult.getOrNull()
     val matchmaking: MatchmakingController? = component?.let { MatchmakingController(it.matchmakingRepository) }
+    internal val peoplePlaySession: PeoplePlaySessionOwner? = component?.let { supabase ->
+        val app = getApplication<OthelloApplication>()
+        val repository = runCatching { OkHttpPeoplePlayRepository(BuildConfig.PEOPLE_PLAY_API_BASE_URL) }
+            .getOrElse { UnconfiguredPeoplePlayRepository() }
+        PeoplePlaySessionOwner(
+            scope = viewModelScope,
+            repository = repository,
+            accessToken = supabase.authGateway::currentAccessToken,
+            persistence = app.localGameRecordPersistence.coordinator,
+        )
+    }
     private val recoveryStore = OnlineMatchRecoveryStore(getApplication())
     var coordinator: WebRtcMatchCoordinator? = null
         private set
@@ -25,6 +36,7 @@ class OnlineSessionViewModel(application: Application) : AndroidViewModel(applic
         context = getApplication(),
         onBeforeSignOut = { prepareForSignOut() },
         onAuthenticatedSessionEnding = {
+            peoplePlaySession?.closeForSignOut()
             matchmaking?.reset()
             leaveCoordinator()
             recoveryStore.clear()
@@ -132,6 +144,7 @@ class OnlineSessionViewModel(application: Application) : AndroidViewModel(applic
     }
 
     override fun onCleared() {
+        peoplePlaySession?.closeForSignOut()
         coordinator?.close()
         coordinator = null
         component?.close()
