@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.othello.game.Position
 
 private val RoomIvory = Color(0xFFFFF4DB)
 private val RoomGold = Color(0xFFFFD97B)
@@ -42,10 +43,10 @@ private const val RoomReferenceHeight = 1536f
 private const val RoomReferenceAspect = RoomReferenceHeight / RoomReferenceWidth
 
 /** The room screen's static UI model. Game/network state is intentionally out of scope. */
-internal data class PeoplePlayRoomUiState(
+internal data class PeoplePlayRoomPresentationState(
     @StringRes val roomNameRes: Int = R.string.play_lobby_room_10,
-    @DrawableRes val leftPlayerAvatarRes: Int = R.drawable.play_lobby_icon_adult_man,
-    @DrawableRes val rightPlayerAvatarRes: Int = R.drawable.play_lobby_icon_adult_woman,
+    @DrawableRes val leftPlayerAvatarRes: Int? = R.drawable.play_lobby_icon_adult_man,
+    @DrawableRes val rightPlayerAvatarRes: Int? = R.drawable.play_lobby_icon_adult_woman,
     val minutesPerPlayer: Int = 10,
     val watcherAvatarRes: List<Int> = listOf(
         R.drawable.play_lobby_icon_adult_woman,
@@ -53,6 +54,14 @@ internal data class PeoplePlayRoomUiState(
         R.drawable.play_lobby_icon_staff,
     ),
     val additionalWatcherCount: Int = 3,
+    val boardCells: List<Int>? = null,
+    val legalMoves: Set<Position> = emptySet(),
+    val canPlay: Boolean = false,
+    val hasColorAssignment: Boolean = true,
+    val showSeatAction: Boolean = true,
+    @StringRes val seatActionLabelRes: Int = R.string.people_room_leave_seat,
+    @StringRes val leftPlayerDescriptionRes: Int = R.string.people_room_black_player,
+    @StringRes val rightPlayerDescriptionRes: Int = R.string.people_room_white_player,
 )
 
 /**
@@ -61,9 +70,11 @@ internal data class PeoplePlayRoomUiState(
  */
 @Composable
 internal fun PeoplePlayRoomScreen(
-    state: PeoplePlayRoomUiState = PeoplePlayRoomUiState(),
+    state: PeoplePlayRoomPresentationState = PeoplePlayRoomPresentationState(),
     onBack: () -> Unit,
     onLeaveSeat: () -> Unit = {},
+    onTakeSeat: () -> Unit = {},
+    onCellClicked: (Position) -> Unit = {},
     onExit: () -> Unit,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize().testTag("people_room_screen")) {
@@ -149,11 +160,15 @@ internal fun PeoplePlayRoomScreen(
                 )
                 .size(boardSize)
                 .testTag("people_room_board"),
+            boardCells = state.boardCells,
+            legalMoves = state.legalMoves,
+            canPlay = state.canPlay,
+            onCellClicked = onCellClicked,
         )
 
-        RoomAction(
+        if (state.showSeatAction) RoomAction(
             imageRes = R.drawable.people_room_action_green,
-            labelRes = R.string.people_room_leave_seat,
+            labelRes = state.seatActionLabelRes,
             icon = { modifier ->
                 Icon(
                     imageVector = Icons.Filled.EventSeat,
@@ -167,8 +182,8 @@ internal fun PeoplePlayRoomScreen(
             designLeft = designLeft,
             designTop = designTop,
             xFraction = 0.035f,
-            testTag = "people_room_leave_seat",
-            onClick = onLeaveSeat,
+            testTag = if (state.seatActionLabelRes == R.string.people_room_take_seat) "people_room_take_seat" else "people_room_leave_seat",
+            onClick = if (state.seatActionLabelRes == R.string.people_room_take_seat) onTakeSeat else onLeaveSeat,
         )
         RoomAction(
             imageRes = R.drawable.people_room_action_red,
@@ -194,7 +209,7 @@ internal fun PeoplePlayRoomScreen(
 
 @Composable
 private fun RoomPlayerInfoBar(
-    state: PeoplePlayRoomUiState,
+    state: PeoplePlayRoomPresentationState,
     designWidth: Dp,
     designHeight: Dp,
     designLeft: Dp,
@@ -220,17 +235,19 @@ private fun RoomPlayerInfoBar(
         )
 
         val avatarSize = minOf(barWidth * 0.150f, barHeight * 0.82f)
-        RoomInfoImage(
-            resId = state.leftPlayerAvatarRes,
-            descriptionRes = R.string.people_room_black_player,
-            tag = "people_room_player_left",
-            centerFraction = 0.128f,
-            size = avatarSize,
-            barWidth = barWidth,
-            barHeight = barHeight,
-            circular = true,
-        )
-        RoomInfoImage(
+        state.leftPlayerAvatarRes?.let { avatarRes ->
+            RoomInfoImage(
+                resId = avatarRes,
+                descriptionRes = state.leftPlayerDescriptionRes,
+                tag = "people_room_player_left",
+                centerFraction = 0.128f,
+                size = avatarSize,
+                barWidth = barWidth,
+                barHeight = barHeight,
+                circular = true,
+            )
+        }
+        if (state.hasColorAssignment) RoomInfoImage(
             resId = R.drawable.people_room_black_disc,
             descriptionRes = R.string.people_room_black_disc_description,
             tag = "people_room_disc_black",
@@ -313,7 +330,7 @@ private fun RoomPlayerInfoBar(
             )
         }
 
-        RoomInfoImage(
+        if (state.hasColorAssignment) RoomInfoImage(
             resId = R.drawable.people_room_white_disc,
             descriptionRes = R.string.people_room_white_disc_description,
             tag = "people_room_disc_white",
@@ -322,16 +339,18 @@ private fun RoomPlayerInfoBar(
             barWidth = barWidth,
             barHeight = barHeight,
         )
-        RoomInfoImage(
-            resId = state.rightPlayerAvatarRes,
-            descriptionRes = R.string.people_room_white_player,
-            tag = "people_room_player_right",
-            centerFraction = 0.905f,
-            size = avatarSize,
-            barWidth = barWidth,
-            barHeight = barHeight,
-            circular = true,
-        )
+        state.rightPlayerAvatarRes?.let { avatarRes ->
+            RoomInfoImage(
+                resId = avatarRes,
+                descriptionRes = state.rightPlayerDescriptionRes,
+                tag = "people_room_player_right",
+                centerFraction = 0.905f,
+                size = avatarSize,
+                barWidth = barWidth,
+                barHeight = barHeight,
+                circular = true,
+            )
+        }
     }
 }
 
@@ -379,7 +398,13 @@ private const val RoomReferenceBoard = """
 
 /** Uses one normalized grid rectangle for every cell, stone, and marker. */
 @Composable
-internal fun PeoplePlayRoomBoard(modifier: Modifier = Modifier) {
+internal fun PeoplePlayRoomBoard(
+    modifier: Modifier = Modifier,
+    boardCells: List<Int>? = null,
+    legalMoves: Set<Position> = emptySet(),
+    canPlay: Boolean = false,
+    onCellClicked: (Position) -> Unit = {},
+) {
     BoxWithConstraints(modifier) {
         Image(
             painter = painterResource(R.drawable.people_room_board),
@@ -394,7 +419,7 @@ internal fun PeoplePlayRoomBoard(modifier: Modifier = Modifier) {
         val cellHeight = maxHeight * (GridBottom - GridTop) / 8f
         val markerSize = minOf(cellWidth, cellHeight) * 0.46f
         val discSize = minOf(cellWidth, cellHeight) * 0.68f
-        val rows = RoomReferenceBoard.trimIndent().lines()
+        val rows = if (boardCells == null) RoomReferenceBoard.trimIndent().lines() else null
 
         for (row in 0 until 8) {
             for (column in 0 until 8) {
@@ -404,19 +429,27 @@ internal fun PeoplePlayRoomBoard(modifier: Modifier = Modifier) {
                     modifier = Modifier
                         .offset(x = cellX, y = cellY)
                         .size(width = cellWidth, height = cellHeight)
-                        .clickable(onClick = {})
+                        .clickable(enabled = boardCells == null || (canPlay && Position(row, column) in legalMoves)) {
+                            if (boardCells != null) onCellClicked(Position(row, column))
+                        }
                         .testTag("people_room_cell_${row + 1}_${column + 1}"),
                 )
 
-                val piece = rows[row][column]
-                if (piece != '.') {
-                    val imageSize = if (piece == 'M') markerSize else discSize
+                val piece = if (boardCells == null) rows!![row][column] else when (boardCells[row * 8 + column]) {
+                    0 -> '.'
+                    1 -> 'B'
+                    2 -> 'W'
+                    else -> error("Invalid server board cell")
+                }
+                val showMarker = if (boardCells == null) piece == 'M' else Position(row, column) in legalMoves
+                if (piece != '.' || showMarker) {
+                    val imageSize = if (showMarker) markerSize else discSize
                     val resource = when (piece) {
                         'B' -> R.drawable.people_room_black_disc
                         'W' -> R.drawable.people_room_white_disc
                         else -> R.drawable.people_room_move_marker
                     }
-                    val kind = when (piece) {
+                    val kind = if (showMarker) "move" else when (piece) {
                         'B' -> "black"
                         'W' -> "white"
                         else -> "move"

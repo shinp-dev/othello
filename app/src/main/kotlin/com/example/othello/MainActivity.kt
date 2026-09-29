@@ -142,7 +142,11 @@ private fun AuthenticatedRoot(
                 PlayProfileSelectionFlow(it, application.pendingPlayProfileStore)
             }
         }
-        AuthenticatedModeRoute(session.userId, playProfileFlow) { onSwitchMode ->
+        AuthenticatedModeRoute(
+            userId = session.userId,
+            playProfileFlow = playProfileFlow,
+            peoplePlaySession = sessionOwner.peoplePlaySession,
+        ) { onSwitchMode ->
             AuthenticatedApp(
                 debugAutoPlay = debugAutoPlay,
                 debugTimeControlMillis = debugTimeControlMillis,

@@ -5,10 +5,16 @@ import com.example.othello.match.LocalMatchController
 import com.example.othello.records.LocalGameRecord
 import com.example.othello.records.LocalGameRecordStore
 import com.example.othello.records.LocalRecordType
+import com.example.othello.records.PeoplePlayLocalColor
+import com.example.othello.records.PeoplePlayLocalFinishReason
+import com.example.othello.records.PeoplePlayLocalMetadata
+import com.example.othello.records.PeoplePlayLocalResult
+import com.example.othello.records.PeoplePlayLocalResultSource
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertFails
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -22,6 +28,44 @@ import kotlinx.coroutines.withContext
 import kotlin.coroutines.CoroutineContext
 
 class LocalGameRecordPersistenceTest {
+    @Test
+    fun peoplePlayLocalIdAcceptsIdenticalDuplicateAndRejectsDifferentResult() = runBlocking {
+        val store = RecordingStore()
+        val owner = LocalGameRecordPersistenceProcessOwner(store, Dispatchers.Unconfined)
+        val metadata = PeoplePlayLocalMetadata(
+            roomId = "room-duplicate",
+            playedAtEpochMillis = 5,
+            opponentDisplayName = "Opponent",
+            playerColor = PeoplePlayLocalColor.BLACK,
+            timeControl = "TEN_MINUTES",
+            result = PeoplePlayLocalResult.NO_CONTEST,
+            finishReason = PeoplePlayLocalFinishReason.DESYNC,
+            resultSource = PeoplePlayLocalResultSource.SERVER_MESSAGE,
+            moveHistoryComplete = false,
+        )
+        val record = LocalGameRecord(
+            localId = "people-play:room-duplicate:member-1",
+            moves = emptyList(),
+            createdAtEpochMillis = 5,
+            type = LocalRecordType.PEOPLE_PLAY,
+            peoplePlay = metadata,
+        )
+
+        owner.coordinator.enqueue(record)?.join()
+        assertNull(owner.coordinator.enqueue(record))
+        assertFails {
+            owner.coordinator.enqueue(record.copy(peoplePlay = metadata.copy(
+                result = PeoplePlayLocalResult.WHITE_WIN,
+                finishReason = PeoplePlayLocalFinishReason.DISCONNECT,
+                resultSource = PeoplePlayLocalResultSource.LOCAL_DISCONNECT,
+                moveHistoryComplete = true,
+            )))
+        }
+        assertEquals(1, store.records.size)
+        assertEquals(record, store.records[record.localId])
+        owner.close()
+    }
+
     @Test
     fun completedGameSurvivesImmediateResetAndIsSavedOnce() = runBlocking {
         val started = CompletableDeferred<Unit>()

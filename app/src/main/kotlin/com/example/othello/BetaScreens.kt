@@ -70,6 +70,10 @@ import com.example.othello.records.LocalGameRecord
 import com.example.othello.records.LocalGameRecordReadResult
 import com.example.othello.records.LocalGameRecordStore
 import com.example.othello.records.LocalRecordType
+import com.example.othello.records.PeoplePlayLocalColor
+import com.example.othello.records.PeoplePlayLocalFinishReason
+import com.example.othello.records.PeoplePlayLocalMetadata
+import com.example.othello.records.PeoplePlayLocalResult
 import com.example.othello.records.toLocalCopy
 import com.example.othello.research.ResearchMove
 import com.example.othello.research.ResearchMoveKind
@@ -617,10 +621,24 @@ internal fun OfflineRecordsScreen(
             records == null -> Text(appString(R.string.loading))
             records.orEmpty().isEmpty() -> Text(appString(R.string.offline_records_none))
             else -> records.orEmpty().forEach { record ->
+                val peoplePlay = record.peoplePlay
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("${record.type.displayLabel(context)} / ${record.result?.userLabel(context) ?: appString(R.string.research_record)}")
-                        Text("${formatDate(record.createdAtEpochMillis)} / ${appString(R.string.move_count, record.moves.size)}")
+                        if (peoplePlay == null) {
+                            Text("${record.type.displayLabel(context)} / ${record.result?.userLabel(context) ?: appString(R.string.research_record)}")
+                            Text("${formatDate(record.createdAtEpochMillis)} / ${appString(R.string.move_count, record.moves.size)}")
+                        } else {
+                            Text("${record.type.displayLabel(context)} / ${peoplePlay.resultLabel(context)}")
+                            Text(
+                                listOf(
+                                    peoplePlay.opponentDisplayName,
+                                    context.getString(peoplePlay.playerColorLabelRes()),
+                                    context.getString(peoplePlay.timeControlLabelRes()),
+                                    formatDate(peoplePlay.playedAtEpochMillis),
+                                    context.getString(R.string.move_count, record.moves.size),
+                                ).joinToString(" / "),
+                            )
+                        }
                         Text(record.canonicalMoves, style = MaterialTheme.typography.bodySmall)
                         record.memo?.takeIf { it.isNotBlank() }?.let { memo ->
                             Text(memo.replace("\n", " "), style = MaterialTheme.typography.bodySmall, maxLines = 2)
@@ -908,9 +926,35 @@ private fun LocalRecordType.displayLabel(context: android.content.Context? = nul
     LocalRecordType.LOCAL_AI -> "AI"
     LocalRecordType.RESEARCH_LINE -> context?.getString(R.string.research_record) ?: "研究"
     LocalRecordType.ONLINE_SAVED -> context?.getString(R.string.online_records) ?: "オンライン対局"
+    LocalRecordType.PEOPLE_PLAY -> context?.getString(R.string.people_play_record) ?: "ふたり対戦"
 }
 
 private fun LocalRecordType.reviewTitle(context: android.content.Context? = null): String = when (this) {
     LocalRecordType.ONLINE_SAVED -> context?.getString(R.string.online_match_saved) ?: "オンライン対局（端末保存）"
+    LocalRecordType.PEOPLE_PLAY -> context?.getString(R.string.people_play_record) ?: "ふたり対戦"
     else -> context?.getString(R.string.offline_record) ?: "オフライン棋譜"
 }
+
+private fun PeoplePlayLocalMetadata.resultLabel(context: android.content.Context): String {
+    val outcome = when (result) {
+        PeoplePlayLocalResult.BLACK_WIN -> R.string.people_play_outcome_black_win
+        PeoplePlayLocalResult.WHITE_WIN -> R.string.people_play_outcome_white_win
+        PeoplePlayLocalResult.DRAW -> R.string.people_play_outcome_draw
+        PeoplePlayLocalResult.NO_CONTEST -> R.string.people_play_outcome_no_contest
+    }
+    val reason = when (finishReason) {
+        PeoplePlayLocalFinishReason.NORMAL -> R.string.people_play_reason_normal
+        PeoplePlayLocalFinishReason.TIMEOUT -> R.string.people_play_reason_timeout
+        PeoplePlayLocalFinishReason.DISCONNECT -> R.string.people_play_reason_disconnect
+        PeoplePlayLocalFinishReason.DESYNC -> R.string.people_play_reason_desync
+    }
+    return context.getString(R.string.people_play_game_over_format, context.getString(outcome), context.getString(reason))
+}
+
+private fun PeoplePlayLocalMetadata.playerColorLabelRes(): Int = when (playerColor) {
+    PeoplePlayLocalColor.BLACK -> R.string.black
+    PeoplePlayLocalColor.WHITE -> R.string.white
+}
+
+private fun PeoplePlayLocalMetadata.timeControlLabelRes(): Int =
+    com.example.othello.network.peopleplay.TimeControl.valueOf(timeControl).roomTitleAndMinutes().first

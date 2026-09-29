@@ -48,6 +48,87 @@ class LocalGameRecordTest {
         assertEquals("d3", decoded.canonicalMoves)
         assertNull(decoded.sourceMatchId)
         assertNull(decoded.memo)
+        assertNull(decoded.peoplePlay)
+    }
+
+    @Test
+    fun peoplePlayNoContestVerifiedPrefixAndZeroMoveLocalDisconnectRoundTrip() {
+        val desync = LocalGameRecord(
+            localId = "people-play:room-desync:member-player",
+            moves = listOf(Position(2, 3)),
+            createdAtEpochMillis = 100,
+            type = LocalRecordType.PEOPLE_PLAY,
+            playerDisc = Disc.BLACK,
+            peoplePlay = PeoplePlayLocalMetadata(
+                roomId = "room-desync",
+                playedAtEpochMillis = 100,
+                opponentDisplayName = "対戦相手",
+                playerColor = PeoplePlayLocalColor.BLACK,
+                timeControl = "TEN_MINUTES",
+                result = PeoplePlayLocalResult.NO_CONTEST,
+                finishReason = PeoplePlayLocalFinishReason.DESYNC,
+                resultSource = PeoplePlayLocalResultSource.SERVER_MESSAGE,
+                moveHistoryComplete = false,
+            ),
+        )
+        val localDisconnect = LocalGameRecord(
+            localId = "people-play:room-disconnect:member-player",
+            moves = emptyList(),
+            createdAtEpochMillis = 101,
+            type = LocalRecordType.PEOPLE_PLAY,
+            playerDisc = Disc.WHITE,
+            peoplePlay = PeoplePlayLocalMetadata(
+                roomId = "room-disconnect",
+                playedAtEpochMillis = 101,
+                opponentDisplayName = "Another player",
+                playerColor = PeoplePlayLocalColor.WHITE,
+                timeControl = "THREE_MINUTES",
+                result = PeoplePlayLocalResult.BLACK_WIN,
+                finishReason = PeoplePlayLocalFinishReason.DISCONNECT,
+                resultSource = PeoplePlayLocalResultSource.LOCAL_DISCONNECT,
+                moveHistoryComplete = true,
+            ),
+        )
+
+        val encoded = LocalGameRecordJson.encodeList(listOf(desync, localDisconnect))
+        val decoded = LocalGameRecordJson.decodeList(encoded)
+        assertEquals(listOf(desync, localDisconnect), decoded)
+        assertEquals(PeoplePlayLocalResult.NO_CONTEST, decoded.first().peoplePlay?.result)
+        assertEquals(false, decoded.first().peoplePlay?.moveHistoryComplete)
+        assertEquals(emptyList(), decoded.last().moves)
+        assertEquals(PeoplePlayLocalResultSource.LOCAL_DISCONNECT, decoded.last().peoplePlay?.resultSource)
+    }
+
+    @Test
+    fun oldAndNewJsonlLinesRecoverTogetherWithoutUnknownKeyMode() {
+        val oldLine = """{"local_id":"legacy-line","moves":"","created_at":1,"type":"LOCAL_HUMAN","result":null,"finish_reason":null,"player_disc":null}"""
+        val newLine = LocalGameRecordJson.encode(
+            LocalGameRecord(
+                localId = "people-play:line:member",
+                moves = emptyList(),
+                createdAtEpochMillis = 2,
+                type = LocalRecordType.PEOPLE_PLAY,
+                playerDisc = Disc.BLACK,
+                peoplePlay = PeoplePlayLocalMetadata(
+                    roomId = "line",
+                    playedAtEpochMillis = 2,
+                    opponentDisplayName = "Rival",
+                    playerColor = PeoplePlayLocalColor.BLACK,
+                    timeControl = "TEN_MINUTES",
+                    result = PeoplePlayLocalResult.NO_CONTEST,
+                    finishReason = PeoplePlayLocalFinishReason.DESYNC,
+                    resultSource = PeoplePlayLocalResultSource.SERVER_MESSAGE,
+                    moveHistoryComplete = false,
+                ),
+            ),
+        )
+
+        val result = LocalGameRecordJson.decodeListRecovering("$oldLine\n{bad}\n$newLine")
+
+        assertEquals(2, result.records.size)
+        assertEquals(1, result.corruptLines.size)
+        assertEquals("legacy-line", result.records.first().localId)
+        assertEquals("people-play:line:member", result.records.last().localId)
     }
 
     @Test
