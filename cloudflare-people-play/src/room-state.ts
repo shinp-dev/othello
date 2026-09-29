@@ -6,9 +6,12 @@ import {
   type ParticipantSummary,
   type TimeControl,
 } from "./registry-core.js";
+import type { ReportedResult } from "./people-play-protocol.js";
 
 export type Seat = "A" | "B";
 export type PlayerColor = "BLACK" | "WHITE";
+export type FinishReason = "NORMAL" | "TIMEOUT" | "DISCONNECT" | "DESYNC";
+export type Outcome = "BLACK_WIN" | "WHITE_WIN" | "DRAW" | "NO_CONTEST";
 
 export interface InternalParticipant extends ParticipantSummary {
   userId: string;
@@ -25,6 +28,12 @@ export interface SocketAttachment {
   playerColorHint: PlayerColor | null;
 }
 
+export interface ResultCheckState {
+  ply: number;
+  black: ReportedResult | null;
+  white: ReportedResult | null;
+}
+
 export interface ActiveRoomState {
   schemaVersion: 1;
   roomId: string;
@@ -33,13 +42,13 @@ export interface ActiveRoomState {
   seats: { a: InternalParticipant | null; b: InternalParticipant | null };
   players: { black: InternalParticipant; white: InternalParticipant } | null;
   currentPly: number;
-  currentTurn: PlayerColor;
+  currentTurn: PlayerColor | null;
   latestSnapshot: {
     board: number[];
     move: { row: number; column: number } | null;
     terminalCandidate: boolean;
   };
-  resultCheck: null;
+  resultCheck: ResultCheckState | null;
 }
 
 export interface ClosedRoomState {
@@ -51,6 +60,36 @@ export interface ClosedRoomState {
 
 export type PersistedRoomState = ActiveRoomState | ClosedRoomState;
 
+export interface RoomSnapshot {
+  protocolVersion: 1;
+  type: "ROOM_SNAPSHOT";
+  roomId: string;
+  phase: "WAITING" | "PLAYING";
+  timeControl: TimeControl;
+  seats: { a: ParticipantSummary | null; b: ParticipantSummary | null };
+  players: { black: ParticipantSummary; white: ParticipantSummary } | null;
+  currentPly: number;
+  board: number[];
+  move: { row: number; column: number } | null;
+  nextTurn: PlayerColor | null;
+  terminalCandidate: boolean;
+  resultCheckPly: number | null;
+  spectatorCount: number;
+  spectatorAvatarPreview: AvatarId[];
+}
+
+export interface GameOverMessage {
+  protocolVersion: 1;
+  type: "GAME_OVER";
+  roomId: string;
+  ply: number;
+  finishReason: FinishReason;
+  outcome: Outcome;
+  winner: PlayerColor | null;
+  decidedAt: number;
+  finalSnapshot: RoomSnapshot;
+}
+
 export const INITIAL_BOARD: readonly number[] = Object.freeze(Array.from({ length: 64 }, (_, index) => {
   if (index === 27 || index === 36) return 2;
   if (index === 28 || index === 35) return 1;
@@ -58,6 +97,7 @@ export const INITIAL_BOARD: readonly number[] = Object.freeze(Array.from({ lengt
 }));
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const REPORTED_RESULTS: readonly ReportedResult[] = ["BLACK_WIN", "WHITE_WIN", "DRAW", "NOT_FINISHED"];
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -73,6 +113,29 @@ function isParticipant(value: unknown): value is InternalParticipant {
     && typeof value.userId === "string" && UUID_PATTERN.test(value.userId)
     && typeof value.displayName === "string" && value.displayName.trim().length > 0
     && typeof value.avatarId === "string" && AVATAR_IDS.includes(value.avatarId as AvatarId);
+}
+
+function isBoard(value: unknown): value is number[] {
+  return Array.isArray(value) && value.length === 64
+    && value.every((cell) => Number.isInteger(cell) && (cell === 0 || cell === 1 || cell === 2));
+}
+
+function isMove(value: unknown): value is { row: number; column: number } {
+  return isRecord(value) && hasExactKeys(value, ["row", "column"])
+    && Number.isInteger(value.row) && (value.row as number) >= 0 && (value.row as number) <= 7
+    && Number.isInteger(value.column) && (value.column as number) >= 0 && (value.column as number) <= 7;
+}
+
+function parseResultCheck(value: unknown, currentPly: number): ResultCheckState | null {
+  if (value === null) return null;
+  if (!isRecord(value) || !hasExactKeys(value, ["ply", "black", "white"])
+    || value.ply !== currentPly
+    || (value.black !== null && !REPORTED_RESULTS.includes(value.black as ReportedResult))
+    || (value.white !== null && !REPORTED_RESULTS.includes(value.white as ReportedResult))
+    || (value.black === null && value.white === null)) {
+    throw new Error("Invalid result check");
+  }
+  return { ply: currentPly, black: value.black as ReportedResult | null, white: value.white as ReportedResult | null };
 }
 
 export function isSocketAttachment(value: unknown): value is SocketAttachment {
@@ -192,6 +255,12 @@ export function attachmentRole(
   return { seat, playerColor, spectator: seat === null && playerColor === null };
 }
 
+export function playerColorForMember(state: ActiveRoomState, memberId: string): PlayerColor | null {
+  if (state.players?.black.memberId === memberId) return "BLACK";
+  if (state.players?.white.memberId === memberId) return "WHITE";
+  return null;
+}
+
 export function reconcileAttachment(state: ActiveRoomState, attachment: SocketAttachment): SocketAttachment {
   const role = attachmentRole(state, attachment);
   return { ...attachment, seatHint: role.seat, playerColorHint: role.playerColor };
@@ -213,24 +282,6 @@ export function spectatorSummary(
 const publicParticipant = ({ memberId, displayName, avatarId }: InternalParticipant): ParticipantSummary =>
   ({ memberId, displayName, avatarId });
 
-export interface RoomSnapshot {
-  protocolVersion: 1;
-  type: "ROOM_SNAPSHOT";
-  roomId: string;
-  phase: "WAITING" | "PLAYING";
-  timeControl: TimeControl;
-  seats: { a: ParticipantSummary | null; b: ParticipantSummary | null };
-  players: { black: ParticipantSummary; white: ParticipantSummary } | null;
-  currentPly: number;
-  board: number[];
-  move: { row: number; column: number } | null;
-  nextTurn: PlayerColor;
-  terminalCandidate: false;
-  resultCheckPly: null;
-  spectatorCount: number;
-  spectatorAvatarPreview: AvatarId[];
-}
-
 export function buildRoomSnapshot(state: ActiveRoomState, attachments: readonly SocketAttachment[]): RoomSnapshot {
   const spectators = spectatorSummary(state, attachments);
   return {
@@ -249,11 +300,32 @@ export function buildRoomSnapshot(state: ActiveRoomState, attachments: readonly 
     } : null,
     currentPly: state.currentPly,
     board: [...state.latestSnapshot.board],
-    move: state.latestSnapshot.move,
+    move: state.latestSnapshot.move ? { ...state.latestSnapshot.move } : null,
     nextTurn: state.currentTurn,
-    terminalCandidate: false,
-    resultCheckPly: null,
+    terminalCandidate: state.latestSnapshot.terminalCandidate,
+    resultCheckPly: state.resultCheck?.ply ?? null,
     ...spectators,
+  };
+}
+
+export function buildGameOver(
+  state: ActiveRoomState,
+  attachments: readonly SocketAttachment[],
+  finishReason: FinishReason,
+  outcome: Outcome,
+  winner: PlayerColor | null,
+  decidedAt: number,
+): GameOverMessage {
+  return {
+    protocolVersion: 1,
+    type: "GAME_OVER",
+    roomId: state.roomId,
+    ply: state.currentPly,
+    finishReason,
+    outcome,
+    winner,
+    decidedAt,
+    finalSnapshot: buildRoomSnapshot(state, attachments),
   };
 }
 
@@ -310,15 +382,28 @@ export function parsePersistedRoomState(value: unknown): PersistedRoomState {
   const b = value.seats.b;
   if ((a !== null && !isParticipant(a)) || (b !== null && !isParticipant(b))) throw new Error("Invalid seat participant");
   if (a && b && a.memberId === b.memberId) throw new Error("Duplicate seat participant");
-  if (typeof value.currentPly !== "number" || !Number.isSafeInteger(value.currentPly) || value.currentPly < 0 || value.currentTurn !== "BLACK") throw new Error("Invalid Phase 3 game state");
-  if (!isRecord(value.latestSnapshot) || !hasExactKeys(value.latestSnapshot, ["board", "move", "terminalCandidate"])) throw new Error("Invalid latest snapshot");
-  if (!Array.isArray(value.latestSnapshot.board) || value.latestSnapshot.board.length !== 64
-    || value.latestSnapshot.board.some((cell) => cell !== 0 && cell !== 1 && cell !== 2)
-    || value.latestSnapshot.move !== null || value.latestSnapshot.terminalCandidate !== false || value.resultCheck !== null) {
-    throw new Error("Invalid Phase 3 snapshot state");
+  if (!Number.isSafeInteger(value.currentPly) || (value.currentPly as number) < 0) throw new Error("Invalid current ply");
+  if (!isRecord(value.latestSnapshot) || !hasExactKeys(value.latestSnapshot, ["board", "move", "terminalCandidate"])
+    || !isBoard(value.latestSnapshot.board) || typeof value.latestSnapshot.terminalCandidate !== "boolean") {
+    throw new Error("Invalid latest snapshot");
   }
+  const currentPly = value.currentPly as number;
+  const move = value.latestSnapshot.move;
+  if ((currentPly === 0 && move !== null) || (currentPly > 0 && !isMove(move))) throw new Error("Invalid snapshot move");
+  const normalizedMove = move === null
+    ? null
+    : isMove(move) ? { row: move.row, column: move.column } : null;
+  if (value.latestSnapshot.terminalCandidate) {
+    if (value.currentTurn !== null) throw new Error("Invalid terminal current turn");
+  } else if (value.currentTurn !== "BLACK" && value.currentTurn !== "WHITE") {
+    throw new Error("Invalid current turn");
+  }
+
   if (value.phase === "WAITING") {
-    if (value.players !== null || (a !== null && b !== null)) throw new Error("Invalid WAITING state");
+    if (value.players !== null || (a !== null && b !== null) || currentPly !== 0 || value.currentTurn !== "BLACK"
+      || move !== null || value.latestSnapshot.terminalCandidate || value.resultCheck !== null) {
+      throw new Error("Invalid WAITING state");
+    }
     return {
       schemaVersion: 1,
       roomId: value.roomId,
@@ -326,30 +411,35 @@ export function parsePersistedRoomState(value: unknown): PersistedRoomState {
       timeControl: value.timeControl as TimeControl,
       seats: { a, b },
       players: null,
-      currentPly: value.currentPly,
-      currentTurn: "BLACK",
-      latestSnapshot: { board: [...value.latestSnapshot.board], move: null, terminalCandidate: false },
-      resultCheck: null,
-    };
-  } else {
-    if (!a || !b || !isRecord(value.players) || !hasExactKeys(value.players, ["black", "white"])
-      || !isParticipant(value.players.black) || !isParticipant(value.players.white)) throw new Error("Invalid PLAYING state");
-    const seatIds = new Set([a.memberId, b.memberId]);
-    if (value.players.black.memberId === value.players.white.memberId
-      || !seatIds.has(value.players.black.memberId) || !seatIds.has(value.players.white.memberId)) {
-      throw new Error("Invalid player assignment");
-    }
-    return {
-      schemaVersion: 1,
-      roomId: value.roomId,
-      phase: "PLAYING",
-      timeControl: value.timeControl as TimeControl,
-      seats: { a, b },
-      players: { black: value.players.black, white: value.players.white },
-      currentPly: value.currentPly,
+      currentPly: 0,
       currentTurn: "BLACK",
       latestSnapshot: { board: [...value.latestSnapshot.board], move: null, terminalCandidate: false },
       resultCheck: null,
     };
   }
+
+  if (!a || !b || !isRecord(value.players) || !hasExactKeys(value.players, ["black", "white"])
+    || !isParticipant(value.players.black) || !isParticipant(value.players.white)) throw new Error("Invalid PLAYING state");
+  const seatIds = new Set([a.memberId, b.memberId]);
+  if (value.players.black.memberId === value.players.white.memberId
+    || !seatIds.has(value.players.black.memberId) || !seatIds.has(value.players.white.memberId)) {
+    throw new Error("Invalid player assignment");
+  }
+  const resultCheck = parseResultCheck(value.resultCheck, currentPly);
+  return {
+    schemaVersion: 1,
+    roomId: value.roomId,
+    phase: "PLAYING",
+    timeControl: value.timeControl as TimeControl,
+    seats: { a, b },
+    players: { black: value.players.black, white: value.players.white },
+    currentPly,
+    currentTurn: value.currentTurn as PlayerColor | null,
+    latestSnapshot: {
+      board: [...value.latestSnapshot.board],
+      move: normalizedMove,
+      terminalCandidate: value.latestSnapshot.terminalCandidate,
+    },
+    resultCheck,
+  };
 }

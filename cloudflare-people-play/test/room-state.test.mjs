@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { deriveAvatarId } from "../dist-test/src/avatar.js";
-import { parsePhase3ClientMessage } from "../dist-test/src/people-play-protocol.js";
+import { parsePeoplePlayClientMessage } from "../dist-test/src/people-play-protocol.js";
 import {
   INITIAL_BOARD,
   allocateMemberId,
@@ -113,16 +113,16 @@ test("initial board and Phase 1 fixtures remain the same wire contract", async (
   assert.deepEqual(INITIAL_BOARD, waitingFixture.board);
   const takeFixture = await fixture("fixtures/client/take-seat.json");
   const leaveFixture = await fixture("fixtures/client/leave-seat.json");
-  assert.equal(parsePhase3ClientMessage(JSON.stringify(takeFixture), takeFixture.roomId).type, "TAKE_SEAT");
-  assert.equal(parsePhase3ClientMessage(JSON.stringify(leaveFixture), leaveFixture.roomId).type, "LEAVE_SEAT");
+  assert.equal(parsePeoplePlayClientMessage(JSON.stringify(takeFixture), takeFixture.roomId).type, "TAKE_SEAT");
+  assert.equal(parsePeoplePlayClientMessage(JSON.stringify(leaveFixture), leaveFixture.roomId).type, "LEAVE_SEAT");
   for (const invalid of [
     { ...takeFixture, protocolVersion: 2 },
     { ...takeFixture, roomId: "other" },
     { ...takeFixture, extra: true },
     { ...takeFixture, type: "MOVE_SNAPSHOT" },
-  ]) assert.throws(() => parsePhase3ClientMessage(JSON.stringify(invalid), takeFixture.roomId));
+  ]) assert.throws(() => parsePeoplePlayClientMessage(JSON.stringify(invalid), takeFixture.roomId));
   assert.throws(
-    () => parsePhase3ClientMessage(JSON.stringify({ ...takeFixture, type: "raw-secret-like-value" }), takeFixture.roomId),
+    () => parsePeoplePlayClientMessage(JSON.stringify({ ...takeFixture, type: "raw-secret-like-value" }), takeFixture.roomId),
     (error) => error.rejectedType === "UNKNOWN",
   );
 });

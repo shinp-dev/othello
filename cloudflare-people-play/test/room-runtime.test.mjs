@@ -13,6 +13,9 @@ const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const takeSeatFixture = JSON.parse(await readFile(new URL("../../protocol/people-play/v1/fixtures/client/take-seat.json", import.meta.url), "utf8"));
 const leaveSeatFixture = JSON.parse(await readFile(new URL("../../protocol/people-play/v1/fixtures/client/leave-seat.json", import.meta.url), "utf8"));
 const moveFixture = JSON.parse(await readFile(new URL("../../protocol/people-play/v1/fixtures/client/move-snapshot.json", import.meta.url), "utf8"));
+const desyncFixture = JSON.parse(await readFile(new URL("../../protocol/people-play/v1/fixtures/client/desync.json", import.meta.url), "utf8"));
+const resultReportFixture = JSON.parse(await readFile(new URL("../../protocol/people-play/v1/fixtures/client/result-report.json", import.meta.url), "utf8"));
+const timeoutSelfFixture = JSON.parse(await readFile(new URL("../../protocol/people-play/v1/fixtures/client/timeout-self.json", import.meta.url), "utf8"));
 let worker;
 let baseUrl;
 let output = "";
@@ -51,6 +54,9 @@ function wrapSocket(ws, headers) {
   const queue = [];
   const waiters = [];
   const history = [];
+  let resolveClosed;
+  const closed = new Promise((resolve) => { resolveClosed = resolve; });
+  ws.once("close", (code, reason) => resolveClosed({ code, reason: reason.toString() }));
   ws.on("message", (data, isBinary) => {
     const value = isBinary ? data : JSON.parse(data.toString());
     history.push(value);
@@ -67,6 +73,7 @@ function wrapSocket(ws, headers) {
     ws,
     headers,
     history,
+    closed,
     async next(predicate = () => true, timeoutMs = 8_000) {
       const index = queue.findIndex(predicate);
       if (index >= 0) return queue.splice(index, 1)[0];
@@ -83,6 +90,9 @@ function wrapSocket(ws, headers) {
     send(type, roomId) {
       const source = type === "TAKE_SEAT" ? takeSeatFixture : leaveSeatFixture;
       ws.send(JSON.stringify({ ...source, roomId }));
+    },
+    sendMessage(message) {
+      ws.send(JSON.stringify(message));
     },
   };
 }
@@ -151,6 +161,33 @@ async function waitUntil(predicate, timeoutMs = 8_000) {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error("Timed out waiting for condition");
+}
+
+async function createPlayingRoom({ spectator = false } = {}) {
+  const creator = await openSocket("/v1/people-play/rooms/new/socket?timeControl=TEN_MINUTES", "test-user-a");
+  const initial = await creator.next((message) => message.type === "ROOM_SNAPSHOT");
+  const roomId = initial.roomId;
+  const joiner = await openSocket(`/v1/people-play/rooms/${roomId}/socket`, "test-user-b");
+  await joiner.next((message) => message.type === "ROOM_SNAPSHOT" && message.spectatorCount === 1);
+  await creator.next((message) => message.type === "ROOM_SNAPSHOT" && message.spectatorCount === 1);
+  joiner.send("TAKE_SEAT", roomId);
+  const playing = await joiner.next((message) => message.type === "ROOM_SNAPSHOT" && message.phase === "PLAYING");
+  await creator.next((message) => message.type === "ROOM_SNAPSHOT" && message.phase === "PLAYING");
+  const byMemberId = new Map([
+    [creator.headers["x-people-play-member-id"], creator],
+    [joiner.headers["x-people-play-member-id"], joiner],
+  ]);
+  const black = byMemberId.get(playing.players.black.memberId);
+  const white = byMemberId.get(playing.players.white.memberId);
+  assert.ok(black && white);
+  let watcher = null;
+  if (spectator) {
+    watcher = await openSocket(`/v1/people-play/rooms/${roomId}/socket`, "test-user-c");
+    await watcher.next((message) => message.type === "ROOM_SNAPSHOT" && message.phase === "PLAYING" && message.spectatorCount === 1);
+    await black.next((message) => message.type === "ROOM_SNAPSHOT" && message.phase === "PLAYING" && message.spectatorCount === 1);
+    await white.next((message) => message.type === "ROOM_SNAPSHOT" && message.phase === "PLAYING" && message.spectatorCount === 1);
+  }
+  return { roomId, creator, joiner, black, white, spectator: watcher, playing };
 }
 
 before(async () => {
@@ -306,7 +343,7 @@ test("unknown and issued-only room IDs cannot initialize Room DOs", async () => 
   assert.deepEqual((await post("/__test/registry/resolve-join-target", { roomId: allocated.body.roomId })).body, { status: "unknown" });
 });
 
-test("Phase 3 parser rejects binary, unknown fields, versions and Phase 4 messages without mutation", async () => {
+test("strict parser rejects binary, unknown fields, versions and malformed Phase 4 messages without mutation", async () => {
   const creator = await openSocket("/v1/people-play/rooms/new/socket?timeControl=TEN_MINUTES", "test-user-a");
   const initial = await creator.next((message) => message.type === "ROOM_SNAPSHOT");
   const roomId = initial.roomId;
@@ -314,7 +351,7 @@ test("Phase 3 parser rejects binary, unknown fields, versions and Phase 4 messag
     { payload: Buffer.from([1, 2, 3]), code: "BAD_MESSAGE", rejectedType: "UNKNOWN" },
     { payload: JSON.stringify({ ...takeSeatFixture, roomId, extra: true }), code: "BAD_MESSAGE", rejectedType: "TAKE_SEAT" },
     { payload: JSON.stringify({ ...takeSeatFixture, roomId, protocolVersion: 2 }), code: "UNSUPPORTED_VERSION", rejectedType: "TAKE_SEAT" },
-    { payload: JSON.stringify({ ...moveFixture, roomId }), code: "BAD_MESSAGE", rejectedType: "MOVE_SNAPSHOT" },
+    { payload: JSON.stringify({ ...moveFixture, roomId, extra: true }), code: "BAD_MESSAGE", rejectedType: "MOVE_SNAPSHOT" },
   ];
   for (const entry of cases) {
     creator.ws.send(entry.payload);
@@ -365,4 +402,197 @@ test("25 seconds idle preserves socket member identity for a later seat command"
   assert.ok(playing.players.black.memberId === memberId || playing.players.white.memberId === memberId);
   await closeSocket(joiner);
   await closeSocket(creator);
+});
+
+test("MOVE relays full snapshots to sender, peer and spectator through forced pass, then NORMAL closes", async () => {
+  const game = await createPlayingRoom({ spectator: true });
+  const { roomId, black, white, spectator } = game;
+  const boardOne = Array(64).fill(1);
+  const firstMove = {
+    ...moveFixture,
+    roomId,
+    ply: 1,
+    board: boardOne,
+    move: { row: 0, column: 0 },
+    nextTurn: "BLACK",
+    terminalCandidate: false,
+  };
+
+  white.sendMessage(firstMove);
+  const wrongTurn = await white.next((message) => message.type === "ERROR" && message.code === "NOT_YOUR_TURN");
+  assert.equal(wrongTurn.currentPly, 0);
+  assert.equal(wrongTurn.rejectedPly, null);
+  spectator.sendMessage(firstMove);
+  assert.equal((await spectator.next((message) => message.type === "ERROR")).code, "NOT_PLAYER");
+
+  black.sendMessage(firstMove);
+  const echoed = await black.next((message) => message.type === "ROOM_SNAPSHOT" && message.currentPly === 1);
+  const peer = await white.next((message) => message.type === "ROOM_SNAPSHOT" && message.currentPly === 1);
+  const watched = await spectator.next((message) => message.type === "ROOM_SNAPSHOT" && message.currentPly === 1);
+  assert.deepEqual(echoed, peer);
+  assert.deepEqual(peer, watched);
+  assert.deepEqual(echoed.board, boardOne);
+  assert.equal(echoed.nextTurn, "BLACK");
+  assert.equal(black.history.some((message) => message.type === "ACK" || message.type === "COMMAND_RESULT"), false);
+
+  black.sendMessage(firstMove);
+  const duplicate = await black.next((message) => message.type === "ERROR" && message.code === "BAD_PLY");
+  assert.equal(duplicate.rejectedPly, 1);
+  assert.equal(duplicate.currentPly, 1);
+  black.sendMessage({ ...firstMove, ply: 3 });
+  const future = await black.next((message) => message.type === "ERROR" && message.code === "BAD_PLY");
+  assert.equal(future.rejectedPly, 3);
+  assert.equal(future.currentPly, 1);
+
+  const terminalMove = {
+    ...firstMove,
+    ply: 2,
+    move: { row: 7, column: 7 },
+    board: Array.from({ length: 64 }, (_, index) => index % 2 ? 2 : 1),
+    nextTurn: null,
+    terminalCandidate: true,
+  };
+  black.sendMessage(terminalMove);
+  for (const client of [black, white, spectator]) {
+    const snapshot = await client.next((message) => message.type === "ROOM_SNAPSHOT" && message.currentPly === 2);
+    assert.equal(snapshot.terminalCandidate, true);
+    assert.equal(snapshot.nextTurn, null);
+  }
+  black.sendMessage({ ...firstMove, ply: 3 });
+  const pending = await black.next((message) => message.type === "ERROR" && message.code === "RESULT_PENDING");
+  assert.equal(pending.currentPly, 2);
+
+  black.sendMessage({ ...resultReportFixture, roomId, ply: 2, result: "BLACK_WIN" });
+  const check = await white.next((message) => message.type === "RESULT_CHECK");
+  assert.equal(check.ply, 2);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(black.history.some((message) => message.type === "RESULT_CHECK"), false);
+  assert.equal(spectator.history.some((message) => message.type === "RESULT_CHECK"), false);
+  white.sendMessage({ ...resultReportFixture, roomId, ply: 2, result: "BLACK_WIN" });
+  const decidedAtValues = [];
+  for (const client of [black, white, spectator]) {
+    const gameOver = await client.next((message) => message.type === "GAME_OVER");
+    decidedAtValues.push(gameOver.decidedAt);
+    assert.equal(gameOver.finishReason, "NORMAL");
+    assert.equal(gameOver.outcome, "BLACK_WIN");
+    assert.equal(gameOver.winner, "BLACK");
+    assert.equal(gameOver.ply, 2);
+    assert.equal(gameOver.finalSnapshot.phase, "PLAYING");
+    assert.deepEqual(gameOver.finalSnapshot.board, terminalMove.board);
+    assert.equal(gameOver.finalSnapshot.resultCheckPly, 2);
+  }
+  assert.equal(new Set(decidedAtValues).size, 1);
+  for (const client of [black, white, spectator]) {
+    assert.deepEqual(await client.closed, { code: 1000, reason: "GAME_OVER" });
+  }
+  await waitUntil(async () => !(await rooms()).some((room) => room.roomId === roomId));
+  assert.deepEqual(await rejectedSocket(`/v1/people-play/rooms/${roomId}/socket`, "test-user-d"), {
+    status: 410,
+    body: { error: "ROOM_CLOSED" },
+  });
+});
+
+test("mismatched terminal reports and a valid DESYNC finish as NO_CONTEST", async () => {
+  const mismatch = await createPlayingRoom();
+  mismatch.black.sendMessage({
+    ...moveFixture,
+    roomId: mismatch.roomId,
+    ply: 1,
+    nextTurn: null,
+    terminalCandidate: true,
+  });
+  await mismatch.black.next((message) => message.type === "ROOM_SNAPSHOT" && message.currentPly === 1);
+  await mismatch.white.next((message) => message.type === "ROOM_SNAPSHOT" && message.currentPly === 1);
+  mismatch.black.sendMessage({ ...resultReportFixture, roomId: mismatch.roomId, ply: 1, result: "BLACK_WIN" });
+  await mismatch.white.next((message) => message.type === "RESULT_CHECK");
+  mismatch.white.sendMessage({ ...resultReportFixture, roomId: mismatch.roomId, ply: 1, result: "WHITE_WIN" });
+  const mismatchOver = await mismatch.black.next((message) => message.type === "GAME_OVER");
+  assert.deepEqual([mismatchOver.finishReason, mismatchOver.outcome, mismatchOver.winner], ["DESYNC", "NO_CONTEST", null]);
+
+  const desync = await createPlayingRoom();
+  desync.black.sendMessage({ ...moveFixture, roomId: desync.roomId, ply: 1 });
+  await desync.black.next((message) => message.type === "ROOM_SNAPSHOT" && message.currentPly === 1);
+  await desync.white.next((message) => message.type === "ROOM_SNAPSHOT" && message.currentPly === 1);
+  desync.white.sendMessage({ ...desyncFixture, roomId: desync.roomId, observedPly: 1 });
+  const desyncOver = await desync.black.next((message) => message.type === "GAME_OVER");
+  assert.deepEqual([desyncOver.finishReason, desyncOver.outcome, desyncOver.winner], ["DESYNC", "NO_CONTEST", null]);
+});
+
+test("NOT_FINISHED from the other player during terminal result check ends DESYNC", async () => {
+  const game = await createPlayingRoom();
+  game.black.sendMessage({
+    ...moveFixture,
+    roomId: game.roomId,
+    ply: 1,
+    nextTurn: null,
+    terminalCandidate: true,
+  });
+  await game.black.next((message) => message.type === "ROOM_SNAPSHOT" && message.currentPly === 1);
+  await game.white.next((message) => message.type === "ROOM_SNAPSHOT" && message.currentPly === 1);
+  game.black.sendMessage({ ...resultReportFixture, roomId: game.roomId, ply: 1, result: "BLACK_WIN" });
+  await game.white.next((message) => message.type === "RESULT_CHECK");
+  game.white.sendMessage({ ...resultReportFixture, roomId: game.roomId, ply: 1, result: "NOT_FINISHED" });
+  const over = await game.black.next((message) => message.type === "GAME_OVER");
+  assert.deepEqual([over.finishReason, over.outcome, over.winner], ["DESYNC", "NO_CONTEST", null]);
+});
+
+test("isolated NOT_FINISHED is a no-op, while early result disagreement ends DESYNC", async () => {
+  const game = await createPlayingRoom();
+  game.black.sendMessage({ ...resultReportFixture, roomId: game.roomId, ply: 0, result: "NOT_FINISHED" });
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(game.white.history.some((message) => message.type === "RESULT_CHECK"), false);
+  game.black.sendMessage({ ...moveFixture, roomId: game.roomId, ply: 1, nextTurn: "WHITE", terminalCandidate: false });
+  await game.black.next((message) => message.type === "ROOM_SNAPSHOT" && message.currentPly === 1);
+  await game.white.next((message) => message.type === "ROOM_SNAPSHOT" && message.currentPly === 1);
+  game.black.sendMessage({ ...resultReportFixture, roomId: game.roomId, ply: 1, result: "BLACK_WIN" });
+  await game.white.next((message) => message.type === "RESULT_CHECK" && message.ply === 1);
+  game.white.sendMessage({ ...resultReportFixture, roomId: game.roomId, ply: 1, result: "NOT_FINISHED" });
+  const over = await game.black.next((message) => message.type === "GAME_OVER");
+  assert.deepEqual([over.finishReason, over.outcome], ["DESYNC", "NO_CONTEST"]);
+});
+
+test("TIMEOUT_SELF succeeds for the non-current player and while result confirmation is pending", async () => {
+  const game = await createPlayingRoom({ spectator: true });
+  game.black.sendMessage({ ...resultReportFixture, roomId: game.roomId, ply: 0, result: "DRAW" });
+  await game.white.next((message) => message.type === "RESULT_CHECK");
+  game.white.sendMessage({ ...timeoutSelfFixture, roomId: game.roomId });
+  for (const client of [game.black, game.white, game.spectator]) {
+    const over = await client.next((message) => message.type === "GAME_OVER");
+    assert.deepEqual([over.finishReason, over.outcome, over.winner], ["TIMEOUT", "BLACK_WIN", "BLACK"]);
+  }
+});
+
+test("player disconnect sends DISCONNECT to remaining recipients while spectator disconnect only updates snapshot", async () => {
+  const spectatorCase = await createPlayingRoom({ spectator: true });
+  await closeSocket(spectatorCase.spectator);
+  for (const client of [spectatorCase.black, spectatorCase.white]) {
+    const snapshot = await client.next((message) => message.type === "ROOM_SNAPSHOT" && message.spectatorCount === 0);
+    assert.equal(snapshot.phase, "PLAYING");
+    assert.equal(client.history.some((message) => message.type === "GAME_OVER"), false);
+  }
+  await closeSocket(spectatorCase.black);
+  const cleanupOver = await spectatorCase.white.next((message) => message.type === "GAME_OVER");
+  assert.equal(cleanupOver.finishReason, "DISCONNECT");
+
+  const playerCase = await createPlayingRoom({ spectator: true });
+  await closeSocket(playerCase.black);
+  for (const client of [playerCase.white, playerCase.spectator]) {
+    const over = await client.next((message) => message.type === "GAME_OVER");
+    assert.deepEqual([over.finishReason, over.outcome, over.winner], ["DISCONNECT", "WHITE_WIN", "WHITE"]);
+    assert.deepEqual(over.finalSnapshot.board, playerCase.playing.board);
+  }
+  await waitUntil(async () => !(await rooms()).some((room) => room.roomId === playerCase.roomId));
+});
+
+test("near-simultaneous timeout and disconnect commit at most one GAME_OVER and do not overwrite CLOSED", async () => {
+  const game = await createPlayingRoom({ spectator: true });
+  game.black.sendMessage({ ...timeoutSelfFixture, roomId: game.roomId });
+  game.black.ws.close();
+  const over = await game.white.next((message) => message.type === "GAME_OVER");
+  assert.ok(over.finishReason === "TIMEOUT" || over.finishReason === "DISCONNECT");
+  await game.white.closed;
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.equal(game.white.history.filter((message) => message.type === "GAME_OVER").length, 1);
+  assert.equal(game.spectator.history.filter((message) => message.type === "GAME_OVER").length, 1);
+  await waitUntil(async () => !(await rooms()).some((room) => room.roomId === game.roomId));
 });
