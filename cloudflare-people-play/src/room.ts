@@ -1,11 +1,21 @@
 import { DurableObject } from "cloudflare:workers";
 import {
-  Phase3ProtocolError,
-  parsePhase3ClientMessage,
+  PeoplePlayProtocolError,
+  parsePeoplePlayClientMessage,
+  serializeGameOver,
   serializePeoplePlayError,
+  serializeResultCheck,
   serializeRoomSnapshot,
   type PeoplePlayErrorCode,
 } from "./people-play-protocol.js";
+import {
+  applyMoveSnapshot,
+  applyResultReport,
+  disconnectEnding,
+  evaluateDesync,
+  evaluateTimeout,
+  type EndingDecision,
+} from "./game-relay.js";
 import {
   AVATAR_IDS,
   TIME_CONTROLS,
@@ -15,6 +25,7 @@ import {
 import {
   allocateMemberId,
   attachmentRole,
+  buildGameOver,
   buildLobbyProjection,
   buildRoomSnapshot,
   createClosedRoomState,
@@ -155,7 +166,8 @@ export class Room extends DurableObject<Env> {
 
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const attachment: unknown = socket.deserializeAttachment();
-    if (!isSocketAttachment(attachment) || !this.state || this.state.phase === "CLOSED") {
+    if (this.state?.phase === "CLOSED") return;
+    if (!isSocketAttachment(attachment) || !this.state) {
       this.sendError(socket, "NOT_MEMBER", "UNKNOWN");
       return;
     }
@@ -165,33 +177,83 @@ export class Room extends DurableObject<Env> {
     }
     let command;
     try {
-      command = parsePhase3ClientMessage(message, this.state.roomId);
+      command = parsePeoplePlayClientMessage(message, this.state.roomId);
     } catch (error) {
-      if (error instanceof Phase3ProtocolError) this.sendError(socket, error.code, error.rejectedType);
+      if (error instanceof PeoplePlayProtocolError) this.sendError(socket, error.code, error.rejectedType);
       else this.sendError(socket, "BAD_MESSAGE", "UNKNOWN");
       return;
     }
 
-    const participant: InternalParticipant = {
-      memberId: attachment.memberId,
-      userId: attachment.userId,
-      displayName: attachment.displayName,
-      avatarId: attachment.avatarId,
-    };
-    const transition = command.type === "TAKE_SEAT"
-      ? takeSeat(this.state, participant, () => this.randomBit())
-      : leaveSeat(this.state, attachment.memberId);
-    if (!transition.ok) {
-      this.sendError(socket, transition.error, command.type);
-      return;
+    const active = this.state;
+    switch (command.type) {
+      case "TAKE_SEAT":
+      case "LEAVE_SEAT": {
+        const participant: InternalParticipant = {
+          memberId: attachment.memberId,
+          userId: attachment.userId,
+          displayName: attachment.displayName,
+          avatarId: attachment.avatarId,
+        };
+        const transition = command.type === "TAKE_SEAT"
+          ? takeSeat(active, participant, () => this.randomBit())
+          : leaveSeat(active, attachment.memberId);
+        if (!transition.ok) {
+          this.sendError(socket, transition.error, command.type);
+          return;
+        }
+        this.persist(transition.state);
+        this.state = transition.state;
+        this.reconcileAllAttachments(transition.state);
+        const connections = this.connections();
+        this.broadcastSnapshot(transition.state, connections);
+        this.queueProjectionUpdate(transition.state, connections.map(({ attachment: current }) => current));
+        return;
+      }
+      case "MOVE_SNAPSHOT": {
+        const transition = applyMoveSnapshot(active, attachment.memberId, command);
+        if (transition.kind === "error") {
+          this.sendError(socket, transition.error.code, command.type, transition.error.rejectedPly);
+          return;
+        }
+        this.persist(transition.state);
+        this.state = transition.state;
+        this.broadcastSnapshot(transition.state, this.connections());
+        return;
+      }
+      case "DESYNC": {
+        const transition = evaluateDesync(active, attachment.memberId, command);
+        if (transition.kind === "error") {
+          this.sendError(socket, transition.error.code, command.type, transition.error.rejectedPly);
+          return;
+        }
+        this.finalizeGame(transition.ending);
+        return;
+      }
+      case "RESULT_REPORT": {
+        const transition = applyResultReport(active, attachment.memberId, command);
+        if (transition.kind === "error") {
+          this.sendError(socket, transition.error.code, command.type, transition.error.rejectedPly);
+          return;
+        }
+        if (transition.kind === "no-op") return;
+        if (transition.kind === "finish") {
+          this.finalizeGame(transition.ending);
+          return;
+        }
+        this.persist(transition.state);
+        this.state = transition.state;
+        this.sendResultCheck(transition.state, transition.targetColor);
+        return;
+      }
+      case "TIMEOUT_SELF": {
+        const transition = evaluateTimeout(active, attachment.memberId);
+        if (transition.kind === "error") {
+          this.sendError(socket, transition.error.code, command.type, transition.error.rejectedPly);
+          return;
+        }
+        this.finalizeGame(transition.ending);
+      }
     }
-
-    this.persist(transition.state);
-    this.state = transition.state;
-    this.reconcileAllAttachments(transition.state);
-    const connections = this.connections();
-    this.broadcastSnapshot(transition.state, connections);
-    this.queueProjectionUpdate(transition.state, connections.map(({ attachment: current }) => current));
   }
 
   async webSocketClose(socket: WebSocket, code: number, reason: string): Promise<void> {
@@ -299,9 +361,60 @@ export class Room extends DurableObject<Env> {
     }
   }
 
-  private sendError(socket: WebSocket, code: PeoplePlayErrorCode, rejectedType: string): void {
+  private sendError(
+    socket: WebSocket,
+    code: PeoplePlayErrorCode,
+    rejectedType: string,
+    rejectedPly: number | null = null,
+  ): void {
     const roomId = this.state?.roomId ?? "unknown";
-    try { socket.send(serializePeoplePlayError(roomId, code, rejectedType)); } catch { /* disconnected */ }
+    const currentPly = this.state?.phase === "WAITING" || this.state?.phase === "PLAYING"
+      ? this.state.currentPly
+      : 0;
+    try {
+      socket.send(serializePeoplePlayError(roomId, code, rejectedType, currentPly, rejectedPly));
+    } catch { /* disconnected */ }
+  }
+
+  private sendResultCheck(state: ActiveRoomState, targetColor: "BLACK" | "WHITE"): void {
+    if (!state.players || !state.resultCheck) return;
+    const targetMemberId = targetColor === "BLACK"
+      ? state.players.black.memberId
+      : state.players.white.memberId;
+    const wire = serializeResultCheck(state.roomId, state.resultCheck.ply);
+    for (const { socket, attachment } of this.connections()) {
+      if (attachment.memberId !== targetMemberId) continue;
+      try { socket.send(wire); } catch { /* close/error decides any disconnect result */ }
+    }
+  }
+
+  private finalizeGame(ending: EndingDecision, excluded?: WebSocket): void {
+    if (!this.state || this.state.phase !== "PLAYING") return;
+    const active = this.state;
+    const recipients = this.connections(excluded);
+    const decidedAt = Date.now();
+    const gameOver = buildGameOver(
+      active,
+      recipients.map(({ attachment }) => attachment),
+      ending.finishReason,
+      ending.outcome,
+      ending.winner,
+      decidedAt,
+    );
+    const closed = createClosedRoomState(active.roomId, decidedAt);
+    this.persist(closed);
+    this.state = closed;
+
+    const wire = serializeGameOver(gameOver);
+    for (const { socket } of recipients) {
+      try { socket.send(wire); } catch { /* another recipient must still receive the result */ }
+    }
+    this.ctx.waitUntil(
+      this.env.ROOM_REGISTRY.getByName(REGISTRY_NAME).closeRoom(active.roomId).then(() => undefined),
+    );
+    for (const { socket } of recipients) {
+      try { socket.close(1000, "GAME_OVER"); } catch { /* result remains committed */ }
+    }
   }
 
   private queueProjectionUpdate(state: ActiveRoomState, attachments: SocketAttachment[]): void {
@@ -328,6 +441,11 @@ export class Room extends DurableObject<Env> {
       this.reconcileAllAttachments(next);
       this.broadcastSnapshot(next, remaining);
       this.queueProjectionUpdate(next, remaining.map(({ attachment: current }) => current));
+      return;
+    }
+    const ending = disconnectEnding(active, attachment.memberId);
+    if (ending) {
+      this.finalizeGame(ending, socket);
       return;
     }
     if (role.spectator) {

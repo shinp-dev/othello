@@ -16,6 +16,7 @@
     "src/avatar.ts",
     "src/profile.ts",
     "src/people-play-protocol.ts",
-    "src/room-state.ts"
+    "src/room-state.ts",
+    "src/game-relay.ts"
   ]
 }
