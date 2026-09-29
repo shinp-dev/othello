@@ -45,8 +45,8 @@ private const val RoomReferenceAspect = RoomReferenceHeight / RoomReferenceWidth
 /** The room screen's static UI model. Game/network state is intentionally out of scope. */
 internal data class PeoplePlayRoomPresentationState(
     @StringRes val roomNameRes: Int = R.string.play_lobby_room_10,
-    @DrawableRes val leftPlayerAvatarRes: Int = R.drawable.play_lobby_icon_adult_man,
-    @DrawableRes val rightPlayerAvatarRes: Int = R.drawable.play_lobby_icon_adult_woman,
+    @DrawableRes val leftPlayerAvatarRes: Int? = R.drawable.play_lobby_icon_adult_man,
+    @DrawableRes val rightPlayerAvatarRes: Int? = R.drawable.play_lobby_icon_adult_woman,
     val minutesPerPlayer: Int = 10,
     val watcherAvatarRes: List<Int> = listOf(
         R.drawable.play_lobby_icon_adult_woman,
@@ -235,16 +235,18 @@ private fun RoomPlayerInfoBar(
         )
 
         val avatarSize = minOf(barWidth * 0.150f, barHeight * 0.82f)
-        RoomInfoImage(
-            resId = state.leftPlayerAvatarRes,
-            descriptionRes = state.leftPlayerDescriptionRes,
-            tag = "people_room_player_left",
-            centerFraction = 0.128f,
-            size = avatarSize,
-            barWidth = barWidth,
-            barHeight = barHeight,
-            circular = true,
-        )
+        state.leftPlayerAvatarRes?.let { avatarRes ->
+            RoomInfoImage(
+                resId = avatarRes,
+                descriptionRes = state.leftPlayerDescriptionRes,
+                tag = "people_room_player_left",
+                centerFraction = 0.128f,
+                size = avatarSize,
+                barWidth = barWidth,
+                barHeight = barHeight,
+                circular = true,
+            )
+        }
         if (state.hasColorAssignment) RoomInfoImage(
             resId = R.drawable.people_room_black_disc,
             descriptionRes = R.string.people_room_black_disc_description,
@@ -337,16 +339,18 @@ private fun RoomPlayerInfoBar(
             barWidth = barWidth,
             barHeight = barHeight,
         )
-        RoomInfoImage(
-            resId = state.rightPlayerAvatarRes,
-            descriptionRes = state.rightPlayerDescriptionRes,
-            tag = "people_room_player_right",
-            centerFraction = 0.905f,
-            size = avatarSize,
-            barWidth = barWidth,
-            barHeight = barHeight,
-            circular = true,
-        )
+        state.rightPlayerAvatarRes?.let { avatarRes ->
+            RoomInfoImage(
+                resId = avatarRes,
+                descriptionRes = state.rightPlayerDescriptionRes,
+                tag = "people_room_player_right",
+                centerFraction = 0.905f,
+                size = avatarSize,
+                barWidth = barWidth,
+                barHeight = barHeight,
+                circular = true,
+            )
+        }
     }
 }
 

@@ -19,8 +19,8 @@ internal fun PeoplePlayRoomUiState.toPresentationState(): PeoplePlayRoomPresenta
     }
     return PeoplePlayRoomPresentationState(
         roomNameRes = titleAndMinutes?.first ?: R.string.play_lobby_room_10,
-        leftPlayerAvatarRes = leftAvatar?.toPeoplePlayAvatarDrawable() ?: R.drawable.play_lobby_icon_adult_man,
-        rightPlayerAvatarRes = rightAvatar?.toPeoplePlayAvatarDrawable() ?: R.drawable.play_lobby_icon_adult_woman,
+        leftPlayerAvatarRes = leftAvatar?.toPeoplePlayAvatarDrawable(),
+        rightPlayerAvatarRes = rightAvatar?.toPeoplePlayAvatarDrawable(),
         minutesPerPlayer = titleAndMinutes?.second ?: 10,
         watcherAvatarRes = watcherIcons,
         additionalWatcherCount = room?.let { (it.spectatorCount - it.spectatorAvatarPreview.size).coerceAtLeast(0) } ?: 0,

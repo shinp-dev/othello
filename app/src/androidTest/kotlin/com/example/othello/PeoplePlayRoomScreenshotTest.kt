@@ -5,20 +5,29 @@ import android.graphics.Bitmap
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.othello.designsystem.OthelloTheme
+import com.example.othello.game.GameState
+import com.example.othello.network.peopleplay.PeoplePlayRoomSnapshot
+import com.example.othello.network.peopleplay.PeoplePlaySeats
+import com.example.othello.network.peopleplay.PlayerColor
+import com.example.othello.network.peopleplay.RoomPhase
+import com.example.othello.network.peopleplay.TimeControl
 import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -40,11 +49,12 @@ class PeoplePlayRoomScreenshotTest {
         val locale = if (language == "ja") Locale.JAPAN else Locale.US
         val configuration = android.content.res.Configuration(context.resources.configuration).apply { setLocale(locale) }
         val localizedContext = context.createConfigurationContext(configuration)
+        val presentationState = mutableStateOf(PeoplePlayRoomPresentationState())
         composeRule.setContent {
             CompositionLocalProvider(LocalContext provides localizedContext, LocalConfiguration provides configuration) {
                 OthelloTheme {
                     PeoplePlayRoomScreen(
-                        state = PeoplePlayRoomPresentationState(),
+                        state = presentationState.value,
                         onBack = {},
                         onLeaveSeat = {},
                         onExit = {},
@@ -121,6 +131,47 @@ class PeoplePlayRoomScreenshotTest {
         assertEquals("Screenshot pixel width for ${width}dp emulator", width, bitmap.width)
         saveScreenshot(context, bitmap, "people-play-room-$language-${width}dp.png")
         bitmap.recycle()
+
+        val originalBounds = listOf(
+            "people_room_info_bar", "people_room_time", "people_room_board", "people_room_exit",
+        ).associateWith { composeRule.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot }
+        val waitingSnapshot = PeoplePlayRoomSnapshot(
+            roomId = "room-empty-seats",
+            phase = RoomPhase.WAITING,
+            timeControl = TimeControl.TEN_MINUTES,
+            seats = PeoplePlaySeats(null, null),
+            players = null,
+            wirePly = 0,
+            board = GameState().board.toWireBoard(),
+            move = null,
+            nextTurn = PlayerColor.BLACK,
+            terminalCandidate = false,
+            resultCheckPly = null,
+            spectatorCount = 0,
+            spectatorAvatarPreview = emptyList(),
+        )
+        composeRule.runOnIdle {
+            presentationState.value = PeoplePlayRoomUiState(
+                status = PeoplePlayConnectionStatus.CONNECTED,
+                roomId = waitingSnapshot.roomId,
+                memberId = "member-watcher",
+                snapshot = waitingSnapshot,
+                isSpectator = true,
+            ).toPresentationState()
+        }
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithTag("people_room_player_left").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("people_room_player_right").assertCountEquals(0)
+        composeRule.onNodeWithText(localizedContext.getString(R.string.people_room_take_seat)).assertIsDisplayed()
+        composeRule.onNodeWithTag("people_room_board").assertIsDisplayed()
+        originalBounds.forEach { (tag, bounds) ->
+            assertEquals("$tag layout changed when waiting seats are empty", bounds, composeRule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot)
+        }
+        composeRule.waitForIdle()
+        instrumentation.waitForIdleSync()
+        val waitingBitmap = composeRule.onRoot().captureToImage().asAndroidBitmap().copy(Bitmap.Config.ARGB_8888, false)
+        saveScreenshot(context, waitingBitmap, "people-play-room-waiting-empty-$language-${width}dp.png")
+        waitingBitmap.recycle()
     }
 
     private fun assertWithinScreen(tag: String, screenWidth: Float) {

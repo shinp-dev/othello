@@ -12,6 +12,7 @@ import com.example.othello.network.peopleplay.TimeControl
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PeoplePlayPresentationTest {
@@ -64,10 +65,33 @@ class PeoplePlayPresentationTest {
 
         assertEquals(R.string.play_lobby_room_5, state.roomNameRes)
         assertEquals(R.drawable.play_lobby_icon_staff, state.leftPlayerAvatarRes)
+        assertNull(state.rightPlayerAvatarRes)
         assertFalse(state.hasColorAssignment)
         assertTrue(state.showSeatAction)
         assertEquals(R.string.people_room_take_seat, state.seatActionLabelRes)
         assertFalse(state.canPlay)
+    }
+
+    @Test
+    fun waitingSeatAvatarsMatchOnlyOccupiedServerSeats() {
+        val empty = waitingPresentation(PeoplePlaySeats(null, null))
+        assertNull(empty.leftPlayerAvatarRes)
+        assertNull(empty.rightPlayerAvatarRes)
+        assertFalse(empty.hasColorAssignment)
+
+        val onlyA = waitingPresentation(PeoplePlaySeats(participant("seat-a", AvatarId.MAGIC_WAND), null))
+        assertEquals(R.drawable.play_lobby_icon_staff, onlyA.leftPlayerAvatarRes)
+        assertNull(onlyA.rightPlayerAvatarRes)
+
+        val onlyB = waitingPresentation(PeoplePlaySeats(null, participant("seat-b", AvatarId.GIRL)))
+        assertNull(onlyB.leftPlayerAvatarRes)
+        assertEquals(R.drawable.play_lobby_icon_girl, onlyB.rightPlayerAvatarRes)
+
+        val both = waitingPresentation(
+            PeoplePlaySeats(participant("seat-a", AvatarId.BOY), participant("seat-b", AvatarId.MAGIC_BOOK)),
+        )
+        assertEquals(R.drawable.play_lobby_icon_boy, both.leftPlayerAvatarRes)
+        assertEquals(R.drawable.play_lobby_icon_book, both.rightPlayerAvatarRes)
     }
 
     @Test
@@ -157,4 +181,22 @@ class PeoplePlayPresentationTest {
     }
 
     private fun participant(id: String, avatar: AvatarId) = PeoplePlayParticipantSummary(id, "Player $id", avatar)
+
+    private fun waitingPresentation(seats: PeoplePlaySeats) = PeoplePlayRoomUiState(
+        snapshot = PeoplePlayRoomSnapshot(
+            roomId = "room-waiting",
+            phase = RoomPhase.WAITING,
+            timeControl = TimeControl.TEN_MINUTES,
+            seats = seats,
+            players = null,
+            wirePly = 0,
+            board = GameState().board.toWireBoard(),
+            move = null,
+            nextTurn = PlayerColor.BLACK,
+            terminalCandidate = false,
+            resultCheckPly = null,
+            spectatorCount = 0,
+            spectatorAvatarPreview = emptyList(),
+        ),
+    ).toPresentationState()
 }
