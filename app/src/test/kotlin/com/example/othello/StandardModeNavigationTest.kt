@@ -1,9 +1,47 @@
 package com.example.othello
 
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import org.junit.Test
 
 class StandardModeNavigationTest {
+    @Test
+    fun roomConnectionFailureReturnsToLobbyUnlessGameOverAlreadyExplainsTheEnding() {
+        assertTrue(
+            shouldReturnFromPeoplePlayRoomAfterConnectionFailure(
+                AuthenticatedModeDestination.PEOPLE_ROOM,
+                "CONNECTION_FAILED",
+                null,
+            ),
+        )
+        assertFalse(
+            shouldReturnFromPeoplePlayRoomAfterConnectionFailure(
+                AuthenticatedModeDestination.PEOPLE_MATCH,
+                "CONNECTION_FAILED",
+                null,
+            ),
+        )
+        assertFalse(
+            shouldReturnFromPeoplePlayRoomAfterConnectionFailure(
+                AuthenticatedModeDestination.PEOPLE_ROOM,
+                null,
+                null,
+            ),
+        )
+        assertFalse(
+            shouldReturnFromPeoplePlayRoomAfterConnectionFailure(
+                AuthenticatedModeDestination.PEOPLE_ROOM,
+                "CONNECTION_FAILED",
+                com.example.othello.network.peopleplay.PeoplePlayGameResult(
+                    finishReason = com.example.othello.network.peopleplay.FinishReason.DISCONNECT,
+                    outcome = com.example.othello.network.peopleplay.Outcome.WHITE_WIN,
+                    winner = com.example.othello.network.peopleplay.PlayerColor.WHITE,
+                ),
+            ),
+        )
+    }
+
     @Test
     fun authenticatedUsersStartAtModeSelection() {
         assertEquals(

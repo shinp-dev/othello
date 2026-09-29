@@ -1,7 +1,10 @@
 package com.example.othello.network.peopleplay
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -63,6 +66,22 @@ class PeoplePlayProtocolCodecTest {
         assertTrue(PeoplePlayProtocolCodec.decodeClientMessage(JsonObject(fields - "roomId").toString()).isFailure)
         assertTrue(PeoplePlayProtocolCodec.decodeClientMessage("not json").isFailure)
         assertFailsWith<IllegalArgumentException> { PeoplePlayProtocolCodec.encodeClientMessage(TakeSeat(" ")) }
+    }
+
+    @Test fun malformedServerSnapshotsFailClosed() {
+        val valid = PeoplePlayProtocolCodec.encodeServerMessage(snapshot)
+        val fields = Json.parseToJsonElement(valid).jsonObject
+        val board = fields.getValue("board").jsonArray
+        val invalidMessages = listOf(
+            "not json",
+            valid.replace("ROOM_SNAPSHOT", "UNKNOWN"),
+            JsonObject(fields - "phase").toString(),
+            JsonObject(fields + ("extra" to JsonPrimitive(true))).toString(),
+            JsonObject(fields + ("phase" to JsonPrimitive("CLOSED"))).toString(),
+            JsonObject(fields + ("board" to JsonArray(board.dropLast(1)))).toString(),
+        )
+
+        invalidMessages.forEach { assertTrue(PeoplePlayProtocolCodec.decodeServerMessage(it).isFailure, it) }
     }
 
     @Test fun directionsNeverCrossDecode() {

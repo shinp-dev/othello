@@ -8,12 +8,15 @@ import com.example.othello.network.peopleplay.PeoplePlaySeats
 import com.example.othello.network.peopleplay.PlayerColor
 import com.example.othello.network.peopleplay.RoomPhase
 import com.example.othello.network.peopleplay.TimeControl
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.junit.Test
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
@@ -108,16 +111,44 @@ class PeoplePlayLifecycleTest {
         }
     }
 
+    @Test
+    fun cancellingRoomOpenBeforeTokenCompletesNeverCreatesLateSocket() = runBlocking {
+        val tokenGate = CompletableDeferred<String?>()
+        val repository = CountingRepository()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val session = PeoplePlaySessionOwner(
+            scope,
+            repository,
+            { withContext(NonCancellable) { tokenGate.await() } },
+            LocalGameRecordPersistenceCoordinator(RecordingStore(), scope),
+        )
+        try {
+            session.createRoom()
+            session.cancelOpening()
+            tokenGate.complete("fixture-token")
+            delay(20)
+
+            assertEquals(null, session.activeRoom.value)
+            assertEquals(0, repository.createCalls.get())
+        } finally {
+            scope.cancel()
+        }
+    }
+
     private class CountingRepository(
         private val failJoinWith: PeoplePlayOpenFailure? = null,
     ) : PeoplePlayRepository {
         val listCalls = AtomicInteger()
+        val createCalls = AtomicInteger()
         override suspend fun listRooms(accessToken: String): List<PeoplePlayLobbyEntry> {
             listCalls.incrementAndGet()
             return emptyList()
         }
         override fun createRoom(accessToken: String, listener: PeoplePlaySocketListener): PeoplePlaySocket =
-            FakeSocket().also { listener.onFailure(PeoplePlayOpenFailure.Transport) }
+            FakeSocket().also {
+                createCalls.incrementAndGet()
+                listener.onFailure(PeoplePlayOpenFailure.Transport)
+            }
         override fun joinRoom(roomId: String, accessToken: String, listener: PeoplePlaySocketListener): PeoplePlaySocket =
             FakeSocket().also { listener.onFailure(requireNotNull(failJoinWith)) }
     }

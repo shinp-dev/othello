@@ -160,3 +160,17 @@ export function disconnectEnding(
   if (color === "WHITE") return { finishReason: "DISCONNECT", outcome: "BLACK_WIN", winner: "BLACK" };
   return null;
 }
+
+export function missingPlayerDisconnectEnding(
+  state: ActiveRoomState,
+  connectedMemberIds: ReadonlySet<string>,
+): EndingDecision | null {
+  if (state.phase !== "PLAYING" || !state.players) return null;
+  if (!connectedMemberIds.has(state.players.black.memberId)) {
+    return disconnectEnding(state, state.players.black.memberId);
+  }
+  if (!connectedMemberIds.has(state.players.white.memberId)) {
+    return disconnectEnding(state, state.players.white.memberId);
+  }
+  return null;
+}

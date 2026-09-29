@@ -151,6 +151,13 @@ internal fun peoplePlayGameOverMessage(context: android.content.Context, result:
     )
 }
 
+internal fun shouldReturnFromPeoplePlayRoomAfterConnectionFailure(
+    destination: AuthenticatedModeDestination,
+    connectionError: String?,
+    gameOver: PeoplePlayGameResult?,
+): Boolean = destination == AuthenticatedModeDestination.PEOPLE_ROOM &&
+    connectionError != null && gameOver == null
+
 @Composable
 internal fun AuthenticatedModeRoute(
     userId: String,
@@ -284,6 +291,20 @@ internal fun AuthenticatedModeRoute(
             duration = SnackbarDuration.Indefinite,
         )
         if (destination == AuthenticatedModeDestination.PEOPLE_ROOM) returnFromPeopleRoom()
+    }
+
+    LaunchedEffect(activeRoomState.connectionError, activeRoomState.gameOver, destination) {
+        if (!shouldReturnFromPeoplePlayRoomAfterConnectionFailure(
+                destination,
+                activeRoomState.connectionError,
+                activeRoomState.gameOver,
+            )
+        ) return@LaunchedEffect
+        val message = context.getString(R.string.people_play_error_connection)
+        returnFromPeopleRoom()
+        scope.launch {
+            snackbarHostState.showSnackbar(message, duration = SnackbarDuration.Short)
+        }
     }
 
     fun enterPeopleDestination(target: AuthenticatedModeDestination) {

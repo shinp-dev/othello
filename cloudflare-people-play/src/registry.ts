@@ -1,6 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
 import { allocateUniqueRoomId, parseLobbyProjection, type LobbyProjection } from "./registry-core.js";
 
+const MAX_LOBBY_RECONCILIATION_ROOMS = 50;
+
 export type RegistryOperationError =
   | "NOT_FOUND"
   | "ROOM_CLOSED"
@@ -137,11 +139,36 @@ export class RoomRegistry extends DurableObject<Env> {
   }
 
   async listRooms(): Promise<LobbyProjection[]> {
+    const candidates = await this.listRoomProjectionCandidates();
+    const rooms: LobbyProjection[] = [];
+    for (const candidate of candidates) {
+      try {
+        const current = await this.env.ROOM.getByName(candidate.roomId).getLobbyStatus(candidate.roomId);
+        if (current.status === "closed") {
+          await this.closeRoom(candidate.roomId);
+          continue;
+        }
+        if (current.status !== "active") continue;
+        const projection = parseLobbyProjection(current.projection);
+        if (projection.roomId !== candidate.roomId) continue;
+        const updated = await this.updateRoomProjection(candidate.roomId, projection);
+        if (updated.ok) rooms.push(projection);
+      } catch {
+        // An unreachable Room is omitted for this response and retried on the next bounded list read.
+      }
+    }
+    return rooms;
+  }
+
+  async listRoomProjectionCandidates(): Promise<LobbyProjection[]> {
     const rows = this.ctx.storage.sql.exec<ProjectionRow>(
       `SELECT p.room_id, p.projection_json
        FROM room_projections AS p
        INNER JOIN issued_room_ids AS i ON i.room_id = p.room_id
-       WHERE i.closed_at IS NULL`,
+       WHERE i.closed_at IS NULL
+       ORDER BY p.updated_at DESC
+       LIMIT ?`,
+      MAX_LOBBY_RECONCILIATION_ROOMS,
     ).toArray();
 
     return rows.map((row) => {

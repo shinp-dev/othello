@@ -36,7 +36,13 @@ class PeoplePlayProtocolValidationTest {
         valid(initial)
         invalid(initial.copy(wirePly = -1))
         invalid(initial.copy(move = PeoplePlayMove(2, 3)))
-        val played = initial.copy(wirePly = 1, move = PeoplePlayMove(2, 3), phase = RoomPhase.PLAYING, players = PeoplePlayPlayers(a, b))
+        val played = initial.copy(
+            wirePly = 1,
+            move = PeoplePlayMove(2, 3),
+            phase = RoomPhase.PLAYING,
+            seats = PeoplePlaySeats(a, b),
+            players = PeoplePlayPlayers(a, b),
+        )
         valid(played)
         invalid(played.copy(move = null))
         invalid(MoveSnapshot("room", 0, PeoplePlayMove(2, 3), board, PlayerColor.WHITE, false))
@@ -55,13 +61,34 @@ class PeoplePlayProtocolValidationTest {
         invalid(initial.copy(phase = RoomPhase.PLAYING))
         invalid(initial.copy(phase = RoomPhase.CLOSED))
         invalid(initial.copy(phase = RoomPhase.PLAYING, players = PeoplePlayPlayers(a, a)))
-        val playing = initial.copy(phase = RoomPhase.PLAYING, players = PeoplePlayPlayers(a, b), wirePly = 1, move = PeoplePlayMove(2, 3))
+        val playing = initial.copy(
+            phase = RoomPhase.PLAYING,
+            seats = PeoplePlaySeats(a, b),
+            players = PeoplePlayPlayers(a, b),
+            wirePly = 1,
+            move = PeoplePlayMove(2, 3),
+        )
         valid(playing)
         valid(playing.copy(terminalCandidate = true, nextTurn = null, resultCheckPly = 1))
         invalid(playing.copy(terminalCandidate = true, nextTurn = PlayerColor.BLACK))
         invalid(playing.copy(terminalCandidate = false, nextTurn = null))
         invalid(playing.copy(resultCheckPly = 2))
         invalid(initial.copy(nextTurn = PlayerColor.WHITE))
+    }
+
+    @Test fun playingPlayersMustMatchBothOccupiedSeats() {
+        val outsider = PeoplePlayParticipantSummary("member-outsider", "Sample outsider", AvatarId.BOY)
+        val playing = initial.copy(
+            phase = RoomPhase.PLAYING,
+            seats = PeoplePlaySeats(a, b),
+            players = PeoplePlayPlayers(a, b),
+        )
+
+        invalid(playing.copy(seats = PeoplePlaySeats(a, null)))
+        invalid(playing.copy(seats = PeoplePlaySeats(null, b)))
+        invalid(playing.copy(players = PeoplePlayPlayers(a, outsider)))
+        invalid(playing.copy(players = PeoplePlayPlayers(outsider, b)))
+        valid(playing.copy(players = PeoplePlayPlayers(b, a)))
     }
 
     @Test fun spectatorPreviewZeroOneThreeAndLimits() {
@@ -93,7 +120,11 @@ class PeoplePlayProtocolValidationTest {
     }
 
     @Test fun finalSnapshotIsPreservedAndMustMatchEnvelope() {
-        val playing = initial.copy(phase = RoomPhase.PLAYING, players = PeoplePlayPlayers(a, b))
+        val playing = initial.copy(
+            phase = RoomPhase.PLAYING,
+            seats = PeoplePlaySeats(a, b),
+            players = PeoplePlayPlayers(a, b),
+        )
         val end = GameOver("room", 0, FinishReason.DESYNC, Outcome.NO_CONTEST, null, 1000L, playing)
         valid(end)
         invalid(end.copy(finalSnapshot = playing.copy(roomId = "other")))

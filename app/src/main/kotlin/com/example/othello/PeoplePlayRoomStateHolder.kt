@@ -1,5 +1,6 @@
 package com.example.othello
 
+import android.os.SystemClock
 import com.example.othello.game.Board
 import com.example.othello.game.Disc
 import com.example.othello.game.GameState
@@ -85,7 +86,7 @@ internal data class PeoplePlayRoomUiState(
 
 /** Device-only monotonic clock. Display refresh frequency never determines elapsed time. */
 internal class PeoplePlayMonotonicClock(
-    private val nowNanos: () -> Long = System::nanoTime,
+    private val nowNanos: () -> Long = SystemClock::elapsedRealtimeNanos,
 ) {
     private var remainingMillis = 0L
     private var runningSinceNanos: Long? = null
@@ -165,6 +166,7 @@ internal class PeoplePlayRoomStateHolder(
     private val mutableState = MutableStateFlow(PeoplePlayRoomUiState())
     val state: StateFlow<PeoplePlayRoomUiState> = mutableState.asStateFlow()
     private var socket: PeoplePlaySocket? = null
+    private var connectJob: Job? = null
     private var started = false
     private var initialClockStarted = false
     private var timeoutSent = false
@@ -172,6 +174,7 @@ internal class PeoplePlayRoomStateHolder(
     private var persistenceSaveJob: Job? = null
     private val ended = AtomicBoolean(false)
     private val desyncSent = AtomicBoolean(false)
+    private var reportedResultPly: Int? = null
 
     init {
         persistenceSaveJob = scope.launch {
@@ -187,7 +190,7 @@ internal class PeoplePlayRoomStateHolder(
     fun connect(roomId: String?) {
         if (started) return
         started = true
-        scope.launch {
+        connectJob = scope.launch {
             val token = try {
                 accessToken()
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
@@ -195,21 +198,32 @@ internal class PeoplePlayRoomStateHolder(
             } catch (_: Throwable) {
                 null
             }
+            if (ended.get()) return@launch
             if (token.isNullOrBlank()) {
                 failOpen(PeoplePlayOpenFailure.Http(401, "AUTH_REQUIRED"))
                 return@launch
             }
+            var openedSocket: PeoplePlaySocket? = null
             try {
-                socket = if (roomId == null) repository.createRoom(token, this@PeoplePlayRoomStateHolder)
+                openedSocket = if (roomId == null) repository.createRoom(token, this@PeoplePlayRoomStateHolder)
                 else repository.joinRoom(roomId, token, this@PeoplePlayRoomStateHolder)
+                if (ended.get()) {
+                    openedSocket.close()
+                    return@launch
+                }
+                socket = openedSocket
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                openedSocket?.close()
+                throw cancelled
             } catch (_: Throwable) {
-                failOpen(PeoplePlayOpenFailure.Transport)
+                if (!ended.get()) failOpen(PeoplePlayOpenFailure.Transport)
             }
         }
     }
 
     @Synchronized
     override fun onOpen(memberId: String) {
+        if (ended.get()) return
         if (memberId.isBlank()) {
             failOpen(PeoplePlayOpenFailure.Protocol)
             return
@@ -222,9 +236,9 @@ internal class PeoplePlayRoomStateHolder(
 
     @Synchronized
     override fun onText(text: String) {
+        if (ended.get()) return
         val decoded = PeoplePlayProtocolCodec.decodeServerMessage(text).getOrElse {
-            socket?.close()
-            setConnectionError("BAD_MESSAGE")
+            protocolFailure()
             return
         }
         when (decoded) {
@@ -244,7 +258,10 @@ internal class PeoplePlayRoomStateHolder(
         }
         if (mutableState.value.gameOver == null) saveLocalDisconnectIfPlayer()
         timeoutJob?.cancel()
-        mutableState.value = mutableState.value.copy(status = PeoplePlayConnectionStatus.CLOSED)
+        mutableState.value = mutableState.value.copy(
+            status = PeoplePlayConnectionStatus.FAILED,
+            connectionError = "CONNECTION_FAILED",
+        )
     }
 
     @Synchronized
@@ -307,6 +324,8 @@ internal class PeoplePlayRoomStateHolder(
     fun closeByUser() {
         if (!ended.get() && mutableState.value.gameOver == null) saveLocalDisconnectIfPlayer()
         ended.set(true)
+        connectJob?.cancel()
+        connectJob = null
         timeoutJob?.cancel()
         socket?.close()
         socket = null
@@ -338,7 +357,10 @@ internal class PeoplePlayRoomStateHolder(
         if (!spectator && snapshot.phase == RoomPhase.PLAYING) {
             val verification = verifyPlayerSnapshot(current, snapshot)
             when (verification) {
-                SnapshotVerification.Bad -> return sendDesync(snapshot.wirePly.coerceAtLeast(1))
+                SnapshotVerification.Bad -> {
+                    if (snapshot.wirePly == 0) return protocolFailure()
+                    return sendDesync(snapshot.wirePly)
+                }
                 is SnapshotVerification.Accept -> {
                     acceptedCore = verification.state
                     acceptedMoves = verification.moves
@@ -350,10 +372,12 @@ internal class PeoplePlayRoomStateHolder(
                 SnapshotVerification.Unchanged -> Unit
             }
         } else if (snapshot.phase == RoomPhase.PLAYING && snapshot.wirePly == 0) {
-            if (snapshot.board != GameState().board.toWireBoard()) return sendDesync(1)
+            if (snapshot.board != GameState().board.toWireBoard()) return protocolFailure()
             acceptedCore = GameState()
             acceptedMoves = emptyList()
         }
+        val shouldReportTerminal = !spectator && selfColor != null && snapshot.terminalCandidate &&
+            acceptedCore?.status is GameStatus.Finished && reportedResultPly != snapshot.wirePly
         val next = current.copy(
             status = PeoplePlayConnectionStatus.CONNECTED,
             roomId = snapshot.roomId,
@@ -364,10 +388,20 @@ internal class PeoplePlayRoomStateHolder(
             acceptedCoreState = acceptedCore,
             acceptedMoves = acceptedMoves,
             pendingMove = pending,
-            resultCheckPending = current.resultCheckPending || snapshot.resultCheckPly != null,
+            resultCheckPending = current.resultCheckPending || snapshot.resultCheckPly != null || shouldReportTerminal,
             lastCommandError = null,
         )
         mutableState.value = next
+        if (shouldReportTerminal) {
+            reportedResultPly = snapshot.wirePly
+            send(
+                ResultReport(
+                    roomId = snapshot.roomId,
+                    wirePly = snapshot.wirePly,
+                    result = requireNotNull(acceptedCore).toPeoplePlayReportedResult(),
+                ),
+            )
+        }
         if (next.resultCheckPending) {
             timeoutJob?.cancel()
             monotonicClock.stop()
@@ -422,15 +456,20 @@ internal class PeoplePlayRoomStateHolder(
     private fun acceptResultCheck(message: ResultCheck) {
         val current = mutableState.value
         if (message.roomId != current.roomId || message.wirePly != current.snapshot?.wirePly || current.isSpectator || current.gameOver != null) {
-            sendDesync(current.snapshot?.wirePly?.coerceAtLeast(1) ?: 1, DesyncReason.RESULT_MISMATCH)
+            val observedPly = current.snapshot?.wirePly ?: 0
+            if (observedPly == 0) protocolFailure()
+            else sendDesync(observedPly, DesyncReason.RESULT_MISMATCH)
             return
         }
         mutableState.value = current.copy(resultCheckPending = true)
         timeoutJob?.cancel()
         monotonicClock.stop()
         refreshClock()
-        val result = current.acceptedCoreState?.toReportedResult() ?: ReportedResult.NOT_FINISHED
-        send(ResultReport(roomId = message.roomId, wirePly = message.wirePly, result = result))
+        if (reportedResultPly != message.wirePly) {
+            reportedResultPly = message.wirePly
+            val result = current.acceptedCoreState?.toPeoplePlayReportedResult() ?: ReportedResult.NOT_FINISHED
+            send(ResultReport(roomId = message.roomId, wirePly = message.wirePly, result = result))
+        }
     }
 
     private fun acceptGameOver(message: GameOver) {
@@ -539,8 +578,9 @@ internal class PeoplePlayRoomStateHolder(
     private fun sendDesync(observedPly: Int, reason: DesyncReason = DesyncReason.SNAPSHOT_MISMATCH) {
         val current = mutableState.value
         val roomId = current.roomId ?: return
+        if (observedPly < 1) return protocolFailure()
         if (current.isSpectator || current.selfColor == null || current.gameOver != null || !desyncSent.compareAndSet(false, true)) return
-        send(Desync(roomId = roomId, observedPly = observedPly.coerceAtLeast(1), reason = reason))
+        send(Desync(roomId = roomId, observedPly = observedPly, reason = reason))
         timeoutJob?.cancel()
         monotonicClock.stop()
         mutableState.value = current.copy(lastCommandError = "DESYNC", resultCheckPending = true)
@@ -554,6 +594,7 @@ internal class PeoplePlayRoomStateHolder(
     }
 
     private fun protocolFailure() {
+        if (mutableState.value.gameOver == null) saveLocalDisconnectIfPlayer()
         socket?.close()
         setConnectionError("BAD_MESSAGE")
     }
@@ -661,7 +702,7 @@ internal fun wireBoardToCoreState(board: List<Int>, nextTurn: PlayerColor, ply: 
     )
 }
 
-private fun GameState.toReportedResult(): ReportedResult = when (val gameStatus = status) {
+internal fun GameState.toPeoplePlayReportedResult(): ReportedResult = when (val gameStatus = status) {
     GameStatus.InProgress -> ReportedResult.NOT_FINISHED
     is GameStatus.Finished -> when (gameStatus.result.winner) {
         Disc.BLACK -> ReportedResult.BLACK_WIN

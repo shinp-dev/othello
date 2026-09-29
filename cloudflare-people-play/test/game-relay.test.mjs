@@ -7,6 +7,7 @@ import {
   disconnectEnding,
   evaluateDesync,
   evaluateTimeout,
+  missingPlayerDisconnectEnding,
 } from "../dist-test/src/game-relay.js";
 import {
   parsePeoplePlayClientMessage,
@@ -245,6 +246,19 @@ test("player disconnect loses only that color and spectator disconnect creates n
   assert.deepEqual(disconnectEnding(state, black.memberId), { finishReason: "DISCONNECT", outcome: "WHITE_WIN", winner: "WHITE" });
   assert.deepEqual(disconnectEnding(state, white.memberId), { finishReason: "DISCONNECT", outcome: "BLACK_WIN", winner: "BLACK" });
   assert.equal(disconnectEnding(state, "spectator"), null);
+});
+
+test("hibernation recovery treats a persisted player without a live attachment as disconnected", () => {
+  const { state, black, white } = playingState();
+  assert.equal(missingPlayerDisconnectEnding(state, new Set([black.memberId, white.memberId])), null);
+  assert.deepEqual(
+    missingPlayerDisconnectEnding(state, new Set([white.memberId, "spectator"])),
+    { finishReason: "DISCONNECT", outcome: "WHITE_WIN", winner: "WHITE" },
+  );
+  assert.deepEqual(
+    missingPlayerDisconnectEnding(state, new Set([black.memberId])),
+    { finishReason: "DISCONNECT", outcome: "BLACK_WIN", winner: "BLACK" },
+  );
 });
 
 test("resultCheck survives persist and reload without changing either report slot", () => {

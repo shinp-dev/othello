@@ -2,7 +2,9 @@ package com.example.othello
 
 import com.example.othello.game.Board
 import com.example.othello.game.Disc
+import com.example.othello.game.GameStatus
 import com.example.othello.game.GameState
+import com.example.othello.game.MoveOutcome
 import com.example.othello.game.Position
 import com.example.othello.game.TurnResolver
 import com.example.othello.network.peopleplay.FinishReason
@@ -16,6 +18,8 @@ import com.example.othello.network.peopleplay.PeoplePlayProtocolCodec
 import com.example.othello.network.peopleplay.PeoplePlayRoomSnapshot
 import com.example.othello.network.peopleplay.PeoplePlaySeats
 import com.example.othello.network.peopleplay.PlayerColor
+import com.example.othello.network.peopleplay.ReportedResult
+import com.example.othello.network.peopleplay.ResultReport
 import com.example.othello.network.peopleplay.ResultCheck
 import com.example.othello.network.peopleplay.RoomPhase
 import com.example.othello.network.peopleplay.Seat
@@ -238,6 +242,7 @@ class PeoplePlayRoomStateHolderTest {
         )
         repo.send(result)
         repo.send(result)
+        repo.socket.listener.onText("not-json")
         repo.socket.listener.onClosed()
         assertEquals(1, store.records.size)
         val saved = store.records.single()
@@ -274,6 +279,51 @@ class PeoplePlayRoomStateHolderTest {
     }
 
     @Test
+    fun unexpectedSocketCloseSurfacesConnectionFailureAfterSavingLocalDisconnect() = withRoomScope { scope ->
+        val store = MemoryRecordStore()
+        val repo = FakePeoplePlayRepository("member-black")
+        val holder = holder(scope, repo, LocalGameRecordPersistenceCoordinator(store, scope))
+        holder.connect("room-fixture")
+        repo.sendSnapshot(playingSnapshot())
+
+        repo.socket.listener.onClosed()
+
+        assertEquals(PeoplePlayConnectionStatus.FAILED, holder.state.value.status)
+        assertEquals("CONNECTION_FAILED", holder.state.value.connectionError)
+        assertEquals(1, store.records.size)
+        assertEquals(PeoplePlayLocalResultSource.LOCAL_DISCONNECT, store.records.single().peoplePlay?.resultSource)
+    }
+
+    @Test
+    fun malformedServerMessageFailsClosedAndSavesOneLocalDisconnectForPlayerOnly() = withRoomScope { scope ->
+        val store = MemoryRecordStore()
+        val persistence = LocalGameRecordPersistenceCoordinator(store, scope)
+        val playerRepo = FakePeoplePlayRepository("member-black")
+        val player = holder(scope, playerRepo, persistence)
+        player.connect("room-fixture")
+        playerRepo.sendSnapshot(playingSnapshot())
+
+        playerRepo.socket.listener.onText("not-json")
+        assertEquals(PeoplePlayConnectionStatus.FAILED, player.state.value.status)
+        assertEquals("BAD_MESSAGE", player.state.value.connectionError)
+        assertEquals(1, store.records.size)
+        assertEquals(PeoplePlayLocalResultSource.LOCAL_DISCONNECT, store.records.single().peoplePlay?.resultSource)
+        assertEquals(PeoplePlayLocalFinishReason.DISCONNECT, store.records.single().peoplePlay?.finishReason)
+
+        playerRepo.socket.listener.onClosed()
+        assertEquals(1, store.records.size)
+
+        val spectatorRepo = FakePeoplePlayRepository("member-watcher")
+        val spectator = holder(scope, spectatorRepo, persistence)
+        spectator.connect("room-fixture")
+        spectatorRepo.sendSnapshot(playingSnapshot(spectatorCount = 1))
+        spectatorRepo.socket.listener.onText("not-json")
+        spectatorRepo.socket.listener.onClosed()
+        assertEquals(1, store.records.size)
+        assertTrue(spectator.state.value.isSpectator)
+    }
+
+    @Test
     fun spectatorSnapshotIsReadOnlyAndResultCheckDoesNotProducePlayerReport() = withRoomScope { scope ->
         val repo = FakePeoplePlayRepository("member-watcher")
         val holder = holder(scope, repo, persistence(scope))
@@ -302,6 +352,70 @@ class PeoplePlayRoomStateHolderTest {
         val atResultCheck = clock.remainingMillis()
         nanos += 500_000_000
         assertEquals(atResultCheck, clock.remainingMillis())
+    }
+
+    @Test
+    fun terminalSnapshotStartsOneResultReportForSenderAndReceiverButNeverSpectator() = withRoomScope { scope ->
+        val transcript = deterministicGameTranscript()
+        val terminal = transcript.last()
+        val receiverColor = terminal.mover.opponent()
+
+        listOf(terminal.mover, receiverColor).forEach { selfColor ->
+            val memberId = if (selfColor == PlayerColor.BLACK) "member-black" else "member-white"
+            val repo = FakePeoplePlayRepository(memberId)
+            val holder = holder(scope, repo, persistence(scope))
+            holder.connect("room-fixture")
+            repo.sendSnapshot(playingSnapshot())
+            replayTranscript(holder, repo, transcript, selfColor)
+
+            val reports = repo.socket.sent.mapNotNull {
+                PeoplePlayProtocolCodec.decodeClientMessage(it).getOrNull() as? ResultReport
+            }
+            assertEquals(1, reports.size, "terminal ${if (selfColor == terminal.mover) "sender" else "receiver"} must report once")
+            assertEquals(transcript.size, reports.single().wirePly)
+            assertEquals(terminal.state.toPeoplePlayReportedResult(), reports.single().result)
+
+            repo.sendSnapshot(transcriptSnapshot(terminal, transcript.size))
+            repo.send(ResultCheck("room-fixture", transcript.size))
+            val reportsAfterDuplicates = repo.socket.sent.mapNotNull {
+                PeoplePlayProtocolCodec.decodeClientMessage(it).getOrNull() as? ResultReport
+            }
+            assertEquals(1, reportsAfterDuplicates.size, "duplicate snapshot/check must not duplicate RESULT_REPORT")
+        }
+
+        val spectatorRepo = FakePeoplePlayRepository("member-watcher")
+        val spectator = holder(scope, spectatorRepo, persistence(scope))
+        spectator.connect("room-fixture")
+        spectatorRepo.sendSnapshot(transcriptSnapshot(terminal, transcript.size, spectatorCount = 1))
+        assertTrue(spectator.state.value.isSpectator)
+        assertTrue(spectatorRepo.socket.sent.none {
+            PeoplePlayProtocolCodec.decodeClientMessage(it).getOrNull() is ResultReport
+        })
+    }
+
+    @Test
+    fun terminalResultMappingCoversBlackWhiteAndDraw() {
+        val black = GameState(Board.fromRows(List(8) { "BBBBBBBB" }))
+        val white = GameState(Board.fromRows(List(8) { "WWWWWWWW" }))
+        val draw = GameState(Board.fromRows(List(4) { "BBBBBBBB" } + List(4) { "WWWWWWWW" }))
+
+        assertEquals(ReportedResult.BLACK_WIN, black.toPeoplePlayReportedResult())
+        assertEquals(ReportedResult.WHITE_WIN, white.toPeoplePlayReportedResult())
+        assertEquals(ReportedResult.DRAW, draw.toPeoplePlayReportedResult())
+    }
+
+    @Test
+    fun invalidInitialPlayingBoardFailsProtocolWithoutSendingImpossiblePlyOneDesync() = withRoomScope { scope ->
+        val repo = FakePeoplePlayRepository("member-black")
+        val holder = holder(scope, repo, persistence(scope))
+        holder.connect("room-fixture")
+        repo.sendSnapshot(playingSnapshot(board = List(64) { 0 }))
+
+        assertEquals(PeoplePlayConnectionStatus.FAILED, holder.state.value.status)
+        assertEquals("BAD_MESSAGE", holder.state.value.connectionError)
+        assertTrue(repo.socket.sent.none {
+            PeoplePlayProtocolCodec.decodeClientMessage(it).getOrNull() is com.example.othello.network.peopleplay.Desync
+        })
     }
 
     @Test
@@ -347,7 +461,15 @@ class PeoplePlayRoomStateHolderTest {
         scope: CoroutineScope,
         repository: FakePeoplePlayRepository,
         persistence: LocalGameRecordPersistenceCoordinator,
-    ) = PeoplePlayRoomStateHolder(scope, repository, { "fixture-token" }, persistence, {}, {})
+    ) = PeoplePlayRoomStateHolder(
+        scope,
+        repository,
+        { "fixture-token" },
+        persistence,
+        {},
+        {},
+        PeoplePlayMonotonicClock(System::nanoTime),
+    )
 
     private fun persistence(scope: CoroutineScope) = LocalGameRecordPersistenceCoordinator(MemoryRecordStore(), scope)
 
@@ -385,6 +507,49 @@ class PeoplePlayRoomStateHolderTest {
         terminalCandidate = nextTurn == null, resultCheckPly = null,
         spectatorCount = spectatorCount, spectatorAvatarPreview = emptyList(),
     )
+
+    private data class TranscriptMove(
+        val mover: PlayerColor,
+        val move: Position,
+        val state: GameState,
+    )
+
+    private fun deterministicGameTranscript(): List<TranscriptMove> {
+        var state = GameState()
+        val transcript = mutableListOf<TranscriptMove>()
+        while (state.status !is GameStatus.Finished) {
+            val move = state.legalMoves.sortedWith(compareBy<Position>({ it.row }, { it.column })).first()
+            val mover = state.currentPlayer.toPlayerColor()
+            val played = state.play(move) as MoveOutcome.Played
+            state = TurnResolver.resolveForcedPasses(played.state).state
+            transcript += TranscriptMove(mover, move, state)
+        }
+        return transcript
+    }
+
+    private fun transcriptSnapshot(item: TranscriptMove, wirePly: Int, spectatorCount: Int = 0) = playingSnapshot(
+        wirePly = wirePly,
+        board = item.state.board.toWireBoard(),
+        move = com.example.othello.network.peopleplay.PeoplePlayMove(item.move.row, item.move.column),
+        nextTurn = if (item.state.status is GameStatus.Finished) null else item.state.currentPlayer.toPlayerColor(),
+        spectatorCount = spectatorCount,
+    )
+
+    private fun replayTranscript(
+        holder: PeoplePlayRoomStateHolder,
+        repo: FakePeoplePlayRepository,
+        transcript: List<TranscriptMove>,
+        selfColor: PlayerColor,
+    ) {
+        transcript.forEachIndexed { index, item ->
+            if (item.mover == selfColor) holder.play(item.move)
+            repo.sendSnapshot(transcriptSnapshot(item, index + 1))
+        }
+    }
+
+    private fun PlayerColor.opponent() = if (this == PlayerColor.BLACK) PlayerColor.WHITE else PlayerColor.BLACK
+
+    private fun Disc.toPlayerColor() = if (this == Disc.BLACK) PlayerColor.BLACK else PlayerColor.WHITE
 
     private class FakePeoplePlayRepository(private val memberId: String) : PeoplePlayRepository {
         lateinit var listener: PeoplePlaySocketListener
