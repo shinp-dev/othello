@@ -49,6 +49,12 @@ export default {
       );
       return response({ status: inspected.status, upgrade: inspected.headers.get("upgrade") });
     }
+    if (url.pathname === "/__test/room/abort-create" && request.method === "POST") {
+      const body = await request.json<{ roomId?: string }>();
+      const roomId = String(body.roomId ?? "");
+      await env.ROOM.getByName(roomId).abortCreate(roomId);
+      return response({ ok: true });
+    }
     if (!url.pathname.startsWith("/__test/registry/")) return peoplePlayHandler.fetch!(request, env, ctx);
     if (request.method !== "POST") return response({ error: "METHOD_NOT_ALLOWED" }, 405);
 
@@ -76,7 +82,7 @@ export default {
       case "/__test/registry/resolve-join-target":
         return response(await registry.resolveJoinTarget(String(body.roomId ?? "")));
       case "/__test/registry/list":
-        return response({ rooms: await registry.listRooms() });
+        return response({ rooms: await registry.listRoomProjectionCandidates() });
       default:
         return response({ error: "NOT_FOUND" }, 404);
     }

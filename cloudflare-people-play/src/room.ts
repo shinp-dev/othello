@@ -14,12 +14,14 @@ import {
   disconnectEnding,
   evaluateDesync,
   evaluateTimeout,
+  missingPlayerDisconnectEnding,
   type EndingDecision,
 } from "./game-relay.js";
 import {
   AVATAR_IDS,
   TIME_CONTROLS,
   type AvatarId,
+  type LobbyProjection,
   type TimeControl,
 } from "./registry-core.js";
 import {
@@ -58,6 +60,17 @@ interface InternalIdentity {
   displayName: string;
   avatarId: AvatarId;
 }
+
+interface ConstructorRecovery {
+  roomId: string;
+  recipients: WebSocket[];
+  gameOverWire: string | null;
+}
+
+export type RoomLobbyStatus =
+  | { status: "active"; projection: LobbyProjection }
+  | { status: "closed" }
+  | { status: "unavailable" };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -99,7 +112,7 @@ export class Room extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    ctx.blockConcurrencyWhile(async () => {
+    const initialization = ctx.blockConcurrencyWhile(async (): Promise<ConstructorRecovery | null> => {
       this.ctx.storage.sql.exec(`
         CREATE TABLE IF NOT EXISTS room_state (
           singleton INTEGER PRIMARY KEY,
@@ -129,7 +142,58 @@ export class Room extends DurableObject<Env> {
           }
         }
       }
+      if (this.state?.phase === "CLOSED") {
+        return {
+          roomId: this.state.roomId,
+          recipients: this.ctx.getWebSockets().filter((socket) => socket.readyState === 1),
+          gameOverWire: null,
+        };
+      }
+      if (this.state?.phase === "PLAYING") {
+        const connections = this.connections();
+        const ending = missingPlayerDisconnectEnding(
+          this.state,
+          new Set(connections.map(({ attachment }) => attachment.memberId)),
+        );
+        if (ending) {
+          const active = this.state;
+          const decidedAt = Date.now();
+          const gameOver = buildGameOver(
+            active,
+            connections.map(({ attachment }) => attachment),
+            ending.finishReason,
+            ending.outcome,
+            ending.winner,
+            decidedAt,
+          );
+          const closed = createClosedRoomState(active.roomId, decidedAt);
+          this.persist(closed);
+          this.state = closed;
+          return {
+            roomId: active.roomId,
+            recipients: connections.map(({ socket }) => socket),
+            gameOverWire: serializeGameOver(gameOver),
+          };
+        }
+      }
+      return null;
     });
+    ctx.waitUntil(initialization.then(async (recovery) => {
+      if (!recovery) return;
+      if (recovery.gameOverWire !== null) {
+        for (const socket of recovery.recipients) {
+          try { socket.send(recovery.gameOverWire); } catch { /* the CLOSED state remains authoritative */ }
+        }
+      }
+      for (const socket of recovery.recipients) {
+        try { socket.close(1000, "GAME_OVER"); } catch { /* already closed */ }
+      }
+      try {
+        await this.env.ROOM_REGISTRY.getByName(REGISTRY_NAME).closeRoom(recovery.roomId);
+      } catch {
+        // Registry reconciliation on a later lobby read will converge to the CLOSED Room state.
+      }
+    }));
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -162,6 +226,18 @@ export class Room extends DurableObject<Env> {
         try { socket.close(1011, "Room creation failed"); } catch { /* already closed */ }
       }
     }
+  }
+
+  async getLobbyStatus(roomId: string): Promise<RoomLobbyStatus> {
+    if (this.unavailable || !this.state || this.state.roomId !== roomId) return { status: "unavailable" };
+    if (this.state.phase === "CLOSED") return { status: "closed" };
+    return {
+      status: "active",
+      projection: buildLobbyProjection(
+        this.state,
+        this.connections().map(({ attachment }) => attachment),
+      ),
+    };
   }
 
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {

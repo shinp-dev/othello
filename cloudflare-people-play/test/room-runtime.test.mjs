@@ -596,3 +596,18 @@ test("near-simultaneous timeout and disconnect commit at most one GAME_OVER and 
   assert.equal(game.spectator.history.filter((message) => message.type === "GAME_OVER").length, 1);
   await waitUntil(async () => !(await rooms()).some((room) => room.roomId === game.roomId));
 });
+
+test("lobby GET removes a stale projection when Room is CLOSED but Registry close notification was lost", async () => {
+  const creator = await openSocket("/v1/people-play/rooms/new/socket?timeControl=TEN_MINUTES", "test-user-a");
+  const initial = await creator.next((message) => message.type === "ROOM_SNAPSHOT");
+  const roomId = initial.roomId;
+  assert.equal((await rooms()).some((room) => room.roomId === roomId), true);
+
+  const aborted = await post("/__test/room/abort-create", { roomId });
+  assert.deepEqual(aborted, { status: 200, body: { ok: true } });
+  assert.equal((await post("/__test/registry/resolve-join-target", { roomId })).body.status, "active");
+
+  assert.equal((await rooms()).some((room) => room.roomId === roomId), false);
+  assert.equal((await post("/__test/registry/resolve-join-target", { roomId })).body.status, "closed");
+  await closeSocket(creator);
+});

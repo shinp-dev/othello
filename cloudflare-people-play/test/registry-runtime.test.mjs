@@ -177,6 +177,9 @@ test("RoomRegistry allocates privately, publishes and replaces only listed proje
   const waiting = projection(id);
   assert.deepEqual((await post("/__test/registry/publish", { roomId: id, projection: waiting })).body, { ok: true });
   assert.deepEqual(await registryList(), [waiting]);
+  const reconciled = await fetch(`${baseUrl}/v1/people-play/rooms`, { headers: authHeaders });
+  assert.equal(reconciled.status, 200);
+  assert.equal((await reconciled.json()).rooms.some((room) => room.roomId === id), false);
   assert.deepEqual((await post("/__test/registry/publish", { roomId: id, projection: waiting })).body, { ok: false, error: "ALREADY_PUBLISHED" });
 
   const updatedWaiting = { ...waiting, spectatorCount: 3 };

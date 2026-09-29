@@ -167,9 +167,16 @@ object PeoplePlayProtocolValidator {
                     }
                     RoomPhase.PLAYING -> {
                         val players = requireNotNull(message.players) { "PLAYING requires players" }
+                        val seatA = requireNotNull(message.seats.a) { "PLAYING requires seat A" }
+                        val seatB = requireNotNull(message.seats.b) { "PLAYING requires seat B" }
                         validateParticipant(players.black)
                         validateParticipant(players.white)
                         require(players.black.memberId != players.white.memberId) { "Players must differ" }
+                        require(seatA.memberId != seatB.memberId) { "Seats must differ" }
+                        require(
+                            setOf(players.black.memberId, players.white.memberId) ==
+                                setOf(seatA.memberId, seatB.memberId),
+                        ) { "PLAYING players must match seats" }
                     }
                     RoomPhase.CLOSED -> error("CLOSED is not a live snapshot")
                 }
