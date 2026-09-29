@@ -169,11 +169,12 @@ internal class PeoplePlayRoomStateHolder(
     private var initialClockStarted = false
     private var timeoutSent = false
     private var timeoutJob: Job? = null
+    private var persistenceSaveJob: Job? = null
     private val ended = AtomicBoolean(false)
     private val desyncSent = AtomicBoolean(false)
 
     init {
-        scope.launch {
+        persistenceSaveJob = scope.launch {
             persistence.saveStates.collect { saves ->
                 val localId = mutableState.value.localRecordId ?: return@collect
                 if (saves[localId]?.status == com.example.othello.LocalRecordSaveStatus.SAVED) {
@@ -304,12 +305,12 @@ internal class PeoplePlayRoomStateHolder(
 
     @Synchronized
     fun closeByUser() {
-        if (ended.get()) return
-        if (mutableState.value.gameOver == null) saveLocalDisconnectIfPlayer()
+        if (!ended.get() && mutableState.value.gameOver == null) saveLocalDisconnectIfPlayer()
         ended.set(true)
         timeoutJob?.cancel()
         socket?.close()
         socket = null
+        persistenceSaveJob?.cancel()
         mutableState.value = mutableState.value.copy(status = PeoplePlayConnectionStatus.CLOSED)
     }
 
@@ -558,6 +559,8 @@ internal class PeoplePlayRoomStateHolder(
     }
 
     private fun failOpen(failure: PeoplePlayOpenFailure) {
+        timeoutJob?.cancel()
+        persistenceSaveJob?.cancel()
         onOpenFailure(failure)
         mutableState.value = mutableState.value.copy(
             status = PeoplePlayConnectionStatus.FAILED,
