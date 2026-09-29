@@ -127,7 +127,7 @@ test("initial board and Phase 1 fixtures remain the same wire contract", async (
   );
 });
 
-test("spectator count uses memberId sort and preview is capped at three", () => {
+test("spectator count and preview cover zero, one, three, and four spectators", () => {
   const state = createInitialRoomState("room-preview", "TEN_MINUTES", participant("seat-a"));
   const spectators = [
     attachment("z-member", userId("00000005", "1"), "MAGIC_BOOK"),
@@ -135,9 +135,18 @@ test("spectator count uses memberId sort and preview is capped at three", () => 
     attachment("m-member", userId("00000003", "3"), "GIRL"),
     attachment("b-member", userId("00000002", "4"), "BOY"),
   ];
-  const summary = spectatorSummary(state, [attachment("seat-a"), ...spectators]);
-  assert.equal(summary.spectatorCount, 4);
-  assert.deepEqual(summary.spectatorAvatarPreview, ["ADULT_WOMAN", "BOY", "GIRL"]);
+  const expectedPreviews = new Map([
+    [0, []],
+    [1, ["MAGIC_BOOK"]],
+    [3, ["ADULT_WOMAN", "GIRL", "MAGIC_BOOK"]],
+    [4, ["ADULT_WOMAN", "BOY", "GIRL"]],
+  ]);
+  for (const [count, expectedPreview] of expectedPreviews) {
+    const summary = spectatorSummary(state, [attachment("seat-a"), ...spectators.slice(0, count)]);
+    assert.equal(summary.spectatorCount, count);
+    assert.deepEqual(summary.spectatorAvatarPreview, expectedPreview);
+    assert.equal(summary.spectatorCount - summary.spectatorAvatarPreview.length, Math.max(0, count - 3));
+  }
 });
 
 test("attachment hints reconcile from storage without carrying credentials", () => {

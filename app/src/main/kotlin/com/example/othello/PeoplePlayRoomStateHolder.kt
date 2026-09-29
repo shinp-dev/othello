@@ -223,8 +223,7 @@ internal class PeoplePlayRoomStateHolder(
     @Synchronized
     override fun onText(text: String) {
         val decoded = PeoplePlayProtocolCodec.decodeServerMessage(text).getOrElse {
-            socket?.close()
-            setConnectionError("BAD_MESSAGE")
+            protocolFailure()
             return
         }
         when (decoded) {
@@ -554,6 +553,7 @@ internal class PeoplePlayRoomStateHolder(
     }
 
     private fun protocolFailure() {
+        if (mutableState.value.gameOver == null) saveLocalDisconnectIfPlayer()
         socket?.close()
         setConnectionError("BAD_MESSAGE")
     }

@@ -238,6 +238,7 @@ class PeoplePlayRoomStateHolderTest {
         )
         repo.send(result)
         repo.send(result)
+        repo.socket.listener.onText("not-json")
         repo.socket.listener.onClosed()
         assertEquals(1, store.records.size)
         val saved = store.records.single()
@@ -269,6 +270,35 @@ class PeoplePlayRoomStateHolderTest {
         spectator.connect("room-fixture")
         spectatorRepo.sendSnapshot(playingSnapshot(spectatorCount = 1))
         spectator.closeByUser()
+        assertEquals(1, store.records.size)
+        assertTrue(spectator.state.value.isSpectator)
+    }
+
+    @Test
+    fun malformedServerMessageFailsClosedAndSavesOneLocalDisconnectForPlayerOnly() = withRoomScope { scope ->
+        val store = MemoryRecordStore()
+        val persistence = LocalGameRecordPersistenceCoordinator(store, scope)
+        val playerRepo = FakePeoplePlayRepository("member-black")
+        val player = holder(scope, playerRepo, persistence)
+        player.connect("room-fixture")
+        playerRepo.sendSnapshot(playingSnapshot())
+
+        playerRepo.socket.listener.onText("not-json")
+        assertEquals(PeoplePlayConnectionStatus.FAILED, player.state.value.status)
+        assertEquals("BAD_MESSAGE", player.state.value.connectionError)
+        assertEquals(1, store.records.size)
+        assertEquals(PeoplePlayLocalResultSource.LOCAL_DISCONNECT, store.records.single().peoplePlay?.resultSource)
+        assertEquals(PeoplePlayLocalFinishReason.DISCONNECT, store.records.single().peoplePlay?.finishReason)
+
+        playerRepo.socket.listener.onClosed()
+        assertEquals(1, store.records.size)
+
+        val spectatorRepo = FakePeoplePlayRepository("member-watcher")
+        val spectator = holder(scope, spectatorRepo, persistence)
+        spectator.connect("room-fixture")
+        spectatorRepo.sendSnapshot(playingSnapshot(spectatorCount = 1))
+        spectatorRepo.socket.listener.onText("not-json")
+        spectatorRepo.socket.listener.onClosed()
         assertEquals(1, store.records.size)
         assertTrue(spectator.state.value.isSpectator)
     }
