@@ -11,36 +11,43 @@ class GuiInformationArchitectureContractTest {
     private val board = File("src/main/kotlin/com/example/othello/BoardUi.kt").readText()
     private val analysis = File("src/main/kotlin/com/example/othello/AnalysisScreens.kt").readText()
     private val topLevel = File("src/main/kotlin/com/example/othello/TopLevelScreens.kt").readText()
+    private val deep = File("src/main/kotlin/com/example/othello/DeepEnjoyScreen.kt").readText()
     private val research = File("src/main/kotlin/com/example/othello/ResearchSettingsScreen.kt").readText()
     private val positionReview = File("src/main/kotlin/com/example/othello/PositionReviewScreens.kt").readText()
     private val theoryExploration = File("src/main/kotlin/com/example/othello/TheoryExplorationScreens.kt").readText()
     private val theoryBoardText = File("src/main/kotlin/com/example/othello/TheoryBoardTextSettings.kt").readText()
 
     @Test
-    fun playAndScoreHeaderKeepModeOutOfTheFourthColumn() {
-        val play = main.substringAfter("private fun PlayScreen(").substringBefore("internal fun opponentRatingLabel")
+    fun deepHomeCombinesPlayReviewAndSettingsWithThreeClosedFeatures() {
+        assertTrue("R.string.deep_battle_section" in deep)
+        assertTrue("R.string.deep_review_section" in deep)
+        assertTrue("R.string.deep_settings_section" in deep)
+        assertTrue("R.string.play_against_ai" in deep)
+        assertTrue("R.string.two_player_match" in deep)
+        assertTrue("R.string.position_review" in deep)
+        assertTrue("R.string.theory_exploration" in deep)
+        assertTrue("R.string.offline_records" in deep)
+        assertTrue("R.string.match_settings" in deep)
+        assertTrue("R.string.review_settings" in deep)
+        assertTrue("R.string.common_settings" in deep)
+        assertEquals(3, deep.split("onClick = null").size - 1)
+        assertTrue("R.drawable.ic_deep_close" in deep)
+        assertTrue("R.string.play_online" in deep)
+        assertTrue("R.string.online_records" in deep)
+        assertTrue("R.string.research_participation" in deep)
+    }
+
+    @Test
+    fun deepModeHasNoBottomTabBarAndScoreHeaderKeepsModeOutOfTheFourthColumn() {
+        val advancedBody = main.substringAfter("private fun AuthenticatedApp(")
+            .substringBefore("@Composable\nprivate fun OnlineMatchScreen")
         val score = main.substringAfter("private fun ScoreHeader(game:")
             .substringBefore("private fun OthelloBoard")
-        assertFalse("ちゃんと残る、ちゃんと振り返れるリバーシ" in play)
+        assertFalse("ChanrivaBottomNavigation(" in advancedBody)
         assertTrue("ScoreHeader(viewState.game)" in main)
         assertTrue("status.orEmpty()" in score)
         assertFalse("AI対局" in score)
         assertFalse("ローカル" in score)
-    }
-
-    @Test
-    fun playScreenUsesEmphasizedRowsAndKeepsTwoPlayerAsNormalRow() {
-        val play = main.substringAfter("private fun PlayScreen(").substringBefore("internal fun opponentRatingLabel")
-        val onlineRow = "title = appString(R.string.play_online)"
-        val aiRow = "title = appString(R.string.play_against_ai)"
-        assertTrue(play.contains("emphasized = true"))
-        assertTrue(play.indexOf(onlineRow) < play.indexOf(aiRow))
-        assertTrue(play.indexOf(aiRow) < play.indexOf("R.string.two_player_match"))
-        assertFalse(play.contains("Text(appString(R.string.online_match)"))
-        assertFalse(play.contains("Text(appString(R.string.device_match)"))
-        assertTrue(play.contains("onClick = onLocalAiStart"))
-        assertTrue(play.contains("R.string.play_against_ai"))
-        assertTrue(play.contains("title = appString(R.string.two_player_match)"))
     }
 
     @Test
@@ -88,28 +95,17 @@ class GuiInformationArchitectureContractTest {
     }
 
     @Test
-    fun studyNavigationGroupsFourEqualFeaturesIntoAnalysisCategories() {
-        val study = topLevel.substringAfter("internal fun StudyScreen(").substringBefore("internal fun MoreScreen(")
-
-        assertEquals(4, study.split("ChanrivaNavigationRow(").size - 1)
-        assertEquals(4, study.split("emphasized = true").size - 1)
-        assertTrue(study.indexOf("R.string.study_position_analysis") < study.indexOf("R.string.study_theory_analysis"))
-        assertTrue(study.indexOf("R.string.study_theory_analysis") < study.indexOf("R.string.study_record_analysis"))
-        assertTrue(study.indexOf("R.string.position_review") < study.indexOf("R.string.theory_exploration"))
-        assertTrue(study.indexOf("R.string.theory_exploration") < study.indexOf("R.string.online_records"))
-        assertTrue(study.indexOf("R.string.online_records") < study.indexOf("R.string.offline_records"))
-        assertEquals(1, study.split("titleBadge =").size - 1)
-        assertTrue(study.contains("titleBadge = appString(R.string.theory_enthusiast_recommended)"))
-        assertTrue(study.contains("onClick = onPositionReview"))
-        assertTrue(study.contains("onClick = onTheoryExploration"))
-        assertTrue(study.contains("onClick = onOnlineRecords"))
-        assertTrue(study.contains("onClick = onOfflineRecords"))
-        assertTrue(study.contains("color = MaterialTheme.colorScheme.onSurfaceVariant"))
+    fun deepNavigationKeepsPositionAndTheoryWorkspacesIndependent() {
         assertTrue(positionReview.contains("PositionReviewStore"))
         assertTrue(positionReview.contains("PositionReviewSession"))
         assertFalse(positionReview.contains("LocalGameRecord"))
         assertFalse(positionReview.contains("ResearchReviewPanel"))
         assertFalse(positionReview.contains("ResearchPositionRepository"))
+        assertTrue("onPositionReview = { destination = AppDestination.POSITION_REVIEW_HOME }" in main)
+        assertTrue("onTheoryExploration = { destination = AppDestination.THEORY_EXPLORATION }" in main)
+        assertTrue("onOfflineRecords = { destination = AppDestination.OFFLINE_RECORDS }" in main)
+        assertFalse("onOnlineStart =" in main.substringAfter("destination == AppDestination.PLAY -> DeepEnjoyScreen(")
+            .substringBefore("destination == AppDestination.THEORY_EXPLORATION"))
     }
 
     @Test
