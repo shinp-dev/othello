@@ -24,6 +24,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,7 +42,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.othello.designsystem.ChanrivaScreenHeader
 
 private val SocialAccent = Color(0xFF65E0D5)
 private val SocialAccentSoft = Color(0xFF4EC7D9)
@@ -97,11 +98,7 @@ internal fun PeopleSocialScreen(
                 .padding(top = 8.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            ChanrivaScreenHeader(
-                title = appString(R.string.people_social_title),
-                onBack = onBack,
-                backLabel = appString(R.string.back),
-            )
+            PeopleSocialHeader(onBack = onBack)
 
             Column(
                 modifier = Modifier.padding(horizontal = 4.dp),
@@ -179,6 +176,38 @@ internal fun PeopleSocialScreen(
                 textAlign = TextAlign.Center,
             )
         }
+    }
+}
+
+@Composable
+private fun PeopleSocialHeader(
+    onBack: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        OutlinedButton(
+            onClick = onBack,
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = SocialIvory),
+        ) {
+            Text(appString(R.string.back))
+        }
+        Spacer(Modifier.weight(1f))
+        Box(
+            modifier = Modifier
+                .size(width = 2.dp, height = 22.dp)
+                .background(SocialAccent),
+        )
+        Spacer(Modifier.size(9.dp))
+        Text(
+            text = appString(R.string.people_social_title),
+            color = SocialIvory,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 
