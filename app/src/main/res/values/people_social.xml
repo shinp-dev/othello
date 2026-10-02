@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="people_social_prompt">When might you be up for a game today?</string>
+    <string name="people_social_relaxed_note">Just a casual maybe. No commitment if plans change.</string>
+    <string name="people_social_notification_note">If a match room opens during a time you picked, we’ll let you know.</string>
+    <string name="people_social_today">Today</string>
+    <string name="people_social_tap_hint">Tap a time to mark “maybe”</string>
+    <string name="people_social_people_count">%1$d people</string>
+    <string name="people_social_footer_note">Your selection expires automatically when the time passes.</string>
+    <string name="people_social_selected">Maybe selected</string>
+</resources>
