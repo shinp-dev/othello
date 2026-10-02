@@ -103,7 +103,7 @@ internal fun SettingsScreen(
 }
 
 @Composable
-private fun LanguageSelectionDialog(
+internal fun LanguageSelectionDialog(
     selectedLanguage: AppLanguage,
     onSelect: (AppLanguage) -> Unit,
     onDismiss: () -> Unit,
