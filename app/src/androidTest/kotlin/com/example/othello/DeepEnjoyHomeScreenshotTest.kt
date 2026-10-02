@@ -3,6 +3,7 @@ package com.example.othello
 import android.content.ContentValues
 import android.graphics.Bitmap
 import android.os.Environment
+import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -75,10 +76,29 @@ class DeepEnjoyHomeScreenshotTest {
         composeRule.onNodeWithText(localizedContext.getString(R.string.two_player_match)).assertHasClickAction()
 
         composeRule.waitForIdle()
-        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val bitmap = awaitVisibleDeepEnjoyScreen()
         assertEquals("Screenshot pixel width for ${width}dp emulator", width, bitmap.width)
         saveScreenshot(context, bitmap, "deep-enjoy-home-${width}dp.png")
         bitmap.recycle()
+    }
+
+    private fun awaitVisibleDeepEnjoyScreen(): Bitmap {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val deadline = SystemClock.uptimeMillis() + 12_000L
+        do {
+            composeRule.waitForIdle()
+            val frame = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+            val pixel = frame.getPixel(frame.width / 2, frame.height / 2)
+            val brightness = (
+                android.graphics.Color.red(pixel) +
+                    android.graphics.Color.green(pixel) +
+                    android.graphics.Color.blue(pixel)
+                ) / 3
+            if (brightness < 80) return frame
+            frame.recycle()
+            Thread.sleep(250)
+        } while (SystemClock.uptimeMillis() < deadline)
+        throw AssertionError("DeepEnjoyScreen background was not visible before capture")
     }
 
     private fun saveScreenshot(context: android.content.Context, bitmap: Bitmap, name: String) {
