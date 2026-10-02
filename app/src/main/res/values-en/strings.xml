@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="people_social_title">Connect</string>
-    <string name="people_social_supporting">Share when you might play</string>
     <string name="enjoy_casually">Play for Fun</string>
     <string name="enjoy_casually_detail">Opponent Packs · Gacha\nReversi Collection</string>
     <string name="enjoy_casually_accessibility">Play for Fun. Opponent Packs, Gacha, Reversi Collection</string>
