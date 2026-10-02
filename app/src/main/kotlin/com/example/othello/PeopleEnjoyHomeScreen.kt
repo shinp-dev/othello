@@ -6,7 +6,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,7 +37,6 @@ import com.example.othello.designsystem.ChanrivaScreenHeader
 
 private val PeopleGold = Color(0xFFE7C875)
 private val PeopleIvory = Color(0xFFFFF8E8)
-private val PeopleForest = Color(0xFF063B35)
 
 @Composable
 internal fun PeopleEnjoyHomeScreen(
@@ -67,7 +65,7 @@ internal fun PeopleEnjoyHomeScreen(
         ) {
             // Keep this screen intentionally titleless: the three illustrated cards are the primary navigation.
             // System back still returns to the mode selector through the parent route.
-            Spacer(Modifier.height(72.dp))
+            Spacer(Modifier.height(56.dp))
 
             PeopleHomeCard(
                 title = appString(R.string.people_play_title),
@@ -124,49 +122,48 @@ private fun PeopleHomeCard(
                     ),
                 ),
             )
-            Row(
-                modifier = Modifier.fillMaxSize().padding(start = 18.dp, end = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            Column(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxWidth()
+                    .padding(start = 18.dp, end = 72.dp),
+                verticalArrangement = Arrangement.Center,
             ) {
-                Column(
-                    modifier = Modifier.weight(1f).padding(end = 6.dp),
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Text(
-                        text = title,
-                        color = PeopleIvory,
-                        fontSize = 25.sp,
-                        lineHeight = 31.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.height(7.dp))
-                    Text(
-                        text = subtitle,
-                        color = Color(0xFFFFF0CE),
-                        fontSize = 14.sp,
-                        lineHeight = 19.sp,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .background(PeopleForest.copy(alpha = 0.92f), CircleShape)
-                        .border(1.5.dp, PeopleGold, CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "›",
-                        color = PeopleIvory,
-                        fontSize = 32.sp,
-                        lineHeight = 34.sp,
-                        fontWeight = FontWeight.Normal,
-                    )
-                }
+                Text(
+                    text = title,
+                    color = PeopleIvory,
+                    fontSize = 25.sp,
+                    lineHeight = 31.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(7.dp))
+                Text(
+                    text = subtitle,
+                    color = Color(0xFFFFF0CE),
+                    fontSize = 14.sp,
+                    lineHeight = 19.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(14.dp)
+                    .size(42.dp)
+                    .background(Color(0xD9004B45), CircleShape)
+                    .border(1.dp, Color.White.copy(alpha = 0.76f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "›",
+                    color = Color.White,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Medium,
+                )
             }
         }
     }
