@@ -122,4 +122,3 @@ class AuthUiArchitectureContractTest {
         assertFalse("LOGIN" in navigation)
     }
 }
-}
