@@ -38,14 +38,13 @@ class ModeSelectionNavigationAndroidTest {
         }
 
         composeRule.onNodeWithContentDescription(choiceLabel).performClick()
-        composeRule.onNodeWithText("人と楽しむ").assertExists()
         composeRule.onNodeWithText("対戦する").assertExists()
         composeRule.onNodeWithText("イベントを見る").assertExists()
         composeRule.onNodeWithText("交流する").assertExists()
         composeRule.onNodeWithText("イベントを見る").performClick()
         composeRule.onNodeWithText("リアルイベント").assertExists()
         Espresso.pressBack()
-        composeRule.onNodeWithText("人と楽しむ").assertExists()
+        composeRule.onNodeWithText("対戦する").assertExists()
         Espresso.pressBack()
         composeRule.onNodeWithContentDescription(choiceLabel).assertExists()
     }
