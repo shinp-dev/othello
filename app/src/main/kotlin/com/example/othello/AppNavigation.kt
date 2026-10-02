@@ -40,39 +40,36 @@ internal enum class AppDestination(@StringRes val labelRes: Int, @StringRes val 
 
 internal val topLevelDestinations = listOf(
     AppDestination.PLAY,
-    AppDestination.STUDY,
-    AppDestination.SETTINGS,
-    AppDestination.MORE,
 )
 
 internal fun AppDestination.isTopLevel(): Boolean = this in topLevelDestinations
 
 internal fun backDestination(
     current: AppDestination,
-    reviewParent: AppDestination = AppDestination.STUDY,
-    commonSettingsParent: AppDestination = AppDestination.SETTINGS,
-    researchSettingsParent: AppDestination = AppDestination.SETTINGS,
+    reviewParent: AppDestination = AppDestination.PLAY,
+    commonSettingsParent: AppDestination = AppDestination.PLAY,
+    researchSettingsParent: AppDestination = AppDestination.PLAY,
 ): AppDestination? = when (current) {
     AppDestination.PLAY -> null
     AppDestination.STUDY,
     AppDestination.SETTINGS,
     AppDestination.MORE,
-    AppDestination.LOCAL_AI_SETUP -> AppDestination.PLAY
+    AppDestination.LOCAL_AI_SETUP,
     AppDestination.ONLINE_RECORDS,
-    AppDestination.OFFLINE_RECORDS -> AppDestination.STUDY
-    AppDestination.POSITION_REVIEW_HOME -> AppDestination.STUDY
+    AppDestination.OFFLINE_RECORDS,
+    AppDestination.POSITION_REVIEW_HOME -> AppDestination.PLAY
     AppDestination.POSITION_REVIEW_INPUT,
     AppDestination.POSITION_REVIEW -> AppDestination.POSITION_REVIEW_HOME
-    AppDestination.THEORY_EXPLORATION -> AppDestination.STUDY
+    AppDestination.THEORY_EXPLORATION -> AppDestination.PLAY
     AppDestination.REVIEW -> reviewParent
     AppDestination.RESEARCH_INFO,
     AppDestination.ABOUT -> AppDestination.MORE
     AppDestination.ACCOUNT -> AppDestination.MORE
     AppDestination.ACCOUNT_DELETION -> AppDestination.ACCOUNT
-    AppDestination.MATCH_SETTINGS -> AppDestination.SETTINGS
+    AppDestination.MATCH_SETTINGS -> AppDestination.PLAY
     AppDestination.AI_MATCH_SETTINGS,
     AppDestination.MATCH_COMMON_SETTINGS -> AppDestination.MATCH_SETTINGS
-    AppDestination.REVIEW_SETTINGS -> AppDestination.SETTINGS
+    AppDestination.REVIEW_SETTINGS -> AppDestination.PLAY
     AppDestination.RESEARCH_SETTINGS -> researchSettingsParent
     AppDestination.COMMON_SETTINGS -> commonSettingsParent
     AppDestination.OSS_LICENSES -> AppDestination.ABOUT
