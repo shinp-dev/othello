@@ -172,7 +172,6 @@ private fun AuthenticatedApp(
     val uriHandler = LocalUriHandler.current
     val application = context.applicationContext as OthelloApplication
     val audioSettings = remember { AudioSettingsStore(context) }
-    val ratingAchievementStore = remember { RatingAchievementStore(context) }
     val analysisDataManager = remember { EdaxDataManager(context) }
     val edaxSettings = remember { EdaxSettingsStore(context) }
     val analysisEngine = remember { ProductionAnalysisEngine() }
@@ -193,9 +192,9 @@ private fun AuthenticatedApp(
         selectedReviewInput?.let(::ReviewSession)
     }
     var positionReviewWorkspace by remember { mutableStateOf<PositionReviewWorkspace?>(null) }
-    var commonSettingsBackDestination by remember { mutableStateOf(AppDestination.SETTINGS) }
-    var reviewBackDestination by remember { mutableStateOf(AppDestination.STUDY) }
-    var researchSettingsBackDestination by remember { mutableStateOf(AppDestination.SETTINGS) }
+    var commonSettingsBackDestination by remember { mutableStateOf(AppDestination.PLAY) }
+    var reviewBackDestination by remember { mutableStateOf(AppDestination.PLAY) }
+    var researchSettingsBackDestination by remember { mutableStateOf(AppDestination.PLAY) }
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
     val component = requireNotNull(sessionOwner.component) { "Authenticated app requires Supabase component" }
