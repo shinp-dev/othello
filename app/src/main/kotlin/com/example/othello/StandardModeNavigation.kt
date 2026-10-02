@@ -427,8 +427,7 @@ internal fun AuthenticatedModeRoute(
             onCellClicked = { position -> activeRoomHolder?.play(position) },
             onExit = ::returnFromPeopleRoom,
         )
-        AuthenticatedModeDestination.PEOPLE_SOCIAL -> PeopleComingSoonScreen(
-            title = appString(R.string.people_social_title),
+        AuthenticatedModeDestination.PEOPLE_SOCIAL -> PeopleSocialScreen(
             onBack = { destination = AuthenticatedModeDestination.PEOPLE_HOME },
         )
         AuthenticatedModeDestination.ADVANCED -> advancedContent {

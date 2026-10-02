@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="people_social_prompt">When could you play today?</string>
+    <string name="people_social_relaxed_note">A casual maybe is enough. No worries if plans change.</string>
+    <string name="people_social_notification_note">We’ll notify you if a room opens then.</string>
+    <string name="people_social_today">Today</string>
+    <string name="people_social_tap_hint">Tap to select</string>
+    <string name="people_social_people_count">%1$d people</string>
+    <string name="people_social_footer_note">Clears automatically after the time passes.</string>
+    <string name="people_social_selected">Maybe selected</string>
+</resources>
