@@ -1,11 +1,16 @@
 package com.example.othello
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -15,48 +20,52 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.example.othello.designsystem.ChanrivaColors
 import com.example.othello.designsystem.ChanrivaNavigationRow
 import com.example.othello.designsystem.ChanrivaScreenHeader
 import com.example.othello.designsystem.ChanrivaSpacing
-import com.example.othello.profile.CurrentRatingRepository
-import com.example.othello.profile.RatingSummary
+import com.example.othello.network.peopleplay.AvatarId
+import com.example.othello.profile.PlayProfileLookup
+import com.example.othello.profile.PlayProfileRepository
 import kotlinx.coroutines.CancellationException
 
 @Composable
 internal fun AccountScreen(
     userId: String,
-    currentRatingRepository: CurrentRatingRepository,
-    ratingAchievementStore: RatingAchievementStore,
+    playProfileRepository: PlayProfileRepository,
     logoutInProgress: Boolean,
     logoutError: String?,
     onBack: () -> Unit,
     onAccountDeletion: () -> Unit,
     onLogout: () -> Unit,
 ) {
-    var ratingSummary by remember(userId) { mutableStateOf<RatingSummary?>(null) }
-    var localBest by remember(userId, ratingAchievementStore) {
-        mutableStateOf(ratingAchievementStore.getBest(userId))
-    }
-    var loading by remember(userId) { mutableStateOf(true) }
-    var ratingLoadFailed by remember(userId) { mutableStateOf(false) }
+    var displayName by remember(userId) { mutableStateOf<String?>(null) }
+    var loadingName by remember(userId) { mutableStateOf(true) }
+    val avatarRes = remember(userId) { derivePeoplePlayAvatar(userId).toPeoplePlayAvatarDrawable() }
 
-    LaunchedEffect(userId, currentRatingRepository, ratingAchievementStore) {
-        loading = true
-        localBest = ratingAchievementStore.getBest(userId)
-        try {
-            ratingSummary = currentRatingRepository.getRatingSummary()
-            ratingSummary?.yesterdayRanking?.let { ranking ->
-                localBest = ratingAchievementStore.recordIfBetter(userId, ranking)
+    LaunchedEffect(userId, playProfileRepository) {
+        loadingName = true
+        displayName = try {
+            when (val profile = playProfileRepository.findCurrentUserProfile()) {
+                is PlayProfileLookup.Exists -> playProfileRepository
+                    .getActiveDisplayNames()
+                    .firstOrNull { it.id == profile.displayNameId }
+                    ?.displayName
+                PlayProfileLookup.Missing,
+                is PlayProfileLookup.Failed -> null
             }
-            ratingLoadFailed = false
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
-            ratingSummary = null
-            ratingLoadFailed = true
+            null
         } finally {
-            loading = false
+            loadingName = false
         }
     }
 
@@ -65,54 +74,55 @@ internal fun AccountScreen(
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
     ) {
         ChanrivaScreenHeader(appString(R.string.account), onBack, backLabel = appString(R.string.back))
-        Text(appString(R.string.current_rating), style = MaterialTheme.typography.titleMedium)
-        Text(
-            when {
-                loading -> appString(R.string.loading)
-                ratingSummary != null -> ratingSummary!!.currentRating.toString()
-                else -> "---"
-            },
-            style = MaterialTheme.typography.displaySmall,
-        )
-        if (ratingLoadFailed) {
-            Text(appString(R.string.rating_load_failed), style = MaterialTheme.typography.bodySmall)
-        }
 
-        Column(verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact)) {
-            Text(appString(R.string.previous_day_ranking), style = MaterialTheme.typography.titleMedium)
-            when {
-                loading -> Text(appString(R.string.loading), style = MaterialTheme.typography.bodySmall)
-                ratingSummary?.yesterdayRanking != null -> {
-                    val ranking = requireNotNull(ratingSummary?.yesterdayRanking)
-                    Text(
-                        appString(
-                            R.string.rank_format,
-                            String.format(java.util.Locale.ROOT, "%,d", ranking.rank),
-                            String.format(java.util.Locale.ROOT, "%,d", ranking.activeUserCount),
-                        ),
-                        style = MaterialTheme.typography.headlineSmall,
-                    )
-                    Text(appString(R.string.top_percentile, formatTopPercentile(ranking.topPercentile)))
-                }
-                else -> Text(appString(R.string.no_ranking_yet), style = MaterialTheme.typography.bodySmall)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(76.dp)
+                    .clip(CircleShape)
+                    .background(ChanrivaColors.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) {
+                Image(
+                    painter = painterResource(avatarRes),
+                    contentDescription = null,
+                    modifier = Modifier.size(68.dp),
+                )
             }
-            Text(appString(R.string.rating_previous_day_note), style = MaterialTheme.typography.bodySmall)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = appString(R.string.account_chanriva_name),
+                    color = ChanrivaColors.textSecondary,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Text(
+                    text = when {
+                        loadingName -> appString(R.string.account_chanriva_name_loading)
+                        displayName != null -> requireNotNull(displayName)
+                        else -> appString(R.string.account_chanriva_name_unavailable)
+                    },
+                    color = ChanrivaColors.textPrimary,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact)) {
-            Text(appString(R.string.best_local_record), style = MaterialTheme.typography.titleMedium)
-            localBest?.let { best ->
-                Text(appString(R.string.top_percentile, formatTopPercentile(best.topPercentile)), style = MaterialTheme.typography.headlineSmall)
-                Text(formatAchievementDate(best.achievedDate), style = MaterialTheme.typography.bodyMedium)
-            } ?: Text(appString(R.string.no_record_yet), style = MaterialTheme.typography.bodySmall)
-            Text(appString(R.string.best_record_note), style = MaterialTheme.typography.bodySmall)
-        }
-
-        ChanrivaNavigationRow(appString(R.string.account_deletion), onAccountDeletion)
         ChanrivaNavigationRow(
             title = appString(if (logoutInProgress) R.string.logout_in_progress else R.string.logout),
             onClick = if (logoutInProgress) null else onLogout,
         )
+        ChanrivaNavigationRow(appString(R.string.account_deletion), onAccountDeletion)
         logoutError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }
+}
+
+internal fun derivePeoplePlayAvatar(userId: String): AvatarId {
+    val compact = userId.replace("-", "")
+    val prefix = compact.take(8)
+    val value = prefix.toLongOrNull(16) ?: 0L
+    return AvatarId.entries[(value % AvatarId.entries.size).toInt()]
 }

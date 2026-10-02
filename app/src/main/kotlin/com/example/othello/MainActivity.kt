@@ -172,7 +172,6 @@ private fun AuthenticatedApp(
     val uriHandler = LocalUriHandler.current
     val application = context.applicationContext as OthelloApplication
     val audioSettings = remember { AudioSettingsStore(context) }
-    val ratingAchievementStore = remember { RatingAchievementStore(context) }
     val analysisDataManager = remember { EdaxDataManager(context) }
     val edaxSettings = remember { EdaxSettingsStore(context) }
     val analysisEngine = remember { ProductionAnalysisEngine() }
@@ -193,9 +192,9 @@ private fun AuthenticatedApp(
         selectedReviewInput?.let(::ReviewSession)
     }
     var positionReviewWorkspace by remember { mutableStateOf<PositionReviewWorkspace?>(null) }
-    var commonSettingsBackDestination by remember { mutableStateOf(AppDestination.SETTINGS) }
-    var reviewBackDestination by remember { mutableStateOf(AppDestination.STUDY) }
-    var researchSettingsBackDestination by remember { mutableStateOf(AppDestination.SETTINGS) }
+    var commonSettingsBackDestination by remember { mutableStateOf(AppDestination.PLAY) }
+    var reviewBackDestination by remember { mutableStateOf(AppDestination.PLAY) }
+    var researchSettingsBackDestination by remember { mutableStateOf(AppDestination.PLAY) }
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
     val component = requireNotNull(sessionOwner.component) { "Authenticated app requires Supabase component" }
@@ -275,271 +274,255 @@ private fun AuthenticatedApp(
         }
     }
     Surface(Modifier.fillMaxSize().statusBarsPadding()) {
-        val showBottomNavigation = !localMatch && p2pCoordinator == null && destination.isTopLevel()
-        Scaffold(
-            bottomBar = {
-                if (showBottomNavigation) {
-                    ChanrivaBottomNavigation(selected = destination, onSelect = { destination = it })
-                }
-            },
-        ) { contentPadding ->
-            Box(Modifier.fillMaxSize().padding(contentPadding)) {
-                when {
-                    localMatch -> LocalMatchScreen(
-                        mode = localMatchMode,
-                        humanDisc = localHumanDisc,
-                        dataManager = analysisDataManager,
-                        settingsStore = edaxSettings,
-                        engine = aiMoveEngine,
-                        persistence = localRecordPersistence,
-                        onBack = { localMatch = false; destination = AppDestination.PLAY },
-                    )
-                    p2pCoordinator != null -> OnlineMatchScreen(
-                        coordinator = requireNotNull(p2pCoordinator),
-                        scope = scope,
-                        showDiagnostics = showDiagnostics,
-                        onBack = ::requestOnlineLeave,
-                    )
-                    destination == AppDestination.STUDY -> StudyScreen(
-                        onPositionReview = { destination = AppDestination.POSITION_REVIEW_HOME },
-                        onTheoryExploration = { destination = AppDestination.THEORY_EXPLORATION },
-                        onOnlineRecords = { destination = AppDestination.ONLINE_RECORDS },
-                        onOfflineRecords = { destination = AppDestination.OFFLINE_RECORDS },
-                    )
-                    destination == AppDestination.THEORY_EXPLORATION -> TheoryExplorationScreen(
-                        sessionStore = theorySessionStore,
-                        persistence = theorySessionPersistence,
-                        analysisCache = theoryAnalysisCache,
-                        dataManager = analysisDataManager,
-                        settingsStore = edaxSettings,
-                        engine = analysisEngine,
-                        onBack = { destination = AppDestination.STUDY },
-                        onOpenCommonSettings = {
-                            commonSettingsBackDestination = AppDestination.THEORY_EXPLORATION
-                            destination = AppDestination.COMMON_SETTINGS
-                        },
-                    )
-                    destination == AppDestination.POSITION_REVIEW_HOME -> PositionReviewHomeScreen(
-                        store = positionReviewStore,
-                        onBack = { destination = AppDestination.STUDY },
-                        onNew = {
-                            positionReviewWorkspace = null
-                            destination = AppDestination.POSITION_REVIEW_INPUT
-                        },
-                        onOpen = { record: PositionReviewRecord ->
-                            positionReviewWorkspace = PositionReviewWorkspace(
-                                id = record.id,
-                                title = record.title,
-                                createdAtEpochMillis = record.createdAtEpochMillis,
-                                session = PositionReviewSession(record),
-                            )
-                            destination = AppDestination.POSITION_REVIEW
-                        },
-                    )
-                    destination == AppDestination.POSITION_REVIEW_INPUT -> PositionReviewInputScreen(
-                        onBack = { destination = AppDestination.POSITION_REVIEW_HOME },
-                        onStart = { board, side, title ->
-                            val now = System.currentTimeMillis()
-                            positionReviewWorkspace = PositionReviewWorkspace(
-                                id = UUID.randomUUID().toString(),
-                                title = title,
-                                createdAtEpochMillis = now,
-                                session = PositionReviewSession(board, side),
-                            )
-                            destination = AppDestination.POSITION_REVIEW
-                        },
-                    )
-                    destination == AppDestination.POSITION_REVIEW && positionReviewWorkspace != null -> {
-                        val workspace = requireNotNull(positionReviewWorkspace)
-                        PositionReviewScreen(
-                            id = workspace.id,
-                            initialTitle = workspace.title,
-                            createdAtEpochMillis = workspace.createdAtEpochMillis,
-                            session = workspace.session,
-                            store = positionReviewStore,
-                            dataManager = analysisDataManager,
-                            settingsStore = edaxSettings,
-                            engine = analysisEngine,
-                            onBack = { destination = AppDestination.POSITION_REVIEW_HOME },
-                            onOpenCommonSettings = {
-                                commonSettingsBackDestination = AppDestination.POSITION_REVIEW
-                                destination = AppDestination.COMMON_SETTINGS
-                            },
-                            onSaved = { savedTitle ->
-                                positionReviewWorkspace = workspace.copy(title = savedTitle)
-                            },
+        Box(Modifier.fillMaxSize()) {
+            val failedLocalRecordSaves = localRecordSaveStates.values.filter {
+                it.status == LocalRecordSaveStatus.FAILED ||
+                    it.status == LocalRecordSaveStatus.DISCARD_FAILED
+            }
+            when {
+                localMatch -> LocalMatchScreen(
+                    mode = localMatchMode,
+                    humanDisc = localHumanDisc,
+                    dataManager = analysisDataManager,
+                    settingsStore = edaxSettings,
+                    engine = aiMoveEngine,
+                    persistence = localRecordPersistence,
+                    onBack = { localMatch = false; destination = AppDestination.PLAY },
+                )
+                p2pCoordinator != null -> OnlineMatchScreen(
+                    coordinator = requireNotNull(p2pCoordinator),
+                    scope = scope,
+                    showDiagnostics = showDiagnostics,
+                    onBack = ::requestOnlineLeave,
+                )
+                destination == AppDestination.PLAY -> DeepEnjoyScreen(
+                    failedLocalRecordSaveCount = failedLocalRecordSaves.size,
+                    onRetryFailedLocalRecords = {
+                        failedLocalRecordSaves.forEach { failed ->
+                            localRecordPersistence.retry(failed.localId)
+                        }
+                    },
+                    onLocalAiStart = { destination = AppDestination.LOCAL_AI_SETUP },
+                    onLocalHumanStart = {
+                        localMatchMode = LocalMatchMode.HUMAN
+                        localHumanDisc = Disc.BLACK
+                        localMatch = true
+                    },
+                    onPositionReview = { destination = AppDestination.POSITION_REVIEW_HOME },
+                    onTheoryExploration = { destination = AppDestination.THEORY_EXPLORATION },
+                    onOfflineRecords = { destination = AppDestination.OFFLINE_RECORDS },
+                    onMatchSettings = { destination = AppDestination.MATCH_SETTINGS },
+                    onReviewSettings = { destination = AppDestination.REVIEW_SETTINGS },
+                    onCommonSettings = {
+                        commonSettingsBackDestination = AppDestination.PLAY
+                        destination = AppDestination.COMMON_SETTINGS
+                    },
+                    onMore = { destination = AppDestination.MORE },
+                )
+                destination == AppDestination.THEORY_EXPLORATION -> TheoryExplorationScreen(
+                    sessionStore = theorySessionStore,
+                    persistence = theorySessionPersistence,
+                    analysisCache = theoryAnalysisCache,
+                    dataManager = analysisDataManager,
+                    settingsStore = edaxSettings,
+                    engine = analysisEngine,
+                    onBack = { destination = AppDestination.PLAY },
+                    onOpenCommonSettings = {
+                        commonSettingsBackDestination = AppDestination.THEORY_EXPLORATION
+                        destination = AppDestination.COMMON_SETTINGS
+                    },
+                )
+                destination == AppDestination.POSITION_REVIEW_HOME -> PositionReviewHomeScreen(
+                    store = positionReviewStore,
+                    onBack = { destination = AppDestination.PLAY },
+                    onNew = {
+                        positionReviewWorkspace = null
+                        destination = AppDestination.POSITION_REVIEW_INPUT
+                    },
+                    onOpen = { record: PositionReviewRecord ->
+                        positionReviewWorkspace = PositionReviewWorkspace(
+                            id = record.id,
+                            title = record.title,
+                            createdAtEpochMillis = record.createdAtEpochMillis,
+                            session = PositionReviewSession(record),
                         )
-                    }
-                    destination == AppDestination.ONLINE_RECORDS -> OnlineRecordsScreen(
-                        userId = session.userId,
-                        repository = component.gameRecordRepository,
-                        localStore = localRecordStore,
-                        onBack = { destination = AppDestination.STUDY },
-                        onReview = {
-                            selectedReviewInput = it
-                            reviewBackDestination = AppDestination.ONLINE_RECORDS
-                            destination = AppDestination.REVIEW
-                        },
-                    )
-                    destination == AppDestination.OFFLINE_RECORDS -> OfflineRecordsScreen(
-                        localStore = localRecordStore,
-                        onBack = { destination = AppDestination.STUDY },
-                        onReview = {
-                            selectedReviewInput = it
-                            reviewBackDestination = AppDestination.OFFLINE_RECORDS
-                            destination = AppDestination.REVIEW
-                        },
-                    )
-                    destination == AppDestination.REVIEW && selectedReviewInput != null && selectedReviewSession != null -> ReviewScreenV2(
-                        input = requireNotNull(selectedReviewInput),
-                        review = selectedReviewSession,
+                        destination = AppDestination.POSITION_REVIEW
+                    },
+                )
+                destination == AppDestination.POSITION_REVIEW_INPUT -> PositionReviewInputScreen(
+                    onBack = { destination = AppDestination.POSITION_REVIEW_HOME },
+                    onStart = { board, side, title ->
+                        val now = System.currentTimeMillis()
+                        positionReviewWorkspace = PositionReviewWorkspace(
+                            id = UUID.randomUUID().toString(),
+                            title = title,
+                            createdAtEpochMillis = now,
+                            session = PositionReviewSession(board, side),
+                        )
+                        destination = AppDestination.POSITION_REVIEW
+                    },
+                )
+                destination == AppDestination.POSITION_REVIEW && positionReviewWorkspace != null -> {
+                    val workspace = requireNotNull(positionReviewWorkspace)
+                    PositionReviewScreen(
+                        id = workspace.id,
+                        initialTitle = workspace.title,
+                        createdAtEpochMillis = workspace.createdAtEpochMillis,
+                        session = workspace.session,
+                        store = positionReviewStore,
                         dataManager = analysisDataManager,
                         settingsStore = edaxSettings,
                         engine = analysisEngine,
-                        localStore = localRecordStore,
-                        researchParticipationRepository = component.researchParticipationRepository,
-                        researchPositionRepository = component.researchPositionRepository,
-                        onBack = { destination = reviewBackDestination },
+                        onBack = { destination = AppDestination.POSITION_REVIEW_HOME },
                         onOpenCommonSettings = {
-                            commonSettingsBackDestination = AppDestination.REVIEW
+                            commonSettingsBackDestination = AppDestination.POSITION_REVIEW
                             destination = AppDestination.COMMON_SETTINGS
                         },
-                        onSaveMemo = { memo ->
-                            selectedReviewInput?.localRecordId?.let { localId ->
-                                scope.launch {
-                                    runCatching { localRecordStore.updateMemo(localId, memo) }
-                                        .onFailure { /* The review screen remains usable; list reload reports store errors. */ }
-                                }
-                            }
+                        onSaved = { savedTitle ->
+                            positionReviewWorkspace = workspace.copy(title = savedTitle)
                         },
-                    )
-                    destination == AppDestination.ACCOUNT -> AccountScreen(
-                        userId = session.userId,
-                        currentRatingRepository = component.currentRatingRepository,
-                        ratingAchievementStore = ratingAchievementStore,
-                        logoutInProgress = logoutInProgress,
-                        logoutError = logoutError,
-                        onBack = { destination = AppDestination.MORE },
-                        onAccountDeletion = { destination = AppDestination.ACCOUNT_DELETION },
-                        onLogout = {
-                            scope.launch {
-                                logoutInProgress = true
-                                logoutError = null
-                                sessionOwner.signOut()
-                                    .onFailure { logoutError = authErrorMessage(AuthOperation.SIGN_OUT, it) }
-                                logoutInProgress = false
-                            }
-                        },
-                    )
-                    destination == AppDestination.ACCOUNT_DELETION -> AccountDeletionScreen(
-                        component.accountDeletionRepository,
-                        onBack = { destination = AppDestination.ACCOUNT },
-                        onRequested = {
-                            scope.launch {
-                                sessionOwner.finishAccountDeletionSession()
-                            }
-                        },
-                    )
-                    destination == AppDestination.SETTINGS -> SettingsScreen(
-                        onMatchSettings = { destination = AppDestination.MATCH_SETTINGS },
-                        onReviewSettings = { destination = AppDestination.REVIEW_SETTINGS },
-                        onCommonSettings = {
-                            commonSettingsBackDestination = AppDestination.SETTINGS
-                            destination = AppDestination.COMMON_SETTINGS
-                        },
-                        onResearch = {
-                            researchSettingsBackDestination = AppDestination.SETTINGS
-                            destination = AppDestination.RESEARCH_SETTINGS
-                        },
-                    )
-                    destination == AppDestination.MATCH_SETTINGS -> MatchSettingsScreen(
-                        onBack = { destination = AppDestination.SETTINGS },
-                        onAiSettings = { destination = AppDestination.AI_MATCH_SETTINGS },
-                        onCommonMatchSettings = { destination = AppDestination.MATCH_COMMON_SETTINGS },
-                    )
-                    destination == AppDestination.AI_MATCH_SETTINGS -> AiMatchSettingsScreen(
-                        onBack = { destination = AppDestination.MATCH_SETTINGS },
-                        edaxSettings = edaxSettings,
-                    )
-                    destination == AppDestination.MATCH_COMMON_SETTINGS -> MatchCommonSettingsScreen(
-                        onBack = { destination = AppDestination.MATCH_SETTINGS },
-                        audioSettings = audioSettings,
-                    )
-                    destination == AppDestination.REVIEW_SETTINGS -> ReviewSettingsScreen(
-                        settingsStore = edaxSettings,
-                        onBack = { destination = AppDestination.SETTINGS },
-                    )
-                    destination == AppDestination.COMMON_SETTINGS -> CommonSettingsScreen(
-                        manager = analysisDataManager,
-                        onDataChanged = {
-                            analysisEngine.clearCache()
-                            scope.launch { theoryAnalysisCache.clear() }
-                        },
-                        onBack = { destination = commonSettingsBackDestination },
-                    )
-                    destination == AppDestination.LOCAL_AI_SETUP -> LocalAiSetupScreen(
-                        dataManager = analysisDataManager,
-                        settingsStore = edaxSettings,
-                        selectedDisc = localHumanDisc,
-                        onDiscSelected = { localHumanDisc = it },
-                        onBack = { destination = AppDestination.PLAY },
-                        onOpenCommonSettings = {
-                            commonSettingsBackDestination = AppDestination.LOCAL_AI_SETUP
-                            destination = AppDestination.COMMON_SETTINGS
-                        },
-                        onStart = { localMatchMode = LocalMatchMode.AI; localMatch = true; destination = AppDestination.PLAY },
-                    )
-                    destination == AppDestination.RESEARCH_SETTINGS -> ResearchSettingsScreen(
-                        repository = component.researchParticipationRepository,
-                        onBack = { destination = researchSettingsBackDestination },
-                    )
-                    destination == AppDestination.MORE -> MoreScreen(
-                        onSwitchMode = onSwitchMode,
-                        onAccount = { destination = AppDestination.ACCOUNT },
-                        onResearchInfo = { destination = AppDestination.RESEARCH_INFO },
-                        onAbout = { destination = AppDestination.ABOUT },
-                    )
-                    destination == AppDestination.RESEARCH_INFO -> ResearchInfoScreen(
-                        onBack = { destination = AppDestination.MORE },
-                        onResearchSettings = {
-                            researchSettingsBackDestination = AppDestination.RESEARCH_INFO
-                            destination = AppDestination.RESEARCH_SETTINGS
-                        },
-                    )
-                    destination == AppDestination.ABOUT -> AboutScreen(
-                        onBack = { destination = AppDestination.MORE },
-                        onPrivacy = { uriHandler.openUri("https://chanriva.shinp-studio.com/privacy") },
-                        onLicenses = { destination = AppDestination.OSS_LICENSES },
-                    )
-                    destination == AppDestination.OSS_LICENSES -> OpenSourceLicensesScreen(
-                        onBack = { destination = AppDestination.ABOUT },
-                        onEdax = { destination = AppDestination.EDAX_LICENSE },
-                        onOtherOss = { destination = AppDestination.OTHER_OSS_LICENSES },
-                    )
-                    destination == AppDestination.EDAX_LICENSE -> EdaxLicenseScreen(
-                        onBack = { destination = AppDestination.OSS_LICENSES },
-                    )
-                    destination == AppDestination.OTHER_OSS_LICENSES -> OtherOssLicensesScreen(
-                        onBack = { destination = AppDestination.OSS_LICENSES },
-                    )
-                    else -> PlayScreen(
-                        state = matchmakingState,
-                        failedLocalRecordSaves = localRecordSaveStates.values
-                            .filter {
-                                it.status == LocalRecordSaveStatus.FAILED ||
-                                    it.status == LocalRecordSaveStatus.DISCARD_FAILED
-                            },
-                        onOnlineStart = { scope.launch { matchmaking.enqueue() } },
-                        onCancel = { scope.launch { matchmaking.cancel() } },
-                        onLocalHumanStart = {
-                            localMatchMode = LocalMatchMode.HUMAN
-                            localHumanDisc = Disc.BLACK
-                            localMatch = true
-                        },
-                        onLocalAiStart = { destination = AppDestination.LOCAL_AI_SETUP },
-                        onRetryLocalRecordSave = localRecordPersistence::retry,
                     )
                 }
+                destination == AppDestination.ONLINE_RECORDS -> OnlineRecordsScreen(
+                    userId = session.userId,
+                    repository = component.gameRecordRepository,
+                    localStore = localRecordStore,
+                    onBack = { destination = AppDestination.PLAY },
+                    onReview = {
+                        selectedReviewInput = it
+                        reviewBackDestination = AppDestination.ONLINE_RECORDS
+                        destination = AppDestination.REVIEW
+                    },
+                )
+                destination == AppDestination.OFFLINE_RECORDS -> OfflineRecordsScreen(
+                    localStore = localRecordStore,
+                    onBack = { destination = AppDestination.PLAY },
+                    onReview = {
+                        selectedReviewInput = it
+                        reviewBackDestination = AppDestination.OFFLINE_RECORDS
+                        destination = AppDestination.REVIEW
+                    },
+                )
+                destination == AppDestination.REVIEW && selectedReviewInput != null && selectedReviewSession != null -> ReviewScreenV2(
+                    input = requireNotNull(selectedReviewInput),
+                    review = selectedReviewSession,
+                    dataManager = analysisDataManager,
+                    settingsStore = edaxSettings,
+                    engine = analysisEngine,
+                    localStore = localRecordStore,
+                    researchParticipationRepository = component.researchParticipationRepository,
+                    researchPositionRepository = component.researchPositionRepository,
+                    onBack = { destination = reviewBackDestination },
+                    onOpenCommonSettings = {
+                        commonSettingsBackDestination = AppDestination.REVIEW
+                        destination = AppDestination.COMMON_SETTINGS
+                    },
+                    onSaveMemo = { memo ->
+                        selectedReviewInput?.localRecordId?.let { localId ->
+                            scope.launch {
+                                runCatching { localRecordStore.updateMemo(localId, memo) }
+                                    .onFailure { /* The review screen remains usable; list reload reports store errors. */ }
+                            }
+                        }
+                    },
+                )
+                destination == AppDestination.ACCOUNT -> AccountScreen(
+                    userId = session.userId,
+                    playProfileRepository = component.playProfileRepository,
+                    logoutInProgress = logoutInProgress,
+                    logoutError = logoutError,
+                    onBack = { destination = AppDestination.MORE },
+                    onAccountDeletion = { destination = AppDestination.ACCOUNT_DELETION },
+                    onLogout = {
+                        scope.launch {
+                            logoutInProgress = true
+                            logoutError = null
+                            sessionOwner.signOut()
+                                .onFailure { logoutError = authErrorMessage(AuthOperation.SIGN_OUT, it) }
+                            logoutInProgress = false
+                        }
+                    },
+                )
+                destination == AppDestination.ACCOUNT_DELETION -> AccountDeletionScreen(
+                    component.accountDeletionRepository,
+                    onBack = { destination = AppDestination.ACCOUNT },
+                    onRequested = {
+                        scope.launch {
+                            sessionOwner.finishAccountDeletionSession()
+                        }
+                    },
+                )
+                destination == AppDestination.MATCH_SETTINGS -> MatchSettingsScreen(
+                    onBack = { destination = AppDestination.PLAY },
+                    onAiSettings = { destination = AppDestination.AI_MATCH_SETTINGS },
+                    onCommonMatchSettings = { destination = AppDestination.MATCH_COMMON_SETTINGS },
+                )
+                destination == AppDestination.AI_MATCH_SETTINGS -> AiMatchSettingsScreen(
+                    onBack = { destination = AppDestination.MATCH_SETTINGS },
+                    edaxSettings = edaxSettings,
+                )
+                destination == AppDestination.MATCH_COMMON_SETTINGS -> MatchCommonSettingsScreen(
+                    onBack = { destination = AppDestination.MATCH_SETTINGS },
+                    audioSettings = audioSettings,
+                )
+                destination == AppDestination.REVIEW_SETTINGS -> ReviewSettingsScreen(
+                    settingsStore = edaxSettings,
+                    onBack = { destination = AppDestination.PLAY },
+                )
+                destination == AppDestination.COMMON_SETTINGS -> CommonSettingsScreen(
+                    manager = analysisDataManager,
+                    onDataChanged = {
+                        analysisEngine.clearCache()
+                        scope.launch { theoryAnalysisCache.clear() }
+                    },
+                    onBack = { destination = commonSettingsBackDestination },
+                )
+                destination == AppDestination.LOCAL_AI_SETUP -> LocalAiSetupScreen(
+                    dataManager = analysisDataManager,
+                    settingsStore = edaxSettings,
+                    selectedDisc = localHumanDisc,
+                    onDiscSelected = { localHumanDisc = it },
+                    onBack = { destination = AppDestination.PLAY },
+                    onOpenCommonSettings = {
+                        commonSettingsBackDestination = AppDestination.LOCAL_AI_SETUP
+                        destination = AppDestination.COMMON_SETTINGS
+                    },
+                    onStart = {
+                        localMatchMode = LocalMatchMode.AI
+                        localMatch = true
+                        destination = AppDestination.PLAY
+                    },
+                )
+                destination == AppDestination.RESEARCH_SETTINGS -> ResearchSettingsScreen(
+                    repository = component.researchParticipationRepository,
+                    onBack = { destination = researchSettingsBackDestination },
+                )
+                destination == AppDestination.MORE -> MoreScreen(
+                    onBack = { destination = AppDestination.PLAY },
+                    onAccount = { destination = AppDestination.ACCOUNT },
+                    onResearchInfo = { destination = AppDestination.RESEARCH_INFO },
+                    onAbout = { destination = AppDestination.ABOUT },
+                )
+                destination == AppDestination.RESEARCH_INFO -> ResearchInfoScreen(
+                    onBack = { destination = AppDestination.MORE },
+                )
+                destination == AppDestination.ABOUT -> AboutScreen(
+                    onBack = { destination = AppDestination.MORE },
+                    onPrivacy = { uriHandler.openUri("https://chanriva.shinp-studio.com/privacy") },
+                    onLicenses = { destination = AppDestination.OSS_LICENSES },
+                )
+                destination == AppDestination.OSS_LICENSES -> OpenSourceLicensesScreen(
+                    onBack = { destination = AppDestination.ABOUT },
+                    onEdax = { destination = AppDestination.EDAX_LICENSE },
+                    onOtherOss = { destination = AppDestination.OTHER_OSS_LICENSES },
+                )
+                destination == AppDestination.EDAX_LICENSE -> EdaxLicenseScreen(
+                    onBack = { destination = AppDestination.OSS_LICENSES },
+                )
+                destination == AppDestination.OTHER_OSS_LICENSES -> OtherOssLicensesScreen(
+                    onBack = { destination = AppDestination.OSS_LICENSES },
+                )
+                else -> Unit
             }
         }
     }

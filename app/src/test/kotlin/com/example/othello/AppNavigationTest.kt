@@ -6,11 +6,8 @@ import kotlin.test.assertNull
 
 class AppNavigationTest {
     @Test
-    fun topLevelOrderAndLaunchDestinationAreStable() {
-        assertEquals(
-            listOf(AppDestination.PLAY, AppDestination.STUDY, AppDestination.SETTINGS, AppDestination.MORE),
-            topLevelDestinations,
-        )
+    fun deepHomeIsTheOnlyAdvancedTopLevelDestination() {
+        assertEquals(listOf(AppDestination.PLAY), topLevelDestinations)
         assertNull(backDestination(AppDestination.PLAY))
         assertEquals(AppDestination.PLAY, backDestination(AppDestination.STUDY))
         assertEquals(AppDestination.PLAY, backDestination(AppDestination.SETTINGS))
@@ -18,11 +15,11 @@ class AppNavigationTest {
     }
 
     @Test
-    fun detailScreensReturnToTheirLogicalParents() {
-        assertEquals(AppDestination.STUDY, backDestination(AppDestination.ONLINE_RECORDS))
-        assertEquals(AppDestination.STUDY, backDestination(AppDestination.OFFLINE_RECORDS))
-        assertEquals(AppDestination.STUDY, backDestination(AppDestination.POSITION_REVIEW_HOME))
-        assertEquals(AppDestination.STUDY, backDestination(AppDestination.THEORY_EXPLORATION))
+    fun deepFeatureScreensReturnToTheMergedHome() {
+        assertEquals(AppDestination.PLAY, backDestination(AppDestination.ONLINE_RECORDS))
+        assertEquals(AppDestination.PLAY, backDestination(AppDestination.OFFLINE_RECORDS))
+        assertEquals(AppDestination.PLAY, backDestination(AppDestination.POSITION_REVIEW_HOME))
+        assertEquals(AppDestination.PLAY, backDestination(AppDestination.THEORY_EXPLORATION))
         assertEquals(AppDestination.POSITION_REVIEW_HOME, backDestination(AppDestination.POSITION_REVIEW_INPUT))
         assertEquals(AppDestination.POSITION_REVIEW_HOME, backDestination(AppDestination.POSITION_REVIEW))
         assertEquals(
@@ -33,10 +30,10 @@ class AppNavigationTest {
             AppDestination.OFFLINE_RECORDS,
             backDestination(AppDestination.REVIEW, reviewParent = AppDestination.OFFLINE_RECORDS),
         )
-        assertEquals(AppDestination.SETTINGS, backDestination(AppDestination.MATCH_SETTINGS))
-        assertEquals(AppDestination.SETTINGS, backDestination(AppDestination.REVIEW_SETTINGS))
-        assertEquals(AppDestination.SETTINGS, backDestination(AppDestination.COMMON_SETTINGS))
-        assertEquals(AppDestination.SETTINGS, backDestination(AppDestination.RESEARCH_SETTINGS))
+        assertEquals(AppDestination.PLAY, backDestination(AppDestination.MATCH_SETTINGS))
+        assertEquals(AppDestination.PLAY, backDestination(AppDestination.REVIEW_SETTINGS))
+        assertEquals(AppDestination.PLAY, backDestination(AppDestination.COMMON_SETTINGS))
+        assertEquals(AppDestination.PLAY, backDestination(AppDestination.RESEARCH_SETTINGS))
         assertEquals(
             AppDestination.RESEARCH_INFO,
             backDestination(

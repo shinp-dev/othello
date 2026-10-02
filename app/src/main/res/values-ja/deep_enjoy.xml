@@ -1,0 +1,13 @@
+<resources>
+    <string name="deep_enjoy_supporting">もっと強く、もっと深く、オセロを楽しむ</string>
+    <string name="deep_battle_section">対局</string>
+    <string name="deep_battle_supporting">実戦で磨く</string>
+    <string name="deep_review_section">検討</string>
+    <string name="deep_review_supporting">深く考え、理解を深める</string>
+    <string name="deep_settings_section">設定</string>
+    <string name="deep_settings_supporting">自分に合わせて調整する</string>
+    <string name="deep_feature_closed">ここでは利用できません</string>\n    <string name="deep_online_match">オンライン対局</string>
+    <string name="account_chanriva_name">ちゃんりば名</string>
+    <string name="account_chanriva_name_loading">ちゃんりば名を読み込み中…</string>
+    <string name="account_chanriva_name_unavailable">ちゃんりば名を取得できません</string>
+</resources>
