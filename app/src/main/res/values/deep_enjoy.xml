@@ -6,7 +6,7 @@
     <string name="deep_review_supporting">Think deeply and understand more</string>
     <string name="deep_settings_section">Settings</string>
     <string name="deep_settings_supporting">Tune the tools to your style</string>
-    <string name="deep_feature_closed">Unavailable here</string>
+    <string name="deep_feature_closed">Unavailable here</string>\n    <string name="deep_online_match">Online match</string>
     <string name="account_chanriva_name">Chanriva name</string>
     <string name="account_chanriva_name_loading">Loading name…</string>
     <string name="account_chanriva_name_unavailable">Name unavailable</string>
