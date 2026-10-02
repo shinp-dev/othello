@@ -9,7 +9,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.example.othello.designsystem.ChanrivaNavigationRow
 import com.example.othello.designsystem.ChanrivaScreenHeader
@@ -79,27 +84,46 @@ private fun StudyCategory(
 
 @Composable
 internal fun MoreScreen(
-    onSwitchMode: () -> Unit,
+    onBack: () -> Unit,
     onAccount: () -> Unit,
     onResearchInfo: () -> Unit,
     onAbout: () -> Unit,
 ) {
+    var showLanguageDialog by remember { mutableStateOf(false) }
+    val selectedLanguage = AppLanguage.fromTag(AppCompatDelegate.getApplicationLocales().toLanguageTags())
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.compact),
     ) {
-        ChanrivaScreenHeader(appString(R.string.more))
-        ChanrivaNavigationRow(appString(R.string.switch_mode), onSwitchMode)
+        ChanrivaScreenHeader(appString(R.string.more), onBack, backLabel = appString(R.string.back))
         ChanrivaNavigationRow(appString(R.string.account), onAccount)
+        ChanrivaNavigationRow(
+            title = appString(R.string.language_setting),
+            supportingText = when (selectedLanguage) {
+                AppLanguage.SYSTEM_DEFAULT -> appString(R.string.language_system_default)
+                AppLanguage.JAPANESE -> appString(R.string.language_japanese)
+                AppLanguage.ENGLISH -> appString(R.string.language_english)
+            },
+            onClick = { showLanguageDialog = true },
+        )
         ChanrivaNavigationRow(appString(R.string.research_info), onResearchInfo)
         ChanrivaNavigationRow(appString(R.string.about_app), onAbout)
+    }
+    if (showLanguageDialog) {
+        LanguageSelectionDialog(
+            selectedLanguage = selectedLanguage,
+            onSelect = { language ->
+                applyAppLanguage(language)
+                showLanguageDialog = false
+            },
+            onDismiss = { showLanguageDialog = false },
+        )
     }
 }
 
 @Composable
 internal fun ResearchInfoScreen(
     onBack: () -> Unit,
-    onResearchSettings: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(ChanrivaSpacing.page),
@@ -118,9 +142,5 @@ internal fun ResearchInfoScreen(
         Text(appString(R.string.research_viewing), style = MaterialTheme.typography.titleMedium)
         Text(appString(R.string.research_viewing_copy))
         Text(appString(R.string.research_privacy_copy), style = MaterialTheme.typography.bodySmall)
-        ChanrivaNavigationRow(
-            title = appString(R.string.open_research_settings),
-            onClick = onResearchSettings,
-        )
     }
 }
