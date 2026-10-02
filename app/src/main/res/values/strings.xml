@@ -84,7 +84,7 @@
     <string name="people_events_title">Explore Events</string>
     <string name="people_events_supporting">Discover Othello events and activities</string>
     <string name="people_social_title">Connect</string>
-    <string name="people_social_supporting">Share when you might be up for a game</string>
+    <string name="people_social_supporting">Share when you might play</string>
     <string name="chanriva_name_selection_title">Choose your Chanriva name</string>
     <string name="chanriva_name_selection_supporting">This name will be shown in matches and social features.</string>
     <string name="chanriva_name_selection_reroll_available">You can redraw one more time.</string>
