@@ -3,7 +3,6 @@ package com.example.othello
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,7 +15,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,12 +26,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -58,7 +54,7 @@ internal fun PeopleEnjoyHomeScreen(
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
         )
-        Box(Modifier.fillMaxSize().background(Color(0x3303131F)))
+        Box(Modifier.fillMaxSize().background(Color(0x3D00101F)))
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -67,43 +63,10 @@ internal fun PeopleEnjoyHomeScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
                 .padding(top = 8.dp, bottom = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(28.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(Color(0xCC082B2A))
-                        .border(1.dp, PeopleGold.copy(alpha = 0.85f), CircleShape)
-                        .clickable(role = Role.Button, onClick = onBack)
-                        .padding(horizontal = 12.dp, vertical = 7.dp),
-                ) {
-                    Text(
-                        text = "‹  ${appString(R.string.back)}",
-                        color = PeopleIvory,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                    )
-                }
-                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = appString(R.string.people_home_title),
-                        color = PeopleIvory,
-                        fontSize = 26.sp,
-                        lineHeight = 32.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.headlineSmall,
-                    )
-                }
-                Spacer(Modifier.width(64.dp))
-            }
-
+            // Keep this screen intentionally titleless: the three illustrated cards are the primary navigation.
+            // System back still returns to the mode selector through the parent route.
             Spacer(Modifier.height(72.dp))
 
             PeopleHomeCard(
@@ -138,9 +101,9 @@ private fun PeopleHomeCard(
     val shape = RoundedCornerShape(22.dp)
     Card(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth().height(164.dp),
+        modifier = Modifier.fillMaxWidth().height(178.dp),
         shape = shape,
-        border = androidx.compose.foundation.BorderStroke(1.25.dp, PeopleGold.copy(alpha = 0.92f)),
+        border = androidx.compose.foundation.BorderStroke(1.4.dp, PeopleGold.copy(alpha = 0.94f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp, pressedElevation = 1.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
     ) {
@@ -155,9 +118,9 @@ private fun PeopleHomeCard(
                 Modifier.fillMaxSize().background(
                     Brush.horizontalGradient(
                         0f to Color(0xE807171B),
-                        0.48f to Color(0xB50A181C),
-                        0.76f to Color(0x3D071317),
-                        1f to Color(0x1A071317),
+                        0.44f to Color(0xB50A181C),
+                        0.70f to Color(0x30071317),
+                        1f to Color.Transparent,
                     ),
                 ),
             )
@@ -172,7 +135,7 @@ private fun PeopleHomeCard(
                     Text(
                         text = title,
                         color = PeopleIvory,
-                        fontSize = 24.sp,
+                        fontSize = 25.sp,
                         lineHeight = 31.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
@@ -191,7 +154,7 @@ private fun PeopleHomeCard(
                 }
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(52.dp)
                         .background(PeopleForest.copy(alpha = 0.92f), CircleShape)
                         .border(1.5.dp, PeopleGold, CircleShape),
                     contentAlignment = Alignment.Center,
