@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="people_social_prompt">今日、いつならいけそう？</string>
-    <string name="people_social_relaxed_note">いけるかも、くらいの気軽な宣言です。来られなくても大丈夫。</string>
-    <string name="people_social_notification_note">選んだ時間に対局部屋ができたら通知します</string>
+    <string name="people_social_prompt">今日、いついける？</string>
+    <string name="people_social_relaxed_note">いけるかも、くらいでOK。来られなくても大丈夫。</string>
+    <string name="people_social_notification_note">選んだ時間に部屋ができたら通知します</string>
     <string name="people_social_today">今日</string>
-    <string name="people_social_tap_hint">時間をタップして「いけるかも」</string>
+    <string name="people_social_tap_hint">タップで選択</string>
     <string name="people_social_people_count">%1$d人</string>
-    <string name="people_social_footer_note">選んだ時間を過ぎると自動で解除されます</string>
+    <string name="people_social_footer_note">時間を過ぎると自動で解除されます</string>
     <string name="people_social_selected">いけるかも選択中</string>
 </resources>
