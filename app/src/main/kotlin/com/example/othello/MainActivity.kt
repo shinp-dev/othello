@@ -522,9 +522,7 @@ private fun AuthenticatedApp(
                 destination == AppDestination.OTHER_OSS_LICENSES -> OtherOssLicensesScreen(
                     onBack = { destination = AppDestination.OSS_LICENSES },
                 )
-                else -> {
-                    destination = AppDestination.PLAY
-                }
+                else -> Unit
             }
         }
     }
