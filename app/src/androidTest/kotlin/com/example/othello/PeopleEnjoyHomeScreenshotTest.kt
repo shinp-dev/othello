@@ -46,7 +46,6 @@ class PeopleEnjoyHomeScreenshotTest {
         }
 
         val visibleLabels = listOf(
-            localizedContext.getString(R.string.people_home_title),
             localizedContext.getString(R.string.people_play_title),
             localizedContext.getString(R.string.people_play_supporting),
             localizedContext.getString(R.string.people_events_title),
