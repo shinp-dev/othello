@@ -191,10 +191,12 @@ internal class PeopleSocialAvailabilityController(
     private val repository: PeopleSocialAvailabilityRepository,
     private val accessToken: suspend () -> String?,
     private val now: () -> Long = System::currentTimeMillis,
-    private val zoneId: ZoneId = ZoneId.systemDefault(),
+    private val zoneId: ZoneId? = null,
 ) {
+    private fun currentZoneId(): ZoneId = zoneId ?: ZoneId.systemDefault()
+
     private val _state = MutableStateFlow(
-        PeopleSocialUiState(slots = peopleSocialTodaySlots(now(), zoneId)),
+        PeopleSocialUiState(slots = peopleSocialTodaySlots(now(), currentZoneId())),
     )
     val state: StateFlow<PeopleSocialUiState> = _state
 
@@ -206,7 +208,7 @@ internal class PeopleSocialAvailabilityController(
         _state.value = _state.value.copy(loading = true, errorCode = null)
         refreshJob = scope.launch {
             mutationJobs.values.toList().joinAll()
-            val currentSlots = peopleSocialTodaySlots(now(), zoneId)
+            val currentSlots = peopleSocialTodaySlots(now(), currentZoneId())
             try {
                 val token = accessToken()?.takeIf(String::isNotBlank)
                     ?: throw PeopleSocialHttpException(401, "AUTH_REQUIRED")
@@ -289,7 +291,7 @@ internal class PeopleSocialAvailabilityController(
     }
 
     fun refreshTimeState() {
-        val currentSlots = peopleSocialTodaySlots(now(), zoneId)
+        val currentSlots = peopleSocialTodaySlots(now(), currentZoneId())
         val previousBySlot = _state.value.slots.associateBy(PeopleSocialUiSlot::slotStartEpochMillis)
         _state.value = _state.value.copy(
             slots = currentSlots.map { current ->
@@ -311,7 +313,7 @@ internal class PeopleSocialAvailabilityController(
         refreshJob = null
         mutationJobs.values.forEach { it.cancel() }
         mutationJobs.clear()
-        _state.value = PeopleSocialUiState(slots = peopleSocialTodaySlots(now(), zoneId))
+        _state.value = PeopleSocialUiState(slots = peopleSocialTodaySlots(now(), currentZoneId()))
     }
 }
 
