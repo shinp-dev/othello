@@ -12,6 +12,7 @@
   },
   "include": [
     "src/registry-core.ts",
+    "src/social-core.ts",
     "src/auth.ts",
     "src/avatar.ts",
     "src/profile.ts",
