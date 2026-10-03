@@ -203,10 +203,10 @@ internal class PeopleSocialAvailabilityController(
 
     fun refresh() {
         refreshJob?.cancel()
+        _state.value = _state.value.copy(loading = true, errorCode = null)
         refreshJob = scope.launch {
             mutationJobs.values.toList().joinAll()
             val currentSlots = peopleSocialTodaySlots(now(), zoneId)
-            _state.value = PeopleSocialUiState(slots = currentSlots, loading = true)
             try {
                 val token = accessToken()?.takeIf(String::isNotBlank)
                     ?: throw PeopleSocialHttpException(401, "AUTH_REQUIRED")
