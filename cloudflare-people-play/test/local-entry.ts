@@ -54,6 +54,16 @@ export default {
       const social = env.SOCIAL_REGISTRY.getByName("people-social-registry");
       return response({ count: await social.pendingNotificationCount() });
     }
+    if (url.pathname === "/__test/social/record-room-created" && request.method === "POST") {
+      const body = await request.json<{ roomId?: string; creatorUserId?: string; createdAt?: number }>();
+      const social = env.SOCIAL_REGISTRY.getByName("people-social-registry");
+      const queued = await social.recordRoomCreated(
+        String(body.roomId ?? ""),
+        String(body.creatorUserId ?? ""),
+        Number(body.createdAt ?? Date.now()),
+      );
+      return response({ queued });
+    }
     if (url.pathname === "/__test/room/abort-create" && request.method === "POST") {
       const body = await request.json<{ roomId?: string }>();
       const roomId = String(body.roomId ?? "");
