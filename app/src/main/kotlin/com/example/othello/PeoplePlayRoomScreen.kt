@@ -84,7 +84,7 @@ internal fun PeoplePlayRoomScreen(
         val designHeight = designWidth * RoomReferenceAspect
         val designLeft = (screenWidth - designWidth) / 2f
         val designTop = (screenHeight - designHeight) / 2f
-        val boardSize = designWidth * 0.99f
+        val boardSize = screenWidth
 
         Image(
             painter = painterResource(R.drawable.people_room_background_full),
@@ -155,7 +155,7 @@ internal fun PeoplePlayRoomScreen(
         PeoplePlayRoomBoard(
             modifier = Modifier
                 .offset(
-                    x = designLeft + designWidth * 0.005f,
+                    x = 0.dp,
                     y = designTop + designHeight * 0.244f,
                 )
                 .size(boardSize)
@@ -380,10 +380,10 @@ private fun RoomInfoImage(
     )
 }
 
-private const val GridLeft = 0.1515f
-private const val GridRight = 0.8509f
-private const val GridTop = 0.1135f
-private const val GridBottom = 0.7974f
+private const val GridLeft = 0.032f
+private const val GridRight = 0.968f
+private const val GridTop = 0.032f
+private const val GridBottom = 0.968f
 
 private const val RoomReferenceBoard = """
 ........
@@ -407,7 +407,7 @@ internal fun PeoplePlayRoomBoard(
 ) {
     BoxWithConstraints(modifier) {
         Image(
-            painter = painterResource(R.drawable.people_room_board),
+            painter = painterResource(R.drawable.people_room_board_thin),
             contentDescription = null,
             modifier = Modifier.fillMaxSize().testTag("people_room_board_art"),
             contentScale = ContentScale.Fit,
@@ -418,7 +418,7 @@ internal fun PeoplePlayRoomBoard(
         val cellWidth = maxWidth * (GridRight - GridLeft) / 8f
         val cellHeight = maxHeight * (GridBottom - GridTop) / 8f
         val markerSize = minOf(cellWidth, cellHeight) * 0.46f
-        val discSize = minOf(cellWidth, cellHeight) * 0.68f
+        val discSize = minOf(cellWidth, cellHeight) * 0.80f
         val rows = if (boardCells == null) RoomReferenceBoard.trimIndent().lines() else null
 
         for (row in 0 until 8) {
@@ -490,7 +490,7 @@ private fun RoomAction(
         modifier = Modifier
             .offset(
                 x = designLeft + designWidth * xFraction,
-                y = designTop + designHeight * 0.777f,
+                y = designTop + designHeight * 0.832f,
             )
             .size(width = buttonWidth, height = designHeight * 0.170f)
             .clickable(onClick = onClick)

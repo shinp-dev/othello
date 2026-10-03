@@ -108,6 +108,12 @@ class PeoplePlayRoomScreenshotTest {
 
         val rootWidth = composeRule.onRoot().fetchSemanticsNode().boundsInRoot.width
         assertEquals("Compose root width for ${width}dp emulator", width.toFloat(), rootWidth, 1f)
+        val boardBounds = composeRule.onNodeWithTag("people_room_board").fetchSemanticsNode().boundsInRoot
+        assertEquals("Room board must start at the left edge", 0f, boardBounds.left, 1f)
+        assertEquals("Room board must use the full screen width", rootWidth, boardBounds.right, 1f)
+        assertEquals("Room board must remain square", boardBounds.width, boardBounds.height, 1f)
+        val leaveSeatBounds = composeRule.onNodeWithTag("people_room_leave_seat").fetchSemanticsNode().boundsInRoot
+        assertTrue("Room actions must remain below the enlarged board: board=$boardBounds action=$leaveSeatBounds", leaveSeatBounds.top >= boardBounds.bottom)
         listOf(
             "people_room_title_banner", "people_room_info_bar", "people_room_board",
             "people_room_leave_seat", "people_room_exit",
