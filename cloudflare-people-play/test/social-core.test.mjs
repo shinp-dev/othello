@@ -8,7 +8,7 @@ import {
   validateSocialSlotForWrite,
 } from "../dist-test/src/social-core.js";
 
-test("social slots are 30-minute aligned and bounded", () => {
+test("social slots accept quarter-hour UTC offsets and remain bounded", () => {
   const now = Date.UTC(2026, 9, 3, 10, 5, 0, 0);
   const current = Date.UTC(2026, 9, 3, 10, 0, 0, 0);
   assert.deepEqual(
@@ -17,7 +17,11 @@ test("social slots are 30-minute aligned and bounded", () => {
   );
   assert.throws(() => parseSocialSlotStarts([], now), /BAD_SLOT/);
   assert.throws(() => parseSocialSlotStarts([String(current), String(current)], now), /BAD_SLOT/);
-  assert.throws(() => parseSocialSlotStarts([String(current + 1)], now), /BAD_SLOT/);
+  assert.deepEqual(
+    parseSocialSlotStarts([String(current + 15 * 60 * 1000)], now),
+    [current + 15 * 60 * 1000],
+  );
+  assert.throws(() => parseSocialSlotStarts([String(current + 60 * 1000)], now), /BAD_SLOT/);
 });
 
 test("expired slots cannot be enabled but can be disabled for cleanup", () => {
