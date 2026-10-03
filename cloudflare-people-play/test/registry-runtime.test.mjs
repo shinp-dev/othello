@@ -249,8 +249,8 @@ test("social availability persists per user and room events dedupe one notificat
 test("social notification queue transfers device ownership, cancels on opt-out, groups devices, and retries stale claims", async () => {
   const slotStart = Math.ceil(Date.now() / (30 * 60 * 1000)) * (30 * 60 * 1000) + (30 * 60 * 1000);
   const createdAt = slotStart + 60_000;
-  const authB = {
-    authorization: "Bearer test-user-b",
+  const authD = {
+    authorization: "Bearer test-user-d",
     "content-type": "application/json",
   };
   const authC = {
@@ -260,7 +260,7 @@ test("social notification queue transfers device ownership, cancels on opt-out, 
 
   const enable = await fetch(`${baseUrl}/v1/people-social/availability`, {
     method: "PUT",
-    headers: authB,
+    headers: authD,
     body: JSON.stringify({ slotStart, enabled: true }),
   });
   assert.equal(enable.status, 200);
@@ -268,7 +268,7 @@ test("social notification queue transfers device ownership, cancels on opt-out, 
   const sharedToken = "fixture-shared-device-token-000000001";
   assert.equal((await fetch(`${baseUrl}/v1/people-social/push-device`, {
     method: "PUT",
-    headers: authB,
+    headers: authD,
     body: JSON.stringify({ token: sharedToken }),
   })).status, 200);
   assert.equal((await fetch(`${baseUrl}/v1/people-social/push-device`, {
@@ -285,12 +285,12 @@ test("social notification queue transfers device ownership, cancels on opt-out, 
   });
   assert.deepEqual(transferred, { status: 200, body: { queued: 0 } });
 
-  const tokenOne = "fixture-user-b-device-token-000000001";
-  const tokenTwo = "fixture-user-b-device-token-000000002";
+  const tokenOne = "fixture-user-d-device-token-000000001";
+  const tokenTwo = "fixture-user-d-device-token-000000002";
   for (const token of [tokenOne, tokenTwo]) {
     const registered = await fetch(`${baseUrl}/v1/people-social/push-device`, {
       method: "PUT",
-      headers: authB,
+      headers: authD,
       body: JSON.stringify({ token }),
     });
     assert.equal(registered.status, 200);
@@ -306,7 +306,7 @@ test("social notification queue transfers device ownership, cancels on opt-out, 
 
   const disabled = await fetch(`${baseUrl}/v1/people-social/availability`, {
     method: "PUT",
-    headers: authB,
+    headers: authD,
     body: JSON.stringify({ slotStart, enabled: false }),
   });
   assert.equal(disabled.status, 200);
@@ -314,7 +314,7 @@ test("social notification queue transfers device ownership, cancels on opt-out, 
 
   const reenabled = await fetch(`${baseUrl}/v1/people-social/availability`, {
     method: "PUT",
-    headers: authB,
+    headers: authD,
     body: JSON.stringify({ slotStart, enabled: true }),
   });
   assert.equal(reenabled.status, 200);
@@ -330,7 +330,7 @@ test("social notification queue transfers device ownership, cancels on opt-out, 
   const firstClaim = await post("/__test/social/claim-pending", { now: firstClaimAt, limit: 1 });
   assert.equal(firstClaim.status, 200);
   assert.equal(firstClaim.body.notifications.length, 1);
-  assert.equal(firstClaim.body.notifications[0].targetUserId, "00000001-0000-4000-8000-00000000000b");
+  assert.equal(firstClaim.body.notifications[0].targetUserId, "00000003-0000-4000-8000-00000000000d");
   assert.deepEqual(
     [...firstClaim.body.notifications[0].tokens].sort(),
     [tokenOne, tokenTwo].sort(),
