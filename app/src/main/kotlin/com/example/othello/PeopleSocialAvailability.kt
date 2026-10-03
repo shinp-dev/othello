@@ -243,7 +243,7 @@ internal class PeopleSocialAvailabilityController(
     fun toggle(slotStartEpochMillis: Long) {
         val before = _state.value
         val target = before.slots.firstOrNull { it.slotStartEpochMillis == slotStartEpochMillis } ?: return
-        if (!target.selectable || target.saving) return
+        if (before.loading || !target.selectable || target.saving) return
         val nextSelected = !target.selected
         val optimisticPeople = (target.people + if (nextSelected) 1 else -1).coerceAtLeast(0)
         _state.value = before.copy(
