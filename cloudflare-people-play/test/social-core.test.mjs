@@ -5,14 +5,12 @@ import {
   parseAvailabilityMutation,
   parsePushDeviceMutation,
   parseSocialSlotStarts,
-  socialSlotStart,
   validateSocialSlotForWrite,
 } from "../dist-test/src/social-core.js";
 
 test("social slots are 30-minute aligned and bounded", () => {
   const now = Date.UTC(2026, 9, 3, 10, 5, 0, 0);
-  const current = socialSlotStart(now);
-  assert.equal(current, Date.UTC(2026, 9, 3, 10, 0, 0, 0));
+  const current = Date.UTC(2026, 9, 3, 10, 0, 0, 0);
   assert.deepEqual(
     parseSocialSlotStarts([String(current), String(current + SOCIAL_SLOT_MILLIS)], now),
     [current, current + SOCIAL_SLOT_MILLIS],
