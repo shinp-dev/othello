@@ -153,6 +153,52 @@ class PeopleSocialAvailabilityTest {
     }
 
     @Test
+    fun timeRefreshClearsExpiredSlotWithoutWaitingForNetwork() = runBlocking {
+        var now = Instant.parse("2026-10-03T10:29:00Z").toEpochMilli()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val repository = object : PeopleSocialAvailabilityRepository {
+            override suspend fun getAvailability(
+                slotStarts: List<Long>,
+                accessToken: String,
+            ) = slotStarts.mapIndexed { index, slot ->
+                PeopleSocialAvailability(slot, if (index == 0) 5 else 0, index == 0)
+            }
+
+            override suspend fun setAvailability(
+                slotStartEpochMillis: Long,
+                enabled: Boolean,
+                accessToken: String,
+            ) = PeopleSocialAvailability(slotStartEpochMillis, if (enabled) 1 else 0, enabled)
+
+            override suspend fun registerPushDevice(token: String, accessToken: String) = Unit
+            override suspend fun unregisterPushDevice(token: String, accessToken: String) = Unit
+        }
+        val controller = PeopleSocialAvailabilityController(
+            scope = scope,
+            repository = repository,
+            accessToken = { "fixture-token" },
+            now = { now },
+            zoneId = ZoneId.of("Asia/Tokyo"),
+        )
+
+        controller.refresh()
+        withTimeout(2_000) {
+            while (controller.state.value.loading) delay(10)
+        }
+        assertEquals(true, controller.state.value.slots.first().selected)
+        assertEquals(5, controller.state.value.slots.first().people)
+
+        now = Instant.parse("2026-10-03T10:31:00Z").toEpochMilli()
+        controller.refreshTimeState()
+
+        val expired = controller.state.value.slots.first()
+        assertFalse(expired.selectable)
+        assertFalse(expired.selected)
+        assertEquals(0, expired.people)
+        scope.cancel()
+    }
+
+    @Test
     fun failedRefreshKeepsLastKnownSelectionAndCount() = runBlocking {
         val now = Instant.parse("2026-10-03T09:00:00Z").toEpochMilli()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
