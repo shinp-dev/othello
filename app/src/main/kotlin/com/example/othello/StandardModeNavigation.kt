@@ -266,6 +266,10 @@ internal fun AuthenticatedModeRoute(
     LaunchedEffect(destination, peopleSocialAvailability) {
         if (destination == AuthenticatedModeDestination.PEOPLE_SOCIAL) {
             peopleSocialAvailability?.refresh()
+            while (true) {
+                delay(30_000L)
+                peopleSocialAvailability?.refreshTimeState()
+            }
         }
     }
 
