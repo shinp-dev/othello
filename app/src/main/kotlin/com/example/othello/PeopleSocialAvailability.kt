@@ -286,6 +286,24 @@ internal class PeopleSocialAvailabilityController(
         mutationJobs[slotStartEpochMillis] = job
     }
 
+    fun refreshTimeState() {
+        val currentSlots = peopleSocialTodaySlots(now(), zoneId)
+        val previousBySlot = _state.value.slots.associateBy(PeopleSocialUiSlot::slotStartEpochMillis)
+        _state.value = _state.value.copy(
+            slots = currentSlots.map { current ->
+                val previous = previousBySlot[current.slotStartEpochMillis]
+                when {
+                    previous == null -> current
+                    !current.selectable -> current
+                    else -> previous.copy(
+                        timeLabel = current.timeLabel,
+                        selectable = true,
+                    )
+                }
+            },
+        )
+    }
+
     fun reset() {
         refreshJob?.cancel()
         refreshJob = null
