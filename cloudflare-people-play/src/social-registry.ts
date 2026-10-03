@@ -36,8 +36,10 @@ export interface PendingSocialNotification {
   targetUserId: string;
   slotStart: number;
   roomId: string;
-  token: string;
+  tokens: string[];
 }
+
+const NOTIFICATION_CLAIM_LEASE_MILLIS = 5 * 60 * 1000;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -72,6 +74,8 @@ export class PeopleSocialRegistry extends DurableObject<Env> {
       );
       CREATE INDEX IF NOT EXISTS push_devices_user_idx
         ON push_devices(user_id, enabled);
+      CREATE UNIQUE INDEX IF NOT EXISTS push_devices_token_unique_idx
+        ON push_devices(token);
 
       CREATE TABLE IF NOT EXISTS notification_outbox (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -147,11 +151,19 @@ export class PeopleSocialRegistry extends DurableObject<Env> {
         now,
       );
     } else {
-      this.ctx.storage.sql.exec(
-        "DELETE FROM availability WHERE user_id = ? AND slot_start = ?",
-        userId,
-        slotStart,
-      );
+      this.ctx.storage.transactionSync(() => {
+        this.ctx.storage.sql.exec(
+          "DELETE FROM availability WHERE user_id = ? AND slot_start = ?",
+          userId,
+          slotStart,
+        );
+        this.ctx.storage.sql.exec(
+          `DELETE FROM notification_outbox
+           WHERE target_user_id = ? AND slot_start = ? AND delivered_at IS NULL`,
+          userId,
+          slotStart,
+        );
+      });
     }
 
     return (await this.getAvailability(userId, [slotStart], now))[0];
@@ -160,15 +172,22 @@ export class PeopleSocialRegistry extends DurableObject<Env> {
   async registerPushDevice(userId: string, token: string, now = Date.now()): Promise<void> {
     requireUserId(userId);
     if (token.length < 16 || token.length > 4096 || /[\r\n]/.test(token)) throw new Error("BAD_TOKEN");
-    this.ctx.storage.sql.exec(
-      `INSERT INTO push_devices (user_id, token, updated_at, enabled)
-       VALUES (?, ?, ?, 1)
-       ON CONFLICT(user_id, token)
-       DO UPDATE SET updated_at = excluded.updated_at, enabled = 1`,
-      userId,
-      token,
-      now,
-    );
+    this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec(
+        "DELETE FROM push_devices WHERE token = ? AND user_id <> ?",
+        token,
+        userId,
+      );
+      this.ctx.storage.sql.exec(
+        `INSERT INTO push_devices (user_id, token, updated_at, enabled)
+         VALUES (?, ?, ?, 1)
+         ON CONFLICT(user_id, token)
+         DO UPDATE SET updated_at = excluded.updated_at, enabled = 1`,
+        userId,
+        token,
+        now,
+      );
+    });
   }
 
   async unregisterPushDevice(userId: string, token: string): Promise<void> {
@@ -237,6 +256,7 @@ export class PeopleSocialRegistry extends DurableObject<Env> {
     limit = 50,
   ): Promise<PendingSocialNotification[]> {
     const boundedLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
+    const leaseBefore = now - NOTIFICATION_CLAIM_LEASE_MILLIS;
     this.cleanupExpired(now);
     return this.ctx.storage.transactionSync(() => {
       const rows = this.ctx.storage.sql.exec<PendingNotificationRow>(
@@ -247,29 +267,46 @@ export class PeopleSocialRegistry extends DurableObject<Env> {
          INNER JOIN availability AS a
            ON a.user_id = o.target_user_id AND a.slot_start = o.slot_start
          WHERE o.delivered_at IS NULL
-           AND o.claimed_at IS NULL
+           AND (o.claimed_at IS NULL OR o.claimed_at < ?)
            AND o.slot_start + ? > ?
          ORDER BY o.created_at ASC, o.id ASC
          LIMIT ?`,
+        leaseBefore,
         SOCIAL_SLOT_MILLIS,
         now,
         boundedLimit,
       ).toArray();
-      const ids = [...new Set(rows.map((row) => Number(row.id)))];
-      for (const id of ids) {
+
+      const grouped = new Map<number, PendingSocialNotification>();
+      for (const row of rows) {
+        const id = Number(row.id);
+        const existing = grouped.get(id);
+        if (existing) {
+          if (!existing.tokens.includes(row.token)) existing.tokens.push(row.token);
+        } else {
+          grouped.set(id, {
+            id,
+            targetUserId: row.target_user_id,
+            slotStart: Number(row.slot_start),
+            roomId: row.room_id,
+            tokens: [row.token],
+          });
+        }
+      }
+
+      for (const id of grouped.keys()) {
         this.ctx.storage.sql.exec(
-          "UPDATE notification_outbox SET claimed_at = ? WHERE id = ? AND claimed_at IS NULL",
+          `UPDATE notification_outbox
+           SET claimed_at = ?
+           WHERE id = ?
+             AND delivered_at IS NULL
+             AND (claimed_at IS NULL OR claimed_at < ?)`,
           now,
           id,
+          leaseBefore,
         );
       }
-      return rows.map((row) => ({
-        id: Number(row.id),
-        targetUserId: row.target_user_id,
-        slotStart: Number(row.slot_start),
-        roomId: row.room_id,
-        token: row.token,
-      }));
+      return [...grouped.values()].slice(0, boundedLimit);
     });
   }
 
