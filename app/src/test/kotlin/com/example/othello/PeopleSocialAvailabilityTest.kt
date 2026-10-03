@@ -5,8 +5,16 @@ import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.Test
@@ -44,6 +52,103 @@ class PeopleSocialAvailabilityTest {
                 """{"slots":[{"slotStart":1000,"people":3,"selected":true,"userId":"private"}]}""",
             )
         }
+    }
+
+    @Test
+    fun resetCancelsPendingToggleSoOldSessionCannotRestoreSelection() = runBlocking {
+        val now = Instant.parse("2026-10-03T09:00:00Z").toEpochMilli()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val repository = object : PeopleSocialAvailabilityRepository {
+            override suspend fun getAvailability(
+                slotStarts: List<Long>,
+                accessToken: String,
+            ) = slotStarts.map { PeopleSocialAvailability(it, 0, false) }
+
+            override suspend fun setAvailability(
+                slotStartEpochMillis: Long,
+                enabled: Boolean,
+                accessToken: String,
+            ): PeopleSocialAvailability {
+                started.complete(Unit)
+                release.await()
+                return PeopleSocialAvailability(slotStartEpochMillis, 1, enabled)
+            }
+
+            override suspend fun registerPushDevice(token: String, accessToken: String) = Unit
+            override suspend fun unregisterPushDevice(token: String, accessToken: String) = Unit
+        }
+        val controller = PeopleSocialAvailabilityController(
+            scope = scope,
+            repository = repository,
+            accessToken = { "fixture-token" },
+            now = { now },
+            zoneId = ZoneId.of("Asia/Tokyo"),
+        )
+
+        val slot = controller.state.value.slots.first()
+        controller.toggle(slot.slotStartEpochMillis)
+        withTimeout(2_000) { started.await() }
+
+        controller.reset()
+        release.complete(Unit)
+        delay(100)
+
+        val resetSlot = controller.state.value.slots.first { it.slotStartEpochMillis == slot.slotStartEpochMillis }
+        assertFalse(resetSlot.selected)
+        assertEquals(0, resetSlot.people)
+        assertFalse(resetSlot.saving)
+        scope.cancel()
+    }
+
+    @Test
+    fun refreshWaitsForPendingToggleBeforeReadingAggregateState() = runBlocking {
+        val now = Instant.parse("2026-10-03T09:00:00Z").toEpochMilli()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val writeStarted = CompletableDeferred<Unit>()
+        val releaseWrite = CompletableDeferred<Unit>()
+        val readStarted = CompletableDeferred<Unit>()
+        val repository = object : PeopleSocialAvailabilityRepository {
+            override suspend fun getAvailability(
+                slotStarts: List<Long>,
+                accessToken: String,
+            ): List<PeopleSocialAvailability> {
+                readStarted.complete(Unit)
+                return slotStarts.map { PeopleSocialAvailability(it, if (it == slotStarts.first()) 1 else 0, it == slotStarts.first()) }
+            }
+
+            override suspend fun setAvailability(
+                slotStartEpochMillis: Long,
+                enabled: Boolean,
+                accessToken: String,
+            ): PeopleSocialAvailability {
+                writeStarted.complete(Unit)
+                releaseWrite.await()
+                return PeopleSocialAvailability(slotStartEpochMillis, 1, enabled)
+            }
+
+            override suspend fun registerPushDevice(token: String, accessToken: String) = Unit
+            override suspend fun unregisterPushDevice(token: String, accessToken: String) = Unit
+        }
+        val controller = PeopleSocialAvailabilityController(
+            scope = scope,
+            repository = repository,
+            accessToken = { "fixture-token" },
+            now = { now },
+            zoneId = ZoneId.of("Asia/Tokyo"),
+        )
+
+        val slot = controller.state.value.slots.first()
+        controller.toggle(slot.slotStartEpochMillis)
+        withTimeout(2_000) { writeStarted.await() }
+        controller.refresh()
+        delay(100)
+        assertFalse(readStarted.isCompleted)
+
+        releaseWrite.complete(Unit)
+        withTimeout(2_000) { readStarted.await() }
+        scope.cancel()
     }
 
     @Test
