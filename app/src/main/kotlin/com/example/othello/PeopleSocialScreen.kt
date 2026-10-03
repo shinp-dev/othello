@@ -28,11 +28,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -49,25 +46,13 @@ private val SocialIvory = Color(0xFFFFF8E8)
 private val SocialPanel = Color(0xD90A1D2C)
 private val SocialRow = Color(0xB90B2234)
 
-private data class PeopleSocialSlot(
-    val time: String,
-    val people: Int,
-)
-
-private val peopleSocialPreviewSlots = listOf(
-    PeopleSocialSlot("19:00 - 19:30", 2),
-    PeopleSocialSlot("19:30 - 20:00", 4),
-    PeopleSocialSlot("20:00 - 20:30", 7),
-    PeopleSocialSlot("20:30 - 21:00", 5),
-    PeopleSocialSlot("21:00 - 21:30", 3),
-    PeopleSocialSlot("21:30 - 22:00", 1),
-)
-
 @Composable
 internal fun PeopleSocialScreen(
+    state: PeopleSocialUiState,
     onBack: () -> Unit,
+    onToggle: (Long) -> Unit,
+    onRetry: () -> Unit,
 ) {
-    var selectedSlots by remember { mutableStateOf(setOf<Int>()) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Image(
@@ -120,6 +105,19 @@ internal fun PeopleSocialScreen(
 
             SocialNotificationNote()
 
+            when {
+                state.errorCode != null -> SocialAvailabilityStatus(
+                    text = appString(R.string.people_social_load_failed),
+                    showRetry = true,
+                    onRetry = onRetry,
+                )
+                state.loading -> SocialAvailabilityStatus(
+                    text = appString(R.string.loading),
+                    showRetry = false,
+                    onRetry = onRetry,
+                )
+            }
+
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(22.dp),
@@ -151,18 +149,11 @@ internal fun PeopleSocialScreen(
                         )
                     }
 
-                    peopleSocialPreviewSlots.forEachIndexed { index, slot ->
-                        val selected = index in selectedSlots
+                    state.slots.forEach { slot ->
                         SocialTimeSlot(
                             slot = slot,
-                            selected = selected,
-                            onClick = {
-                                selectedSlots = if (selected) {
-                                    selectedSlots - index
-                                } else {
-                                    selectedSlots + index
-                                }
-                            },
+                            enabled = slot.selectable && !slot.saving && !state.loading,
+                            onClick = { onToggle(slot.slotStartEpochMillis) },
                         )
                     }
                 }
@@ -245,11 +236,44 @@ private fun SocialNotificationNote() {
 }
 
 @Composable
+private fun SocialAvailabilityStatus(
+    text: String,
+    showRetry: Boolean,
+    onRetry: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.weight(1f),
+            color = Color.White.copy(alpha = 0.72f),
+            style = MaterialTheme.typography.bodySmall,
+        )
+        if (showRetry) {
+            OutlinedButton(
+                onClick = onRetry,
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, SocialAccent.copy(alpha = 0.45f)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = SocialAccent),
+            ) {
+                Text(appString(R.string.retry))
+            }
+        }
+    }
+}
+
+@Composable
 private fun SocialTimeSlot(
-    slot: PeopleSocialSlot,
-    selected: Boolean,
+    slot: PeopleSocialUiSlot,
+    enabled: Boolean,
     onClick: () -> Unit,
 ) {
+    val selected = slot.selected
     val shape = RoundedCornerShape(17.dp)
     val borderColor = if (selected) SocialAccent else Color(0xFF2A4A63)
     val container = if (selected) {
@@ -272,12 +296,13 @@ private fun SocialTimeSlot(
                 color = borderColor,
                 shape = shape,
             )
-            .clickable(onClick = onClick)
+            .alpha(if (slot.selectable) 1f else 0.45f)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 15.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = slot.time,
+            text = slot.timeLabel,
             modifier = Modifier.weight(1f),
             color = SocialIvory,
             style = MaterialTheme.typography.titleMedium,
@@ -297,7 +322,7 @@ private fun SocialTimeSlot(
             Text(
                 text = appString(
                     R.string.people_social_people_count,
-                    slot.people + if (selected) 1 else 0,
+                    slot.people,
                 ),
                 color = Color(0xFFB9D8FF),
                 style = MaterialTheme.typography.bodyMedium,
