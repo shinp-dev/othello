@@ -8,4 +8,5 @@
     <string name="people_social_people_count">%1$d people</string>
     <string name="people_social_footer_note">Clears automatically after the time passes.</string>
     <string name="people_social_selected">Maybe selected</string>
+    <string name="people_social_load_failed">Couldn’t refresh availability.</string>
 </resources>
