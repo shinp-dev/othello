@@ -192,22 +192,25 @@ export class PeopleSocialRegistry extends DurableObject<Env> {
     requireRoomId(roomId);
     requireUserId(creatorUserId);
     this.cleanupExpired(createdAt);
-    const slotStart = Math.floor(createdAt / SOCIAL_SLOT_MILLIS) * SOCIAL_SLOT_MILLIS;
-    const targets = this.ctx.storage.sql.exec<UserRow>(
-      `SELECT DISTINCT a.user_id
+    const targets = this.ctx.storage.sql.exec<UserRow & { slot_start: number }>(
+      `SELECT DISTINCT a.user_id, a.slot_start
        FROM availability AS a
-       WHERE a.slot_start = ?
+       WHERE a.slot_start <= ?
+         AND a.slot_start + ? > ?
          AND a.user_id <> ?
          AND EXISTS (
            SELECT 1 FROM push_devices AS d
            WHERE d.user_id = a.user_id AND d.enabled = 1
          )`,
-      slotStart,
+      createdAt,
+      SOCIAL_SLOT_MILLIS,
+      createdAt,
       creatorUserId,
     ).toArray();
 
     let queued = 0;
     for (const target of targets) {
+      const slotStart = Number(target.slot_start);
       const inserted = this.ctx.storage.sql.exec<{ id: number }>(
         `INSERT INTO notification_outbox
            (target_user_id, slot_start, room_id, creator_user_id, created_at, claimed_at, delivered_at)
