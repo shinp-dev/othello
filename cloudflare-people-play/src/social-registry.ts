@@ -260,17 +260,27 @@ export class PeopleSocialRegistry extends DurableObject<Env> {
     this.cleanupExpired(now);
     return this.ctx.storage.transactionSync(() => {
       const rows = this.ctx.storage.sql.exec<PendingNotificationRow>(
-        `SELECT o.id, o.target_user_id, o.slot_start, o.room_id, d.token
-         FROM notification_outbox AS o
+        `WITH candidates AS (
+           SELECT o.id
+           FROM notification_outbox AS o
+           INNER JOIN availability AS a
+             ON a.user_id = o.target_user_id AND a.slot_start = o.slot_start
+           WHERE o.delivered_at IS NULL
+             AND (o.claimed_at IS NULL OR o.claimed_at < ?)
+             AND o.slot_start + ? > ?
+             AND EXISTS (
+               SELECT 1 FROM push_devices AS d
+               WHERE d.user_id = o.target_user_id AND d.enabled = 1
+             )
+           ORDER BY o.created_at ASC, o.id ASC
+           LIMIT ?
+         )
+         SELECT o.id, o.target_user_id, o.slot_start, o.room_id, d.token
+         FROM candidates AS c
+         INNER JOIN notification_outbox AS o ON o.id = c.id
          INNER JOIN push_devices AS d
            ON d.user_id = o.target_user_id AND d.enabled = 1
-         INNER JOIN availability AS a
-           ON a.user_id = o.target_user_id AND a.slot_start = o.slot_start
-         WHERE o.delivered_at IS NULL
-           AND (o.claimed_at IS NULL OR o.claimed_at < ?)
-           AND o.slot_start + ? > ?
-         ORDER BY o.created_at ASC, o.id ASC
-         LIMIT ?`,
+         ORDER BY o.created_at ASC, o.id ASC, d.token ASC`,
         leaseBefore,
         SOCIAL_SLOT_MILLIS,
         now,
@@ -306,7 +316,7 @@ export class PeopleSocialRegistry extends DurableObject<Env> {
           leaseBefore,
         );
       }
-      return [...grouped.values()].slice(0, boundedLimit);
+      return [...grouped.values()];
     });
   }
 
