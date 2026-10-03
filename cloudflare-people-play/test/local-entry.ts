@@ -54,6 +54,16 @@ export default {
       const social = env.SOCIAL_REGISTRY.getByName("people-social-registry");
       return response({ count: await social.pendingNotificationCount() });
     }
+    if (url.pathname === "/__test/social/claim-pending" && request.method === "POST") {
+      const body = await request.json<{ now?: number; limit?: number }>();
+      const social = env.SOCIAL_REGISTRY.getByName("people-social-registry");
+      return response({
+        notifications: await social.claimPendingNotifications(
+          Number(body.now ?? Date.now()),
+          Number(body.limit ?? 50),
+        ),
+      });
+    }
     if (url.pathname === "/__test/social/record-room-created" && request.method === "POST") {
       const body = await request.json<{ roomId?: string; creatorUserId?: string; createdAt?: number }>();
       const social = env.SOCIAL_REGISTRY.getByName("people-social-registry");
