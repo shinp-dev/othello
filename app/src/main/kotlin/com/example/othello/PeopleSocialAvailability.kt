@@ -272,6 +272,7 @@ internal class PeopleSocialAvailabilityController(
                     },
                     errorCode = null,
                 )
+                refreshTimeState()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -281,6 +282,7 @@ internal class PeopleSocialAvailabilityController(
                     },
                     errorCode = (error as? PeopleSocialHttpException)?.errorCode ?: "SOCIAL_UNAVAILABLE",
                 )
+                refreshTimeState()
             }
         }
         mutationJobs[slotStartEpochMillis] = job
