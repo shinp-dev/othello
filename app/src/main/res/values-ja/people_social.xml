@@ -8,4 +8,5 @@
     <string name="people_social_people_count">%1$d人</string>
     <string name="people_social_footer_note">時間を過ぎると自動で解除されます</string>
     <string name="people_social_selected">いけるかも選択中</string>
+    <string name="people_social_load_failed">いけるかもの情報を更新できませんでした。</string>
 </resources>
