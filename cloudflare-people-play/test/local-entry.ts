@@ -50,6 +50,10 @@ export default {
       );
       return response({ status: inspected.status, upgrade: inspected.headers.get("upgrade") });
     }
+    if (url.pathname === "/__test/social/pending-count" && request.method === "GET") {
+      const social = env.SOCIAL_REGISTRY.getByName("people-social-registry");
+      return response({ count: await social.pendingNotificationCount() });
+    }
     if (url.pathname === "/__test/room/abort-create" && request.method === "POST") {
       const body = await request.json<{ roomId?: string }>();
       const roomId = String(body.roomId ?? "");
