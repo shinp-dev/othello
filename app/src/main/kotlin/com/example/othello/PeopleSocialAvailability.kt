@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -198,10 +199,12 @@ internal class PeopleSocialAvailabilityController(
     val state: StateFlow<PeopleSocialUiState> = _state
 
     private var refreshJob: Job? = null
+    private val mutationJobs = mutableMapOf<Long, Job>()
 
     fun refresh() {
         refreshJob?.cancel()
         refreshJob = scope.launch {
+            mutationJobs.values.toList().joinAll()
             val currentSlots = peopleSocialTodaySlots(now(), zoneId)
             _state.value = PeopleSocialUiState(slots = currentSlots, loading = true)
             try {
@@ -245,7 +248,7 @@ internal class PeopleSocialAvailabilityController(
             errorCode = null,
         )
 
-        scope.launch {
+        val job = scope.launch {
             try {
                 val token = accessToken()?.takeIf(String::isNotBlank)
                     ?: throw PeopleSocialHttpException(401, "AUTH_REQUIRED")
@@ -273,11 +276,17 @@ internal class PeopleSocialAvailabilityController(
                 )
             }
         }
+        mutationJobs[slotStartEpochMillis] = job
+        job.invokeOnCompletion {
+            if (mutationJobs[slotStartEpochMillis] === job) mutationJobs.remove(slotStartEpochMillis)
+        }
     }
 
     fun reset() {
         refreshJob?.cancel()
         refreshJob = null
+        mutationJobs.values.forEach(Job::cancel)
+        mutationJobs.clear()
         _state.value = PeopleSocialUiState(slots = peopleSocialTodaySlots(now(), zoneId))
     }
 }
