@@ -353,6 +353,44 @@ test("social notification queue transfers device ownership, cancels on opt-out, 
   );
 });
 
+test("overlapping social slots still queue only one notification per user", async () => {
+  const slotStart = Math.ceil(Date.now() / (30 * 60 * 1000)) * (30 * 60 * 1000) + (60 * 60 * 1000);
+  const overlappingSlot = slotStart + (15 * 60 * 1000);
+  const headers = {
+    authorization: "Bearer test-user-e",
+    "content-type": "application/json",
+  };
+  for (const start of [slotStart, overlappingSlot]) {
+    const enabled = await fetch(`${baseUrl}/v1/people-social/availability`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ slotStart: start, enabled: true }),
+    });
+    assert.equal(enabled.status, 200);
+  }
+  const registered = await fetch(`${baseUrl}/v1/people-social/push-device`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ token: "fixture-user-e-device-token-000000001" }),
+  });
+  assert.equal(registered.status, 200);
+
+  const queued = await post("/__test/social/record-room-created", {
+    roomId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+    creatorUserId: "00000000-0000-4000-8000-00000000000a",
+    createdAt: slotStart + (20 * 60 * 1000),
+  });
+  assert.deepEqual(queued, { status: 200, body: { queued: 1 } });
+
+  for (const start of [slotStart, overlappingSlot]) {
+    await fetch(`${baseUrl}/v1/people-social/availability`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ slotStart: start, enabled: false }),
+    });
+  }
+});
+
 test("RoomRegistry allocates privately, publishes and replaces only listed projections", async () => {
   const id = await allocate();
   assert.deepEqual(await (await post("/__test/registry/resolve", { roomId: id })).body, { status: "active" });
