@@ -4,11 +4,12 @@ interface __BaseEnv_Env {
 	SUPABASE_URL: "https://zgzllmaoyymoeiqtybck.supabase.co";
 	ROOM_REGISTRY: DurableObjectNamespace<import("./src/index").RoomRegistry>;
 	ROOM: DurableObjectNamespace<import("./src/index").Room>;
+	SOCIAL_REGISTRY: DurableObjectNamespace<import("./src/index").PeopleSocialRegistry>;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {
 		mainModule: typeof import("./src/index");
-		durableNamespaces: "RoomRegistry" | "Room";
+		durableNamespaces: "RoomRegistry" | "Room" | "PeopleSocialRegistry";
 	}
 	interface Env extends __BaseEnv_Env {}
 }

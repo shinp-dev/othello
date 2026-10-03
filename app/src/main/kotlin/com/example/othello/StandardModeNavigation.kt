@@ -163,6 +163,7 @@ internal fun AuthenticatedModeRoute(
     userId: String,
     playProfileFlow: PlayProfileSelectionFlow? = null,
     peoplePlaySession: PeoplePlaySessionOwner? = null,
+    peopleSocialAvailability: PeopleSocialAvailabilityController? = null,
     advancedContent: @Composable (onSwitchMode: () -> Unit) -> Unit,
 ) {
     var destination by rememberSaveable(userId) {
@@ -187,6 +188,15 @@ internal fun AuthenticatedModeRoute(
         peoplePlaySession?.lobby?.state ?: MutableStateFlow(PeoplePlayLobbyState())
     }
     val lobbyState by lobbyStateFlow.collectAsState()
+    val socialStateFlow = remember(peopleSocialAvailability) {
+        peopleSocialAvailability?.state ?: MutableStateFlow(
+            PeopleSocialUiState(
+                slots = peopleSocialTodaySlots(System.currentTimeMillis()),
+                errorCode = "API_UNAVAILABLE",
+            ),
+        )
+    }
+    val socialState by socialStateFlow.collectAsState()
     val activeRoomFlow = remember(peoplePlaySession) {
         peoplePlaySession?.activeRoom ?: MutableStateFlow<PeoplePlayRoomStateHolder?>(null)
     }
@@ -249,6 +259,16 @@ internal fun AuthenticatedModeRoute(
             while (true) {
                 activeRoomHolder?.refreshClock()
                 delay(1_000L)
+            }
+        }
+    }
+
+    LaunchedEffect(destination, peopleSocialAvailability) {
+        if (destination == AuthenticatedModeDestination.PEOPLE_SOCIAL) {
+            peopleSocialAvailability?.refresh()
+            while (true) {
+                delay(30_000L)
+                peopleSocialAvailability?.refreshTimeState()
             }
         }
     }
@@ -428,7 +448,10 @@ internal fun AuthenticatedModeRoute(
             onExit = ::returnFromPeopleRoom,
         )
         AuthenticatedModeDestination.PEOPLE_SOCIAL -> PeopleSocialScreen(
+            state = socialState,
             onBack = { destination = AuthenticatedModeDestination.PEOPLE_HOME },
+            onToggle = { slotStart -> peopleSocialAvailability?.toggle(slotStart) },
+            onRetry = { peopleSocialAvailability?.refresh() },
         )
         AuthenticatedModeDestination.ADVANCED -> advancedContent {
             destination = AuthenticatedModeDestination.MODE_SELECTION

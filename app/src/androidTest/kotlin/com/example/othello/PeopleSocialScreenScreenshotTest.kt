@@ -12,7 +12,6 @@ import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.othello.designsystem.OthelloTheme
 import java.util.Locale
@@ -41,15 +40,20 @@ class PeopleSocialScreenScreenshotTest {
                 LocalConfiguration provides configuration,
             ) {
                 OthelloTheme {
-                    PeopleSocialScreen(onBack = {})
+                    PeopleSocialScreen(
+                        state = peopleSocialPreviewUiState(),
+                        onBack = {},
+                        onToggle = {},
+                        onRetry = {},
+                    )
                 }
             }
         }
 
         composeRule.onNodeWithText(localizedContext.getString(R.string.people_social_title)).assertIsDisplayed()
         composeRule.onNodeWithText(localizedContext.getString(R.string.people_social_prompt)).assertIsDisplayed()
-        composeRule.onNodeWithText("20:00 - 20:30").assertHasClickAction().performClick()
-        composeRule.onNodeWithText("20:30 - 21:00").assertHasClickAction().performClick()
+        composeRule.onNodeWithText("20:00 - 20:30").assertHasClickAction()
+        composeRule.onNodeWithText("20:30 - 21:00").assertHasClickAction()
 
         composeRule.waitForIdle()
         val bitmap = awaitVisibleSocialScreen()

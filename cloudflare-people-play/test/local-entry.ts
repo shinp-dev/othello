@@ -1,5 +1,6 @@
 import {
   Room,
+  PeopleSocialRegistry,
   createPeoplePlayHandler,
   type ProfileResolver,
   type RequestAuthenticator,
@@ -31,7 +32,7 @@ const testProfileResolver: ProfileResolver = async (identity) => {
 
 const peoplePlayHandler = createPeoplePlayHandler(testAuthenticator, testProfileResolver);
 
-export { Room, RoomRegistry };
+export { Room, RoomRegistry, PeopleSocialRegistry };
 
 function response(body: unknown, status = 200): Response {
   return Response.json(body, { status });
@@ -48,6 +49,30 @@ export default {
         ctx,
       );
       return response({ status: inspected.status, upgrade: inspected.headers.get("upgrade") });
+    }
+    if (url.pathname === "/__test/social/pending-count" && request.method === "GET") {
+      const social = env.SOCIAL_REGISTRY.getByName("people-social-registry");
+      return response({ count: await social.pendingNotificationCount() });
+    }
+    if (url.pathname === "/__test/social/claim-pending" && request.method === "POST") {
+      const body = await request.json<{ now?: number; limit?: number }>();
+      const social = env.SOCIAL_REGISTRY.getByName("people-social-registry");
+      return response({
+        notifications: await social.claimPendingNotifications(
+          Number(body.now ?? Date.now()),
+          Number(body.limit ?? 50),
+        ),
+      });
+    }
+    if (url.pathname === "/__test/social/record-room-created" && request.method === "POST") {
+      const body = await request.json<{ roomId?: string; creatorUserId?: string; createdAt?: number }>();
+      const social = env.SOCIAL_REGISTRY.getByName("people-social-registry");
+      const queued = await social.recordRoomCreated(
+        String(body.roomId ?? ""),
+        String(body.creatorUserId ?? ""),
+        Number(body.createdAt ?? Date.now()),
+      );
+      return response({ queued });
     }
     if (url.pathname === "/__test/room/abort-create" && request.method === "POST") {
       const body = await request.json<{ roomId?: string }>();

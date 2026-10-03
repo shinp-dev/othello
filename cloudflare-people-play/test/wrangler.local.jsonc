@@ -6,11 +6,13 @@
   "durable_objects": {
     "bindings": [
       { "name": "ROOM_REGISTRY", "class_name": "RoomRegistry" },
-      { "name": "ROOM", "class_name": "Room" }
+      { "name": "ROOM", "class_name": "Room" },
+      { "name": "SOCIAL_REGISTRY", "class_name": "PeopleSocialRegistry" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["RoomRegistry"] },
-    { "tag": "v2", "new_sqlite_classes": ["Room"] }
+    { "tag": "v2", "new_sqlite_classes": ["Room"] },
+    { "tag": "v3", "new_sqlite_classes": ["PeopleSocialRegistry"] }
   ]
 }

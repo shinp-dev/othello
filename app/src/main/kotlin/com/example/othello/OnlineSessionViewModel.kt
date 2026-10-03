@@ -28,6 +28,15 @@ class OnlineSessionViewModel(application: Application) : AndroidViewModel(applic
             persistence = app.localGameRecordPersistence.coordinator,
         )
     }
+    internal val peopleSocialAvailability: PeopleSocialAvailabilityController? = component?.let { supabase ->
+        val repository = runCatching { OkHttpPeopleSocialAvailabilityRepository(BuildConfig.PEOPLE_PLAY_API_BASE_URL) }
+            .getOrElse { UnconfiguredPeopleSocialAvailabilityRepository() }
+        PeopleSocialAvailabilityController(
+            scope = viewModelScope,
+            repository = repository,
+            accessToken = supabase.authGateway::currentAccessToken,
+        )
+    }
     private val recoveryStore = OnlineMatchRecoveryStore(getApplication())
     var coordinator: WebRtcMatchCoordinator? = null
         private set
@@ -37,6 +46,7 @@ class OnlineSessionViewModel(application: Application) : AndroidViewModel(applic
         onBeforeSignOut = { prepareForSignOut() },
         onAuthenticatedSessionEnding = {
             peoplePlaySession?.closeForSignOut()
+            peopleSocialAvailability?.reset()
             matchmaking?.reset()
             leaveCoordinator()
             recoveryStore.clear()
@@ -145,6 +155,7 @@ class OnlineSessionViewModel(application: Application) : AndroidViewModel(applic
 
     override fun onCleared() {
         peoplePlaySession?.closeForSignOut()
+        peopleSocialAvailability?.reset()
         coordinator?.close()
         coordinator = null
         component?.close()

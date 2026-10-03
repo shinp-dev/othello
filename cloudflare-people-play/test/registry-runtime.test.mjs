@@ -166,6 +166,231 @@ test("local Wrangler HTTP contract authenticates GET rooms and rejects other rou
   assert.equal(wrongSocketMethod.headers.get("allow"), "GET");
 });
 
+test("social availability persists per user and room events dedupe one notification per slot", async () => {
+  const slotStart = Math.ceil(Date.now() / (30 * 60 * 1000)) * (30 * 60 * 1000);
+  const slotQuery = new URLSearchParams([["slotStart", String(slotStart)]]).toString();
+
+  const denied = await fetch(`${baseUrl}/v1/people-social/availability?${slotQuery}`);
+  assert.equal(denied.status, 401);
+
+  const setResponse = await fetch(`${baseUrl}/v1/people-social/availability`, {
+    method: "PUT",
+    headers: {
+      authorization: "Bearer test-user-b",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ slotStart, enabled: true }),
+  });
+  assert.equal(setResponse.status, 200);
+  assert.deepEqual(await setResponse.json(), {
+    slot: { slotStart, people: 1, selected: true },
+  });
+
+  const observer = await fetch(`${baseUrl}/v1/people-social/availability?${slotQuery}`, {
+    headers: { authorization: "Bearer test-user-a" },
+  });
+  assert.equal(observer.status, 200);
+  assert.deepEqual(await observer.json(), {
+    slots: [{ slotStart, people: 1, selected: false }],
+  });
+
+  const owner = await fetch(`${baseUrl}/v1/people-social/availability?${slotQuery}`, {
+    headers: { authorization: "Bearer test-user-b" },
+  });
+  assert.deepEqual(await owner.json(), {
+    slots: [{ slotStart, people: 1, selected: true }],
+  });
+
+  const push = await fetch(`${baseUrl}/v1/people-social/push-device`, {
+    method: "PUT",
+    headers: {
+      authorization: "Bearer test-user-b",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ token: "fixture-device-token-000000000001" }),
+  });
+  assert.equal(push.status, 200);
+  assert.deepEqual(await push.json(), { ok: true });
+
+  const creatorUserId = "00000000-0000-4000-8000-00000000000a";
+  const firstRoom = await post("/__test/social/record-room-created", {
+    roomId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    creatorUserId,
+    createdAt: slotStart + 60_000,
+  });
+  assert.deepEqual(firstRoom, { status: 200, body: { queued: 1 } });
+
+  const secondRoom = await post("/__test/social/record-room-created", {
+    roomId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    creatorUserId,
+    createdAt: slotStart + 120_000,
+  });
+  assert.deepEqual(secondRoom, { status: 200, body: { queued: 0 } });
+
+  const pending = await fetch(`${baseUrl}/__test/social/pending-count`);
+  assert.deepEqual(await pending.json(), { count: 1 });
+
+  const unset = await fetch(`${baseUrl}/v1/people-social/availability`, {
+    method: "PUT",
+    headers: {
+      authorization: "Bearer test-user-b",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ slotStart, enabled: false }),
+  });
+  assert.equal(unset.status, 200);
+  assert.deepEqual(await unset.json(), {
+    slot: { slotStart, people: 0, selected: false },
+  });
+});
+
+
+
+test("social notification queue transfers device ownership, cancels on opt-out, groups devices, and retries stale claims", async () => {
+  const slotStart = Math.ceil(Date.now() / (30 * 60 * 1000)) * (30 * 60 * 1000) + (30 * 60 * 1000);
+  const createdAt = slotStart + 60_000;
+  const authD = {
+    authorization: "Bearer test-user-d",
+    "content-type": "application/json",
+  };
+  const authC = {
+    authorization: "Bearer test-user-c",
+    "content-type": "application/json",
+  };
+
+  const enable = await fetch(`${baseUrl}/v1/people-social/availability`, {
+    method: "PUT",
+    headers: authD,
+    body: JSON.stringify({ slotStart, enabled: true }),
+  });
+  assert.equal(enable.status, 200);
+
+  const sharedToken = "fixture-shared-device-token-000000001";
+  assert.equal((await fetch(`${baseUrl}/v1/people-social/push-device`, {
+    method: "PUT",
+    headers: authD,
+    body: JSON.stringify({ token: sharedToken }),
+  })).status, 200);
+  assert.equal((await fetch(`${baseUrl}/v1/people-social/push-device`, {
+    method: "PUT",
+    headers: authC,
+    body: JSON.stringify({ token: sharedToken }),
+  })).status, 200);
+
+  const creatorUserId = "00000000-0000-4000-8000-00000000000a";
+  const transferred = await post("/__test/social/record-room-created", {
+    roomId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    creatorUserId,
+    createdAt,
+  });
+  assert.deepEqual(transferred, { status: 200, body: { queued: 0 } });
+
+  const tokenOne = "fixture-user-d-device-token-000000001";
+  const tokenTwo = "fixture-user-d-device-token-000000002";
+  for (const token of [tokenOne, tokenTwo]) {
+    const registered = await fetch(`${baseUrl}/v1/people-social/push-device`, {
+      method: "PUT",
+      headers: authD,
+      body: JSON.stringify({ token }),
+    });
+    assert.equal(registered.status, 200);
+  }
+
+  const queued = await post("/__test/social/record-room-created", {
+    roomId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    creatorUserId,
+    createdAt: createdAt + 60_000,
+  });
+  assert.deepEqual(queued, { status: 200, body: { queued: 1 } });
+  assert.deepEqual(await (await fetch(`${baseUrl}/__test/social/pending-count`)).json(), { count: 1 });
+
+  const disabled = await fetch(`${baseUrl}/v1/people-social/availability`, {
+    method: "PUT",
+    headers: authD,
+    body: JSON.stringify({ slotStart, enabled: false }),
+  });
+  assert.equal(disabled.status, 200);
+  assert.deepEqual(await (await fetch(`${baseUrl}/__test/social/pending-count`)).json(), { count: 0 });
+
+  const reenabled = await fetch(`${baseUrl}/v1/people-social/availability`, {
+    method: "PUT",
+    headers: authD,
+    body: JSON.stringify({ slotStart, enabled: true }),
+  });
+  assert.equal(reenabled.status, 200);
+
+  const requeued = await post("/__test/social/record-room-created", {
+    roomId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    creatorUserId,
+    createdAt: createdAt + 120_000,
+  });
+  assert.deepEqual(requeued, { status: 200, body: { queued: 1 } });
+
+  const firstClaimAt = createdAt + 180_000;
+  const firstClaim = await post("/__test/social/claim-pending", { now: firstClaimAt, limit: 1 });
+  assert.equal(firstClaim.status, 200);
+  assert.equal(firstClaim.body.notifications.length, 1);
+  assert.equal(firstClaim.body.notifications[0].targetUserId, "00000003-0000-4000-8000-00000000000d");
+  assert.deepEqual(
+    [...firstClaim.body.notifications[0].tokens].sort(),
+    [tokenOne, tokenTwo].sort(),
+  );
+
+  const immediateRetry = await post("/__test/social/claim-pending", {
+    now: firstClaimAt + 60_000,
+    limit: 50,
+  });
+  assert.deepEqual(immediateRetry.body.notifications, []);
+
+  const staleRetry = await post("/__test/social/claim-pending", {
+    now: firstClaimAt + (5 * 60 * 1000) + 1,
+    limit: 50,
+  });
+  assert.equal(staleRetry.body.notifications.length, 1);
+  assert.deepEqual(
+    [...staleRetry.body.notifications[0].tokens].sort(),
+    [tokenOne, tokenTwo].sort(),
+  );
+});
+
+test("overlapping social slots still queue only one notification per user", async () => {
+  const slotStart = Math.ceil(Date.now() / (30 * 60 * 1000)) * (30 * 60 * 1000) + (60 * 60 * 1000);
+  const overlappingSlot = slotStart + (15 * 60 * 1000);
+  const headers = {
+    authorization: "Bearer test-user-e",
+    "content-type": "application/json",
+  };
+  for (const start of [slotStart, overlappingSlot]) {
+    const enabled = await fetch(`${baseUrl}/v1/people-social/availability`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ slotStart: start, enabled: true }),
+    });
+    assert.equal(enabled.status, 200);
+  }
+  const registered = await fetch(`${baseUrl}/v1/people-social/push-device`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ token: "fixture-user-e-device-token-000000001" }),
+  });
+  assert.equal(registered.status, 200);
+
+  const queued = await post("/__test/social/record-room-created", {
+    roomId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+    creatorUserId: "00000000-0000-4000-8000-00000000000a",
+    createdAt: slotStart + (20 * 60 * 1000),
+  });
+  assert.deepEqual(queued, { status: 200, body: { queued: 1 } });
+
+  for (const start of [slotStart, overlappingSlot]) {
+    await fetch(`${baseUrl}/v1/people-social/availability`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ slotStart: start, enabled: false }),
+    });
+  }
+});
+
 test("RoomRegistry allocates privately, publishes and replaces only listed projections", async () => {
   const id = await allocate();
   assert.deepEqual(await (await post("/__test/registry/resolve", { roomId: id })).body, { status: "active" });

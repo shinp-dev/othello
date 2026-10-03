@@ -146,6 +146,7 @@ private fun AuthenticatedRoot(
             userId = session.userId,
             playProfileFlow = playProfileFlow,
             peoplePlaySession = sessionOwner.peoplePlaySession,
+            peopleSocialAvailability = sessionOwner.peopleSocialAvailability,
         ) { onSwitchMode ->
             AuthenticatedApp(
                 debugAutoPlay = debugAutoPlay,
