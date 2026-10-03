@@ -1,4 +1,5 @@
 export const SOCIAL_SLOT_MILLIS = 30 * 60 * 1000;
+export const SOCIAL_SLOT_ALIGNMENT_MILLIS = 15 * 60 * 1000;
 export const MAX_SOCIAL_SLOTS_PER_READ = 12;
 export const SOCIAL_MAX_FUTURE_MILLIS = 24 * 60 * 60 * 1000;
 export const SOCIAL_MAX_PAST_READ_MILLIS = 24 * 60 * 60 * 1000;
@@ -9,13 +10,8 @@ export interface SocialAvailabilitySlot {
   selected: boolean;
 }
 
-export function socialSlotStart(atMillis: number): number {
-  if (!Number.isFinite(atMillis)) throw new Error("Invalid time");
-  return Math.floor(atMillis / SOCIAL_SLOT_MILLIS) * SOCIAL_SLOT_MILLIS;
-}
-
 export function isSocialSlotAligned(slotStart: number): boolean {
-  return Number.isSafeInteger(slotStart) && slotStart >= 0 && slotStart % SOCIAL_SLOT_MILLIS === 0;
+  return Number.isSafeInteger(slotStart) && slotStart >= 0 && slotStart % SOCIAL_SLOT_ALIGNMENT_MILLIS === 0;
 }
 
 export function validateSocialSlotForRead(slotStart: number, now = Date.now()): void {
