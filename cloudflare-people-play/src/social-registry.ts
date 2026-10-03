@@ -212,7 +212,7 @@ export class PeopleSocialRegistry extends DurableObject<Env> {
     requireUserId(creatorUserId);
     this.cleanupExpired(createdAt);
     const targets = this.ctx.storage.sql.exec<UserRow & { slot_start: number }>(
-      `SELECT DISTINCT a.user_id, a.slot_start
+      `SELECT a.user_id, MIN(a.slot_start) AS slot_start
        FROM availability AS a
        WHERE a.slot_start <= ?
          AND a.slot_start + ? > ?
@@ -220,7 +220,8 @@ export class PeopleSocialRegistry extends DurableObject<Env> {
          AND EXISTS (
            SELECT 1 FROM push_devices AS d
            WHERE d.user_id = a.user_id AND d.enabled = 1
-         )`,
+         )
+       GROUP BY a.user_id`,
       createdAt,
       SOCIAL_SLOT_MILLIS,
       createdAt,
