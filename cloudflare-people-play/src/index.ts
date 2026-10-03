@@ -124,9 +124,6 @@ export function createPeoplePlayHandler(
         return jsonResponse({ error: "NOT_FOUND" }, 404);
       }
 
-      if ((isNewSocket || isExistingSocket) && !isWebSocketUpgrade(request)) {
-        return jsonResponse({ error: "UPGRADE_REQUIRED" }, 426, { upgrade: "websocket" });
-      }
       if ((isRooms || isNewSocket || isExistingSocket) && request.method !== "GET") {
         return jsonResponse({ error: "METHOD_NOT_ALLOWED" }, 405, { allow: "GET" });
       }
@@ -135,6 +132,9 @@ export function createPeoplePlayHandler(
       }
       if (isSocialPushDevice && request.method !== "PUT" && request.method !== "DELETE") {
         return jsonResponse({ error: "METHOD_NOT_ALLOWED" }, 405, { allow: "PUT, DELETE" });
+      }
+      if ((isNewSocket || isExistingSocket) && !isWebSocketUpgrade(request)) {
+        return jsonResponse({ error: "UPGRADE_REQUIRED" }, 426, { upgrade: "websocket" });
       }
 
       const authenticated = await authenticate(request, env);
