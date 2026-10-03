@@ -277,15 +277,12 @@ internal class PeopleSocialAvailabilityController(
             }
         }
         mutationJobs[slotStartEpochMillis] = job
-        job.invokeOnCompletion {
-            if (mutationJobs[slotStartEpochMillis] === job) mutationJobs.remove(slotStartEpochMillis)
-        }
     }
 
     fun reset() {
         refreshJob?.cancel()
         refreshJob = null
-        mutationJobs.values.forEach(Job::cancel)
+        mutationJobs.values.forEach { it.cancel() }
         mutationJobs.clear()
         _state.value = PeopleSocialUiState(slots = peopleSocialTodaySlots(now(), zoneId))
     }
