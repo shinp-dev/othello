@@ -1,5 +1,6 @@
 import {
   Room,
+  PeopleSocialRegistry,
   createPeoplePlayHandler,
   type ProfileResolver,
   type RequestAuthenticator,
@@ -31,7 +32,7 @@ const testProfileResolver: ProfileResolver = async (identity) => {
 
 const peoplePlayHandler = createPeoplePlayHandler(testAuthenticator, testProfileResolver);
 
-export { Room, RoomRegistry };
+export { Room, RoomRegistry, PeopleSocialRegistry };
 
 function response(body: unknown, status = 200): Response {
   return Response.json(body, { status });
