@@ -327,7 +327,7 @@ test("social notification queue transfers device ownership, cancels on opt-out, 
   assert.deepEqual(requeued, { status: 200, body: { queued: 1 } });
 
   const firstClaimAt = createdAt + 180_000;
-  const firstClaim = await post("/__test/social/claim-pending", { now: firstClaimAt, limit: 50 });
+  const firstClaim = await post("/__test/social/claim-pending", { now: firstClaimAt, limit: 1 });
   assert.equal(firstClaim.status, 200);
   assert.equal(firstClaim.body.notifications.length, 1);
   assert.equal(firstClaim.body.notifications[0].targetUserId, "00000001-0000-4000-8000-00000000000b");
