@@ -225,8 +225,15 @@ internal class PeopleSocialAvailabilityController(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
+                val previousBySlot = _state.value.slots.associateBy(PeopleSocialUiSlot::slotStartEpochMillis)
                 _state.value = PeopleSocialUiState(
-                    slots = currentSlots,
+                    slots = currentSlots.map { current ->
+                        previousBySlot[current.slotStartEpochMillis]?.copy(
+                            timeLabel = current.timeLabel,
+                            selectable = current.selectable,
+                            saving = false,
+                        ) ?: current
+                    },
                     errorCode = (error as? PeopleSocialHttpException)?.errorCode ?: "SOCIAL_UNAVAILABLE",
                 )
             }
