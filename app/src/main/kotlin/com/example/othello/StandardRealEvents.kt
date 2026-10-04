@@ -1,18 +1,29 @@
 package com.example.othello
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,8 +33,15 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.example.othello.designsystem.ChanrivaColors
 import com.example.othello.designsystem.ChanrivaScreenHeader
 import com.example.othello.designsystem.ChanrivaSpacing
@@ -51,6 +69,13 @@ private const val MAX_STANDARD_REAL_EVENTS_BYTES = 256 * 1024
 private const val MAX_STANDARD_REAL_EVENT_COUNT = 500
 private const val MAX_STANDARD_REAL_EVENT_TEXT_LENGTH = 160
 private const val MAX_STANDARD_REAL_EVENT_URL_LENGTH = 2_048
+private const val STANDARD_REAL_EVENT_PREVIEW_COUNT = 4
+
+private val RealEventGold = Color(0xFFC59A54)
+private val RealEventGoldMuted = Color(0xFF765D37)
+private val RealEventGreen = Color(0xFF0B1715)
+private val RealEventGreenElevated = Color(0xFF10221E)
+private val RealEventRed = Color(0xFFD93C43)
 
 internal data class StandardRealEvent(
     val prefectureCode: String,
@@ -194,7 +219,7 @@ private fun InputStream.readBoundedStandardRealEventsBody(): String {
 internal class StandardRealEventFetchException : Exception()
 internal class StandardRealEventFormatException : Exception()
 
-private sealed interface StandardRealEventUiState {
+internal sealed interface StandardRealEventUiState {
     data object Loading : StandardRealEventUiState
     data class Loaded(val events: List<StandardRealEvent>) : StandardRealEventUiState
     data object Failed : StandardRealEventUiState
@@ -238,16 +263,32 @@ internal fun StandardRealEventRoute(
 }
 
 @Composable
-private fun StandardRealEventScreen(
+internal fun StandardRealEventScreen(
     state: StandardRealEventUiState,
     onBack: () -> Unit,
     onRetry: () -> Unit,
 ) {
     val uriHandler = LocalUriHandler.current
+    var showAllEvents by remember { mutableStateOf(false) }
 
-    Surface(Modifier.fillMaxSize().statusBarsPadding()) {
+    Surface(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding(),
+        color = ChanrivaColors.background,
+    ) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            ChanrivaColors.background,
+                            RealEventGreen.copy(alpha = 0.78f),
+                            ChanrivaColors.background,
+                        ),
+                    ),
+                ),
             contentPadding = PaddingValues(ChanrivaSpacing.page),
             verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.section),
         ) {
@@ -259,37 +300,66 @@ private fun StandardRealEventScreen(
                 )
             }
 
-            item {
-                StandardOfficialOthelloBlockLinks()
-            }
-
             when (state) {
-                StandardRealEventUiState.Loading -> item {
-                    Text(
-                        text = appString(R.string.standard_real_event_loading),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-
-                StandardRealEventUiState.Failed -> item {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.control),
-                    ) {
+                StandardRealEventUiState.Loading -> {
+                    item {
+                        RealEventSectionHeader(
+                            title = appString(R.string.standard_real_event_discovered_title),
+                            supporting = appString(R.string.standard_real_event_discovered_supporting),
+                        )
+                    }
+                    item {
                         Text(
-                            text = appString(R.string.standard_real_event_load_failed),
+                            text = appString(R.string.standard_real_event_loading),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Button(onClick = onRetry) {
-                            Text(appString(R.string.standard_real_event_retry))
+                    }
+                }
+
+                StandardRealEventUiState.Failed -> {
+                    item {
+                        RealEventSectionHeader(
+                            title = appString(R.string.standard_real_event_discovered_title),
+                            supporting = appString(R.string.standard_real_event_discovered_supporting),
+                        )
+                    }
+                    item {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.control),
+                        ) {
+                            Text(
+                                text = appString(R.string.standard_real_event_load_failed),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Button(onClick = onRetry) {
+                                Text(appString(R.string.standard_real_event_retry))
+                            }
                         }
                     }
                 }
 
                 is StandardRealEventUiState.Loaded -> {
-                    if (state.events.isEmpty()) {
+                    val events = state.events.sortedWith(
+                        compareBy<StandardRealEvent>({ it.date }, { it.prefectureCode }, { it.eventName }),
+                    )
+                    val prefectureCount = events.map { it.prefectureCode }.distinct().size
+
+                    item {
+                        RealEventSectionHeader(
+                            title = appString(R.string.standard_real_event_discovered_title),
+                            supporting = appString(R.string.standard_real_event_discovered_supporting),
+                            trailing = if (events.isEmpty()) null else appString(
+                                R.string.standard_real_event_summary,
+                                prefectureCount,
+                                events.size,
+                            ),
+                        )
+                    }
+
+                    if (events.isEmpty()) {
                         item {
                             Text(
                                 text = appString(R.string.standard_real_event_empty),
@@ -298,55 +368,34 @@ private fun StandardRealEventScreen(
                             )
                         }
                     } else {
-                        state.events.groupBy { it.prefectureCode }.values.forEach { prefectureEvents ->
+                        val visibleEvents = if (showAllEvents) events else events.take(STANDARD_REAL_EVENT_PREVIEW_COUNT)
+                        items(
+                            items = visibleEvents,
+                            key = { "${it.prefectureCode}:${it.date}:${it.eventName}" },
+                        ) { event ->
+                            StandardRealEventCard(
+                                event = event,
+                                onClick = { runCatching { uriHandler.openUri(event.sourceUrl) } },
+                            )
+                        }
+
+                        if (events.size > STANDARD_REAL_EVENT_PREVIEW_COUNT) {
                             item {
-                                Text(
-                                    text = prefectureEvents.first().prefectureName,
-                                    style = MaterialTheme.typography.titleMedium,
-                                )
-                            }
-                            items(prefectureEvents) { event ->
-                                Card(
-                                    onClick = { runCatching { uriHandler.openUri(event.sourceUrl) } },
+                                OutlinedButton(
+                                    onClick = { showAllEvents = !showAllEvents },
                                     modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = ChanrivaColors.surfaceElevated,
-                                    ),
+                                    shape = RoundedCornerShape(14.dp),
+                                    border = BorderStroke(1.dp, RealEventGold),
                                 ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(ChanrivaSpacing.section),
-                                        verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.control),
-                                    ) {
-                                        Text(
-                                            text = event.date.replace('-', '/'),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                        Text(
-                                            text = event.eventName,
-                                            style = MaterialTheme.typography.titleMedium,
-                                        )
-                                        Text(
-                                            text = event.venueName,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                        Text(
-                                            text = appString(
-                                                R.string.standard_real_event_retrieved_date,
-                                                event.retrievedDate.replace('-', '/'),
-                                            ),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                        Text(
-                                            text = appString(R.string.standard_real_event_source),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.primary,
-                                        )
-                                    }
+                                    Text(
+                                        text = if (showAllEvents) {
+                                            appString(R.string.standard_real_event_less)
+                                        } else {
+                                            appString(R.string.standard_real_event_more, events.size)
+                                        },
+                                        color = RealEventGold,
+                                        style = MaterialTheme.typography.labelLarge,
+                                    )
                                 }
                             }
                         }
@@ -354,6 +403,186 @@ private fun StandardRealEventScreen(
                 }
             }
 
+            item {
+                StandardOfficialOthelloBlockLinks()
+            }
+        }
+    }
+}
+
+@Composable
+internal fun RealEventSectionHeader(
+    title: String,
+    supporting: String,
+    trailing: String? = null,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(width = 3.dp, height = 28.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(RealEventRed),
+            )
+            Text(
+                text = title,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = ChanrivaColors.textPrimary,
+            )
+            trailing?.let {
+                Text(
+                    text = it,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(RealEventGreenElevated)
+                        .border(1.dp, RealEventGoldMuted, RoundedCornerShape(999.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = RealEventGold,
+                    maxLines = 2,
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.padding(start = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = supporting,
+                modifier = Modifier.weight(1f, fill = false),
+                style = MaterialTheme.typography.bodyMedium,
+                color = ChanrivaColors.textSecondary,
+            )
+            Spacer(Modifier.width(8.dp))
+            OthelloMiniDiscs()
+        }
+    }
+}
+
+@Composable
+private fun OthelloMiniDiscs() {
+    Row(horizontalArrangement = Arrangement.spacedBy((-4).dp)) {
+        Box(
+            Modifier
+                .size(16.dp)
+                .clip(CircleShape)
+                .background(ChanrivaColors.blackDisc)
+                .border(1.dp, RealEventGoldMuted, CircleShape),
+        )
+        Box(
+            Modifier
+                .size(16.dp)
+                .clip(CircleShape)
+                .background(ChanrivaColors.whiteDisc)
+                .border(1.dp, RealEventGoldMuted, CircleShape),
+        )
+    }
+}
+
+@Composable
+private fun StandardRealEventCard(
+    event: StandardRealEvent,
+    onClick: () -> Unit,
+) {
+    val dateParts = event.date.split('-')
+    val year = dateParts.getOrNull(0).orEmpty()
+    val monthDay = if (dateParts.size == 3) "${dateParts[1]}/${dateParts[2]}" else event.date.replace('-', '/')
+
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = RealEventGreenElevated),
+        border = BorderStroke(1.dp, RealEventGoldMuted),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            RealEventGreenElevated,
+                            ChanrivaColors.surfaceElevated,
+                        ),
+                    ),
+                )
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(width = 3.dp, height = 54.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(RealEventRed),
+            )
+            Column(
+                modifier = Modifier.width(58.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp),
+            ) {
+                Text(
+                    text = year,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ChanrivaColors.textSecondary,
+                )
+                Text(
+                    text = monthDay,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = ChanrivaColors.textPrimary,
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = event.prefectureName,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(ChanrivaColors.accentSoft.copy(alpha = 0.55f))
+                            .border(1.dp, RealEventRed, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ChanrivaColors.accent,
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = event.eventName,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = ChanrivaColors.textPrimary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    text = event.venueName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ChanrivaColors.textSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                text = "›",
+                style = MaterialTheme.typography.headlineSmall,
+                color = RealEventGold,
+            )
         }
     }
 }
