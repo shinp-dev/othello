@@ -1,17 +1,28 @@
 package com.example.othello
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import com.example.othello.designsystem.ChanrivaColors
 import com.example.othello.designsystem.ChanrivaSpacing
+
+private val OfficialBlockGold = Color(0xFFC59A54)
+private val OfficialBlockSurface = Color(0xFF10211E)
 
 internal data class StandardOfficialOthelloBlock(
     @StringRes val nameRes: Int,
@@ -44,15 +55,11 @@ internal fun StandardOfficialOthelloBlockLinks() {
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(ChanrivaSpacing.control),
     ) {
-        Text(
-            text = appString(R.string.standard_real_event_official_title),
-            style = MaterialTheme.typography.titleMedium,
+        RealEventSectionHeader(
+            title = appString(R.string.standard_real_event_official_title),
+            supporting = appString(R.string.standard_real_event_official_supporting),
         )
-        Text(
-            text = appString(R.string.standard_real_event_official_supporting),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+
         STANDARD_OFFICIAL_OTHELLO_BLOCKS.chunked(3).forEach { blocks ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -61,10 +68,25 @@ internal fun StandardOfficialOthelloBlockLinks() {
                 blocks.forEach { block ->
                     OutlinedButton(
                         onClick = { runCatching { uriHandler.openUri(block.url) } },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 52.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, OfficialBlockGold.copy(alpha = 0.72f)),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = OfficialBlockSurface,
+                            contentColor = ChanrivaColors.textPrimary,
+                        ),
                     ) {
-                        Text(appString(block.nameRes), maxLines = 1)
+                        Text(
+                            text = appString(block.nameRes),
+                            maxLines = 2,
+                            textAlign = TextAlign.Center,
+                        )
                     }
+                }
+                repeat(3 - blocks.size) {
+                    Spacer(Modifier.weight(1f))
                 }
             }
         }
