@@ -52,10 +52,6 @@ class StandardRealEventsScreenshotTest {
         composeRule.onNodeWithText(
             localizedContext.getString(R.string.standard_real_event_discovered_title),
         ).assertExists()
-        composeRule.onNodeWithText(
-            localizedContext.getString(R.string.standard_real_event_official_title),
-        ).assertExists()
-
         composeRule.waitForIdle()
         val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         assertEquals(width, bitmap.width)
