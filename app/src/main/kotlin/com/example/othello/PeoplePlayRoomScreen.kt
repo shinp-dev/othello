@@ -380,10 +380,10 @@ private fun RoomInfoImage(
     )
 }
 
-private const val GridLeft = 0.032f
-private const val GridRight = 0.968f
-private const val GridTop = 0.032f
-private const val GridBottom = 0.968f
+private const val GridLeft = 0.056f
+private const val GridRight = 0.944f
+private const val GridTop = 0.051f
+private const val GridBottom = 0.927f
 
 private const val RoomReferenceBoard = """
 ........
@@ -407,7 +407,7 @@ internal fun PeoplePlayRoomBoard(
 ) {
     BoxWithConstraints(modifier) {
         Image(
-            painter = painterResource(R.drawable.people_room_board_thin),
+            painter = painterResource(R.drawable.people_room_board_thin_luxury),
             contentDescription = null,
             modifier = Modifier.fillMaxSize().testTag("people_room_board_art"),
             contentScale = ContentScale.Fit,
