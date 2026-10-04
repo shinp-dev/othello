@@ -418,7 +418,7 @@ internal fun PeoplePlayRoomBoard(
         val cellWidth = maxWidth * (GridRight - GridLeft) / 8f
         val cellHeight = maxHeight * (GridBottom - GridTop) / 8f
         val markerSize = minOf(cellWidth, cellHeight) * 0.46f
-        val discSize = minOf(cellWidth, cellHeight) * 0.80f
+        val discSize = minOf(cellWidth, cellHeight) * 0.86f
         val rows = if (boardCells == null) RoomReferenceBoard.trimIndent().lines() else null
 
         for (row in 0 until 8) {
