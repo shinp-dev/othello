@@ -526,7 +526,7 @@ private fun StandardRealEventCard(
                     .background(RealEventRed),
             )
             Column(
-                modifier = Modifier.width(58.dp),
+                modifier = Modifier.width(72.dp),
                 verticalArrangement = Arrangement.spacedBy(1.dp),
             ) {
                 Text(
@@ -539,37 +539,32 @@ private fun StandardRealEventCard(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = ChanrivaColors.textPrimary,
+                    maxLines = 1,
                 )
             }
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(
-                        text = event.prefectureName,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(ChanrivaColors.accentSoft.copy(alpha = 0.55f))
-                            .border(1.dp, RealEventRed, RoundedCornerShape(8.dp))
-                            .padding(horizontal = 8.dp, vertical = 3.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = ChanrivaColors.accent,
-                        maxLines = 1,
-                    )
-                    Text(
-                        text = event.eventName,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = ChanrivaColors.textPrimary,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                Text(
+                    text = event.prefectureName.removeSuffix("都").removeSuffix("道").removeSuffix("府").removeSuffix("県"),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(ChanrivaColors.accentSoft.copy(alpha = 0.55f))
+                        .border(1.dp, RealEventRed, RoundedCornerShape(8.dp))
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ChanrivaColors.accent,
+                    maxLines = 1,
+                )
+                Text(
+                    text = event.eventName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = ChanrivaColors.textPrimary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Text(
                     text = event.venueName,
                     style = MaterialTheme.typography.bodySmall,
