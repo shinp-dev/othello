@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="100dp"
+    android:height="100dp"
+    android:viewportWidth="1000"
+    android:viewportHeight="1000">
+    <!-- Thin replacement board. The previous PNG asset is intentionally retained. -->
+    <path
+        android:fillColor="#082240"
+        android:pathData="M12,12 H988 V988 H12 Z"
+        android:strokeColor="#F2B84B"
+        android:strokeWidth="8"
+        android:strokeLineJoin="round" />
+    <path
+        android:fillColor="#0A315A"
+        android:pathData="M22,22 H978 V978 H22 Z"
+        android:strokeColor="#8B5B18"
+        android:strokeWidth="2" />
+    <path
+        android:fillColor="#006553"
+        android:pathData="M32,32 H968 V968 H32 Z"
+        android:strokeColor="#F2B84B"
+        android:strokeWidth="6" />
+
+    <!-- Exact 8 x 8 grid: 936 / 8 = 117 viewport units per cell. -->
+    <path android:pathData="M149,32 V968" android:strokeColor="#EAB34D" android:strokeWidth="3.5" />
+    <path android:pathData="M266,32 V968" android:strokeColor="#EAB34D" android:strokeWidth="3.5" />
+    <path android:pathData="M383,32 V968" android:strokeColor="#EAB34D" android:strokeWidth="3.5" />
+    <path android:pathData="M500,32 V968" android:strokeColor="#EAB34D" android:strokeWidth="3.5" />
+    <path android:pathData="M617,32 V968" android:strokeColor="#EAB34D" android:strokeWidth="3.5" />
+    <path android:pathData="M734,32 V968" android:strokeColor="#EAB34D" android:strokeWidth="3.5" />
+    <path android:pathData="M851,32 V968" android:strokeColor="#EAB34D" android:strokeWidth="3.5" />
+
+    <path android:pathData="M32,149 H968" android:strokeColor="#EAB34D" android:strokeWidth="3.5" />
+    <path android:pathData="M32,266 H968" android:strokeColor="#EAB34D" android:strokeWidth="3.5" />
+    <path android:pathData="M32,383 H968" android:strokeColor="#EAB34D" android:strokeWidth="3.5" />
+    <path android:pathData="M32,500 H968" android:strokeColor="#EAB34D" android:strokeWidth="3.5" />
+    <path android:pathData="M32,617 H968" android:strokeColor="#EAB34D" android:strokeWidth="3.5" />
+    <path android:pathData="M32,734 H968" android:strokeColor="#EAB34D" android:strokeWidth="3.5" />
+    <path android:pathData="M32,851 H968" android:strokeColor="#EAB34D" android:strokeWidth="3.5" />
+
+    <!-- Small square/diamond accents only; no circular corner ornaments. -->
+    <path android:fillColor="#FFC85E" android:pathData="M12,12 L32,12 L32,32 L12,32 Z" android:strokeColor="#7A4309" android:strokeWidth="3" />
+    <path android:fillColor="#FFC85E" android:pathData="M968,12 L988,12 L988,32 L968,32 Z" android:strokeColor="#7A4309" android:strokeWidth="3" />
+    <path android:fillColor="#FFC85E" android:pathData="M12,968 L32,968 L32,988 L12,988 Z" android:strokeColor="#7A4309" android:strokeWidth="3" />
+    <path android:fillColor="#FFC85E" android:pathData="M968,968 L988,968 L988,988 L968,988 Z" android:strokeColor="#7A4309" android:strokeWidth="3" />
+    <path android:fillColor="#F6BD4C" android:pathData="M500,7 L513,20 L500,33 L487,20 Z" android:strokeColor="#7A4309" android:strokeWidth="3" />
+    <path android:fillColor="#F6BD4C" android:pathData="M500,967 L513,980 L500,993 L487,980 Z" android:strokeColor="#7A4309" android:strokeWidth="3" />
+    <path android:fillColor="#F6BD4C" android:pathData="M7,500 L20,487 L33,500 L20,513 Z" android:strokeColor="#7A4309" android:strokeWidth="3" />
+    <path android:fillColor="#F6BD4C" android:pathData="M967,500 L980,487 L993,500 L980,513 Z" android:strokeColor="#7A4309" android:strokeWidth="3" />
+</vector>
