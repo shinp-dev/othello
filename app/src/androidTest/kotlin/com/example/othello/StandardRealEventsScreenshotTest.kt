@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.os.Environment
+import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalConfiguration
@@ -52,8 +53,7 @@ class StandardRealEventsScreenshotTest {
         composeRule.onNodeWithText(
             localizedContext.getString(R.string.standard_real_event_discovered_title),
         ).assertExists()
-        composeRule.waitForIdle()
-        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val bitmap = awaitVisibleRealEventsScreen()
         assertEquals(width, bitmap.width)
         val name = "standard-real-events-${localeTag}-${width}dp.png"
         saveScreenshot(context, bitmap, name)
@@ -76,6 +76,25 @@ class StandardRealEventsScreenshotTest {
         StandardRealEvent("08", "Ibaraki", "2026-11-21", "Mito City Othello Day 2026", "Aeon Mall Mito Uchihara 1F Main Court", "https://example.com/4", "2026-09-12"),
         StandardRealEvent("12", "Chiba", "2026-11-08", "Othello Experience Event", "Youth Nature Center", "https://example.com/5", "2026-10-03"),
     )
+
+    private fun awaitVisibleRealEventsScreen(): Bitmap {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val deadline = SystemClock.uptimeMillis() + 12_000L
+        do {
+            composeRule.waitForIdle()
+            val frame = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+            val backgroundPixel = frame.getPixel(5, frame.height / 2)
+            val brightness = (
+                android.graphics.Color.red(backgroundPixel) +
+                    android.graphics.Color.green(backgroundPixel) +
+                    android.graphics.Color.blue(backgroundPixel)
+                ) / 3
+            if (brightness < 180) return frame
+            frame.recycle()
+            Thread.sleep(250)
+        } while (SystemClock.uptimeMillis() < deadline)
+        throw AssertionError("StandardRealEventScreen did not render a dark background before capture")
+    }
 
     private fun saveScreenshot(context: android.content.Context, bitmap: Bitmap, name: String) {
         val uri = checkNotNull(context.contentResolver.insert(
